@@ -98,4 +98,8 @@ class SearchViewModel @Inject constructor(
     fun onPlayTrack(tracks: List<Track>, index: Int) {
         playbackController.playTracks(tracks = tracks, startIndex = index)
     }
+
+    fun onPlayNext(track: Track) = playbackController.playNext(track)
+
+    fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
 }

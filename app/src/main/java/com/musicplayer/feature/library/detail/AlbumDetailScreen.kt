@@ -24,6 +24,7 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.model.Track
 
 @Composable
 fun AlbumDetailRoute(
@@ -37,6 +38,8 @@ fun AlbumDetailRoute(
         onPlayAll = viewModel::onPlayAll,
         onShuffleAll = viewModel::onShuffleAll,
         onTrackClick = viewModel::onTrackClick,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
     )
 }
 
@@ -48,6 +51,8 @@ fun AlbumDetailScreen(
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onTrackClick: (Int) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -111,6 +116,8 @@ fun AlbumDetailScreen(
                         showArtwork = false,
                         trackNumberOverride = track.trackNumber ?: (index + 1),
                         onClick = { onTrackClick(index) },
+                        onPlayNext = { onPlayNext(track) },
+                        onAddToQueue = { onAddToQueue(track) },
                     )
                 }
             }

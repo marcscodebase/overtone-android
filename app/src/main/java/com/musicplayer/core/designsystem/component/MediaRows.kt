@@ -2,6 +2,7 @@ package com.musicplayer.core.designsystem.component
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,19 +13,32 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueuePlayNext
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -46,12 +60,22 @@ fun TrackRow(
     modifier: Modifier = Modifier,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    extraMenuActionLabel: String? = null,
+    onExtraMenuAction: (() -> Unit)? = null,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val hasMenu = onPlayNext != null || onAddToQueue != null || onToggleFavorite != null ||
+        onAddToPlaylist != null || (extraMenuActionLabel != null && onExtraMenuAction != null)
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(start = 16.dp, end = if (hasMenu) 4.dp else 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showArtwork) {
@@ -134,6 +158,98 @@ fun TrackRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        if (hasMenu) {
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = stringResource(R.string.track_more_options),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    if (onPlayNext != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.queue_play_next)) },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.QueuePlayNext, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onPlayNext()
+                            },
+                        )
+                    }
+                    if (onAddToQueue != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.queue_add_to_queue)) },
+                            leadingIcon = {
+                                Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onAddToQueue()
+                            },
+                        )
+                    }
+                    if (onToggleFavorite != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (track.isFavorite) {
+                                            R.string.favorite_remove
+                                        } else {
+                                            R.string.favorite_add
+                                        },
+                                    ),
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (track.isFavorite) {
+                                        Icons.Rounded.Favorite
+                                    } else {
+                                        Icons.Rounded.FavoriteBorder
+                                    },
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onToggleFavorite()
+                            },
+                        )
+                    }
+                    if (onAddToPlaylist != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.playlist_add_to)) },
+                            leadingIcon = {
+                                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onAddToPlaylist()
+                            },
+                        )
+                    }
+                    if (extraMenuActionLabel != null && onExtraMenuAction != null) {
+                        DropdownMenuItem(
+                            text = { Text(extraMenuActionLabel) },
+                            onClick = {
+                                menuExpanded = false
+                                onExtraMenuAction()
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

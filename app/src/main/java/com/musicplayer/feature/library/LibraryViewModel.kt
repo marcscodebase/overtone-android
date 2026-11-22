@@ -104,6 +104,10 @@ class LibraryViewModel @Inject constructor(
         playbackController.playTracks(tracks = tracks, startIndex = startIndex)
     }
 
+    fun onPlayNext(track: Track) = playbackController.playNext(track)
+
+    fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+
     private data class MediaCollections(
         val downloaded: List<Track>,
         val playlists: List<Playlist>,

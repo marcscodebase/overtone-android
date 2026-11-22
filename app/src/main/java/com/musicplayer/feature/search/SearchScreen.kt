@@ -57,6 +57,8 @@ fun SearchRoute(
         onArtistClick = onArtistClick,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onPlayTrack,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
     )
 }
 
@@ -70,6 +72,8 @@ fun SearchScreen(
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -163,6 +167,8 @@ fun SearchScreen(
                                     track = track,
                                     isPlaying = track.id == state.activeTrackId,
                                     onClick = { onTrackClick(state.results.tracks, index) },
+                                    onPlayNext = { onPlayNext(track) },
+                                    onAddToQueue = { onAddToQueue(track) },
                                 )
                             }
                         }

@@ -46,6 +46,7 @@ import com.musicplayer.feature.library.detail.PlaylistDetailRoute
 import com.musicplayer.feature.player.MiniPlayer
 import com.musicplayer.feature.player.NowPlayingSheet
 import com.musicplayer.feature.player.PlayerViewModel
+import com.musicplayer.feature.player.QueueSheet
 import com.musicplayer.feature.search.SearchRoute
 import com.musicplayer.feature.settings.SettingsRoute
 
@@ -118,6 +119,7 @@ private fun AuthenticatedShell(
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
 
     val showBottomBar = currentDestination == null ||
         currentDestination.hasRoute(HomeDestination::class) ||
@@ -240,6 +242,18 @@ private fun AuthenticatedShell(
             onSeekTo = playerViewModel::onSeekTo,
             onToggleShuffle = playerViewModel::onToggleShuffle,
             onCycleRepeatMode = playerViewModel::onCycleRepeatMode,
+            onOpenQueue = { showQueueSheet = true },
+        )
+    }
+
+    if (showQueueSheet && playbackState.queue.isNotEmpty()) {
+        QueueSheet(
+            state = playbackState,
+            onDismiss = { showQueueSheet = false },
+            onSelectIndex = playerViewModel::onSelectQueueIndex,
+            onRemoveIndex = playerViewModel::onRemoveQueueIndex,
+            onMoveItem = playerViewModel::onMoveQueueItem,
+            onClearUpNext = playerViewModel::onClearUpNext,
         )
     }
 }

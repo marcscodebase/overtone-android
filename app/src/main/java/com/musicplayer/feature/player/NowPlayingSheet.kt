@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -64,6 +65,7 @@ fun NowPlayingSheet(
     onSeekTo: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
+    onOpenQueue: () -> Unit,
 ) {
     val track = state.currentTrack ?: return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -131,7 +133,12 @@ fun NowPlayingSheet(
                         textAlign = TextAlign.Center,
                     )
                 }
-                Spacer(modifier = Modifier.size(48.dp))
+                IconButton(onClick = onOpenQueue) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = stringResource(R.string.queue_title),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.weight(0.6f))

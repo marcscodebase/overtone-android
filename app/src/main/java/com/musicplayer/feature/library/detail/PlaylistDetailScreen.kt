@@ -26,6 +26,7 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.model.Track
 
 @Composable
 fun PlaylistDetailRoute(
@@ -39,6 +40,8 @@ fun PlaylistDetailRoute(
         onPlayAll = viewModel::onPlayAll,
         onShuffleAll = viewModel::onShuffleAll,
         onTrackClick = viewModel::onTrackClick,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
     )
 }
 
@@ -50,6 +53,8 @@ fun PlaylistDetailScreen(
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onTrackClick: (Int) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -113,6 +118,8 @@ fun PlaylistDetailScreen(
                         track = track,
                         isPlaying = track.id == state.activeTrackId,
                         onClick = { onTrackClick(index) },
+                        onPlayNext = { onPlayNext(track) },
+                        onAddToQueue = { onAddToQueue(track) },
                     )
                 }
             }

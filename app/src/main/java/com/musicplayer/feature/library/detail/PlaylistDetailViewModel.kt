@@ -91,4 +91,8 @@ class PlaylistDetailViewModel @Inject constructor(
             playbackController.playTracks(tracks = tracks, startIndex = index, shuffle = false)
         }
     }
+
+    fun onPlayNext(track: Track) = playbackController.playNext(track)
+
+    fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
 }

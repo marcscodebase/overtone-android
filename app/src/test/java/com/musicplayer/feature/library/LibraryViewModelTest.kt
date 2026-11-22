@@ -93,7 +93,16 @@ class LibraryViewModelTest {
 
     private class FakePlaybackController : PlaybackController {
         override val playbackState: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState())
+        override fun restorePersistedQueue() = Unit
         override fun playTracks(tracks: List<Track>, startIndex: Int, shuffle: Boolean) = Unit
+        override fun playNext(track: Track) = Unit
+        override fun addToQueue(track: Track) = Unit
+        override fun addToQueue(tracks: List<Track>) = Unit
+        override fun skipToQueueIndex(index: Int) = Unit
+        override fun removeFromQueue(index: Int) = Unit
+        override fun moveQueueItem(fromIndex: Int, toIndex: Int) = Unit
+        override fun clearUpNext() = Unit
+        override fun updateTrackFavorite(trackId: String, isFavorite: Boolean) = Unit
         override fun togglePlayPause() = Unit
         override fun skipToNext() = Unit
         override fun skipToPrevious() = Unit

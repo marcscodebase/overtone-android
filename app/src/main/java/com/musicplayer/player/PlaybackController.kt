@@ -15,6 +15,8 @@ import com.musicplayer.core.common.ApplicationScope
 import com.musicplayer.core.common.Dispatcher
 import com.musicplayer.core.model.Track
 import com.musicplayer.player.engine.StreamUrlResolver
+import com.musicplayer.player.queue.QueueOrderHelper
+import com.musicplayer.player.queue.QueuePersistenceManager
 import com.musicplayer.player.service.MusicPlaybackService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -36,7 +38,16 @@ import javax.inject.Singleton
 
 interface PlaybackController {
     val playbackState: StateFlow<PlaybackState>
+    fun restorePersistedQueue()
     fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffle: Boolean = false)
+    fun playNext(track: Track)
+    fun addToQueue(track: Track)
+    fun addToQueue(tracks: List<Track>)
+    fun skipToQueueIndex(index: Int)
+    fun removeFromQueue(index: Int)
+    fun moveQueueItem(fromIndex: Int, toIndex: Int)
+    fun clearUpNext()
+    fun updateTrackFavorite(trackId: String, isFavorite: Boolean)
     fun togglePlayPause()
     fun skipToNext()
     fun skipToPrevious()
@@ -53,6 +64,7 @@ class MediaControllerPlaybackController @Inject constructor(
     @param:ApplicationScope private val appScope: CoroutineScope,
     @param:Dispatcher(AppDispatcher.Main) private val mainDispatcher: CoroutineDispatcher,
     private val streamUrlResolver: StreamUrlResolver,
+    private val queuePersistenceManager: QueuePersistenceManager,
 ) : PlaybackController {
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -61,13 +73,22 @@ class MediaControllerPlaybackController @Inject constructor(
     private val connectMutex = Mutex()
     private var controller: MediaController? = null
     private var positionTickerJob: Job? = null
-    private val tracksById = LinkedHashMap<String, Track>()
-    private var localIds: Set<String> = emptySet()
+    private var hasRestoredQueue = false
+    private var needsPrepareOnPlay = false
+    private var pendingRestoreIndex = 0
+    private var pendingRestorePositionMs = 0L
+
+    private val localIds = mutableSetOf<String>()
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             syncFromPlayer()
-            if (isPlaying) startPositionTicker() else stopPositionTicker()
+            if (isPlaying) {
+                startPositionTicker()
+            } else {
+                stopPositionTicker()
+                persistPositionAsync()
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -76,6 +97,7 @@ class MediaControllerPlaybackController @Inject constructor(
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             syncFromPlayer()
+            persistPositionAsync()
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -97,20 +119,46 @@ class MediaControllerPlaybackController @Inject constructor(
         }
     }
 
+    override fun restorePersistedQueue() {
+        if (hasRestoredQueue) return
+        hasRestoredQueue = true
+        appScope.launch(mainDispatcher) {
+            if (_playbackState.value.queue.isNotEmpty()) return@launch
+            val snapshot = queuePersistenceManager.restoreQueue() ?: return@launch
+            if (_playbackState.value.queue.isNotEmpty()) return@launch
+
+            pendingRestoreIndex = snapshot.currentIndex
+            pendingRestorePositionMs = snapshot.positionMs
+            needsPrepareOnPlay = true
+
+            val activeTrack = snapshot.tracks.getOrNull(snapshot.currentIndex)
+            _playbackState.update {
+                it.copy(
+                    queue = snapshot.tracks,
+                    currentIndex = snapshot.currentIndex,
+                    currentTrack = activeTrack,
+                    positionMs = snapshot.positionMs,
+                    durationMs = activeTrack?.durationMs ?: 0L,
+                    isLocalPlayback = activeTrack?.isDownloaded == true,
+                )
+            }
+        }
+    }
+
     override fun playTracks(tracks: List<Track>, startIndex: Int, shuffle: Boolean) {
         if (tracks.isEmpty()) return
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
+            needsPrepareOnPlay = false
 
             val mediaItems = mutableListOf<MediaItem>()
             val resolvedTracks = mutableListOf<Track>()
-            val resolvedLocals = mutableSetOf<String>()
+            localIds.clear()
 
             tracks.forEach { track ->
                 val resolved = streamUrlResolver.resolve(track) ?: return@forEach
                 resolvedTracks += track
-                tracksById[track.id] = track
-                if (resolved.isLocal) resolvedLocals += track.id
+                if (resolved.isLocal) localIds += track.id
                 mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal)
             }
 
@@ -121,7 +169,6 @@ class MediaControllerPlaybackController @Inject constructor(
                 return@launch
             }
 
-            localIds = resolvedLocals
             val safeIndex = startIndex.coerceIn(0, mediaItems.lastIndex)
 
             mediaController.shuffleModeEnabled = shuffle
@@ -136,16 +183,191 @@ class MediaControllerPlaybackController @Inject constructor(
                     currentTrack = resolvedTracks[safeIndex],
                     isLocalPlayback = resolvedTracks[safeIndex].id in localIds,
                     shuffleEnabled = shuffle,
+                    positionMs = 0L,
+                    durationMs = resolvedTracks[safeIndex].durationMs,
                     errorMessage = null,
                 )
             }
             syncFromPlayer()
+            persistQueueAsync()
+        }
+    }
+
+    override fun playNext(track: Track) {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            if (current.queue.isEmpty()) {
+                playTracks(listOf(track), startIndex = 0, shuffle = false)
+                return@launch
+            }
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+            val resolved = streamUrlResolver.resolve(track) ?: return@launch
+            if (resolved.isLocal) localIds += track.id
+
+            val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
+            val mutated = QueueOrderHelper.insertNext(current.queue, current.currentIndex, track)
+            mediaController.addMediaItem(insertIndex, track.toMediaItem(resolved.uri, resolved.isLocal))
+
+            _playbackState.update {
+                it.copy(
+                    queue = mutated.queue,
+                    currentIndex = mutated.currentIndex,
+                )
+            }
+            persistQueueAsync()
+        }
+    }
+
+    override fun addToQueue(track: Track) = addToQueue(listOf(track))
+
+    override fun addToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            if (current.queue.isEmpty()) {
+                playTracks(tracks, startIndex = 0, shuffle = false)
+                return@launch
+            }
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+
+            val resolvedTracks = mutableListOf<Track>()
+            val mediaItems = mutableListOf<MediaItem>()
+            tracks.forEach { track ->
+                val resolved = streamUrlResolver.resolve(track) ?: return@forEach
+                resolvedTracks += track
+                if (resolved.isLocal) localIds += track.id
+                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal)
+            }
+            if (mediaItems.isEmpty()) return@launch
+
+            val mutated = QueueOrderHelper.append(current.queue, current.currentIndex, resolvedTracks)
+            mediaController.addMediaItems(mediaItems)
+            _playbackState.update {
+                it.copy(
+                    queue = mutated.queue,
+                    currentIndex = mutated.currentIndex,
+                )
+            }
+            persistQueueAsync()
+        }
+    }
+
+    override fun skipToQueueIndex(index: Int) {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            if (index !in current.queue.indices) return@launch
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+            mediaController.seekTo(index, 0L)
+            mediaController.play()
+            syncFromPlayer()
+            persistPositionAsync()
+        }
+    }
+
+    override fun removeFromQueue(index: Int) {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            if (index !in current.queue.indices) return@launch
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+
+            val mutated = QueueOrderHelper.removeAt(current.queue, current.currentIndex, index)
+            if (index < mediaController.mediaItemCount) {
+                mediaController.removeMediaItem(index)
+            }
+            _playbackState.update {
+                it.copy(
+                    queue = mutated.queue,
+                    currentIndex = mutated.currentIndex,
+                    currentTrack = mutated.queue.getOrNull(mutated.currentIndex),
+                )
+            }
+            syncFromPlayer()
+            persistQueueAsync()
+        }
+    }
+
+    override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            if (fromIndex !in current.queue.indices || toIndex !in current.queue.indices ||
+                fromIndex == toIndex
+            ) {
+                return@launch
+            }
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+
+            val mutated = QueueOrderHelper.move(current.queue, current.currentIndex, fromIndex, toIndex)
+            if (fromIndex < mediaController.mediaItemCount && toIndex < mediaController.mediaItemCount) {
+                mediaController.moveMediaItem(fromIndex, toIndex)
+            }
+            _playbackState.update {
+                it.copy(
+                    queue = mutated.queue,
+                    currentIndex = mutated.currentIndex,
+                    currentTrack = mutated.queue.getOrNull(mutated.currentIndex),
+                )
+            }
+            persistQueueAsync()
+        }
+    }
+
+    override fun clearUpNext() {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            val activeIndex = current.currentIndex
+            if (activeIndex !in current.queue.indices || activeIndex >= current.queue.lastIndex) return@launch
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+
+            val removeStart = activeIndex + 1
+            if (removeStart < mediaController.mediaItemCount) {
+                mediaController.removeMediaItems(removeStart, mediaController.mediaItemCount)
+            }
+            val trimmed = current.queue.subList(0, removeStart).toList()
+            _playbackState.update { it.copy(queue = trimmed) }
+            persistQueueAsync()
+        }
+    }
+
+    override fun updateTrackFavorite(trackId: String, isFavorite: Boolean) {
+        _playbackState.update { state ->
+            val updatedQueue = state.queue.map { track ->
+                if (track.id == trackId) track.copy(isFavorite = isFavorite) else track
+            }
+            val updatedCurrent = state.currentTrack?.let { current ->
+                if (current.id == trackId) current.copy(isFavorite = isFavorite) else current
+            }
+            state.copy(
+                queue = updatedQueue,
+                currentTrack = updatedCurrent,
+            )
         }
     }
 
     override fun togglePlayPause() {
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay && _playbackState.value.queue.isNotEmpty()) {
+                hydrateControllerFromState(mediaController, autoPlay = true)
+                return@launch
+            }
             if (mediaController.isPlaying) {
                 mediaController.pause()
             } else {
@@ -157,6 +379,9 @@ class MediaControllerPlaybackController @Inject constructor(
     override fun skipToNext() {
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay && _playbackState.value.queue.isNotEmpty()) {
+                hydrateControllerFromState(mediaController, autoPlay = true)
+            }
             if (mediaController.hasNextMediaItem()) {
                 mediaController.seekToNextMediaItem()
             }
@@ -166,6 +391,9 @@ class MediaControllerPlaybackController @Inject constructor(
     override fun skipToPrevious() {
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay && _playbackState.value.queue.isNotEmpty()) {
+                hydrateControllerFromState(mediaController, autoPlay = true)
+            }
             if (mediaController.currentPosition > PREVIOUS_RESTART_THRESHOLD_MS) {
                 mediaController.seekTo(0L)
             } else if (mediaController.hasPreviousMediaItem()) {
@@ -179,8 +407,13 @@ class MediaControllerPlaybackController @Inject constructor(
     override fun seekTo(positionMs: Long) {
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
-            mediaController.seekTo(positionMs.coerceAtLeast(0L))
-            _playbackState.update { it.copy(positionMs = positionMs.coerceAtLeast(0L)) }
+            val target = positionMs.coerceAtLeast(0L)
+            if (needsPrepareOnPlay) {
+                pendingRestorePositionMs = target
+            } else {
+                mediaController.seekTo(target)
+            }
+            _playbackState.update { it.copy(positionMs = target) }
         }
     }
 
@@ -206,16 +439,41 @@ class MediaControllerPlaybackController @Inject constructor(
     override fun stopAndClear() {
         appScope.launch(mainDispatcher) {
             stopPositionTicker()
+            needsPrepareOnPlay = false
             controller?.stop()
             controller?.clearMediaItems()
-            tracksById.clear()
-            localIds = emptySet()
+            localIds.clear()
             _playbackState.value = PlaybackState()
+            queuePersistenceManager.clear()
         }
     }
 
     override fun clearError() {
         _playbackState.update { it.copy(errorMessage = null) }
+    }
+
+    private fun hydrateControllerFromState(
+        mediaController: MediaController,
+        autoPlay: Boolean,
+    ) {
+        val state = _playbackState.value
+        val items = mutableListOf<MediaItem>()
+        localIds.clear()
+        state.queue.forEach { track ->
+            val resolved = streamUrlResolver.resolve(track) ?: return@forEach
+            if (resolved.isLocal) localIds += track.id
+            items += track.toMediaItem(resolved.uri, resolved.isLocal)
+        }
+        needsPrepareOnPlay = false
+        if (items.isEmpty()) return
+
+        val safeIndex = pendingRestoreIndex.coerceIn(0, items.lastIndex)
+        mediaController.setMediaItems(items, safeIndex, pendingRestorePositionMs)
+        mediaController.prepare()
+        if (autoPlay) {
+            mediaController.play()
+        }
+        syncFromPlayer()
     }
 
     private suspend fun ensureConnected(): MediaController? = connectMutex.withLock {
@@ -240,8 +498,11 @@ class MediaControllerPlaybackController @Inject constructor(
 
     private fun syncFromPlayer() {
         val player = controller ?: return
-        val currentMediaId = player.currentMediaItem?.mediaId
-        val activeTrack = currentMediaId?.let { tracksById[it] } ?: _playbackState.value.currentTrack
+        val currentState = _playbackState.value
+        val index = player.currentMediaItemIndex
+        val activeTrack = currentState.queue.getOrNull(index)
+            ?: player.currentMediaItem?.mediaId?.let { id -> currentState.queue.firstOrNull { it.id == id } }
+            ?: currentState.currentTrack
         val duration = player.duration.takeIf { it > 0L } ?: activeTrack?.durationMs ?: 0L
         val repeatMode = when (player.repeatMode) {
             Player.REPEAT_MODE_ALL -> RepeatMode.ALL
@@ -249,12 +510,12 @@ class MediaControllerPlaybackController @Inject constructor(
             else -> RepeatMode.OFF
         }
         val isLocal = player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(EXTRA_IS_LOCAL)
-            ?: (currentMediaId in localIds)
+            ?: (activeTrack?.id in localIds)
 
-        _playbackState.update { current ->
-            current.copy(
+        _playbackState.update { state ->
+            state.copy(
                 currentTrack = activeTrack,
-                currentIndex = player.currentMediaItemIndex,
+                currentIndex = if (state.queue.isEmpty()) -1 else index.coerceIn(0, state.queue.lastIndex),
                 isPlaying = player.isPlaying,
                 isBuffering = player.playbackState == Player.STATE_BUFFERING,
                 positionMs = player.currentPosition.coerceAtLeast(0L),
@@ -287,6 +548,28 @@ class MediaControllerPlaybackController @Inject constructor(
     private fun stopPositionTicker() {
         positionTickerJob?.cancel()
         positionTickerJob = null
+    }
+
+    private fun persistQueueAsync() {
+        val snapshot = _playbackState.value
+        appScope.launch {
+            queuePersistenceManager.saveQueue(
+                tracks = snapshot.queue,
+                currentIndex = snapshot.currentIndex.coerceAtLeast(0),
+                positionMs = snapshot.positionMs,
+            )
+        }
+    }
+
+    private fun persistPositionAsync() {
+        val snapshot = _playbackState.value
+        if (snapshot.queue.isEmpty()) return
+        appScope.launch {
+            queuePersistenceManager.savePlaybackPosition(
+                currentIndex = snapshot.currentIndex.coerceAtLeast(0),
+                positionMs = snapshot.positionMs,
+            )
+        }
     }
 
     private fun Track.toMediaItem(uri: String, isLocal: Boolean): MediaItem {

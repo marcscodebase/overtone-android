@@ -53,6 +53,8 @@ fun HomeRoute(
         onAlbumClick = onAlbumClick,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onTrackClick,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
         onSettingsClick = onSettingsClick,
     )
 }
@@ -65,6 +67,8 @@ fun HomeScreen(
     onAlbumClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -207,6 +211,8 @@ fun HomeScreen(
                                     track = track,
                                     isPlaying = track.id == state.activeTrackId,
                                     onClick = { onTrackClick(state.recentlyPlayedTracks, index) },
+                                    onPlayNext = { onPlayNext(track) },
+                                    onAddToQueue = { onAddToQueue(track) },
                                 )
                             }
                         }

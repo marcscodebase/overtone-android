@@ -75,4 +75,18 @@
     <string name="player_repeat">Cycle repeat mode</string>
     <string name="player_dismiss">Collapse now playing</string>
     <string name="player_playing_from">Playing from %1$s</string>
+    <string name="track_more_options">Track options</string>
+    <string name="queue_title">Queue</string>
+    <string name="queue_now_playing">Now Playing</string>
+    <string name="queue_up_next">Up Next</string>
+    <string name="queue_up_next_empty">Nothing queued next. Use the menu on any song to add it here.</string>
+    <string name="queue_clear_up_next">Clear</string>
+    <string name="queue_play_next">Play Next</string>
+    <string name="queue_add_to_queue">Add to Queue</string>
+    <string name="queue_remove">Remove from queue</string>
+    <string name="queue_move_up">Move up</string>
+    <string name="queue_move_down">Move down</string>
+    <string name="favorite_add">Add to Favorites</string>
+    <string name="favorite_remove">Remove from Favorites</string>
+    <string name="playlist_add_to">Add to Playlist</string>
 </resources>

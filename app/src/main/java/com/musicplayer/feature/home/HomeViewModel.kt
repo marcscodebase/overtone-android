@@ -79,4 +79,8 @@ class HomeViewModel @Inject constructor(
     fun onTrackClick(tracks: List<Track>, index: Int) {
         playbackController.playTracks(tracks = tracks, startIndex = index)
     }
+
+    fun onPlayNext(track: Track) = playbackController.playNext(track)
+
+    fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
 }

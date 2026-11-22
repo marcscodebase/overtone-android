@@ -30,6 +30,7 @@ import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.SectionHeader
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.model.Track
 
 @Composable
 fun ArtistDetailRoute(
@@ -45,6 +46,8 @@ fun ArtistDetailRoute(
         onPlayAll = viewModel::onPlayAll,
         onShuffleAll = viewModel::onShuffleAll,
         onTrackClick = viewModel::onTrackClick,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
     )
 }
 
@@ -57,6 +60,8 @@ fun ArtistDetailScreen(
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onTrackClick: (Int) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -136,6 +141,8 @@ fun ArtistDetailScreen(
                             track = track,
                             isPlaying = track.id == state.activeTrackId,
                             onClick = { onTrackClick(index) },
+                            onPlayNext = { onPlayNext(track) },
+                            onAddToQueue = { onAddToQueue(track) },
                         )
                     }
                 }
