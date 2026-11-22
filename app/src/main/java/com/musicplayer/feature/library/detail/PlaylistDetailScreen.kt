@@ -23,6 +23,9 @@ import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,7 +35,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +97,8 @@ fun PlaylistDetailRoute(
         onToggleReorderMode = viewModel::onToggleReorderMode,
         onMoveTrack = viewModel::onMoveTrack,
         onRemoveTrack = viewModel::onRemoveTrack,
+        onToggleAutoSyncDownloads = viewModel::onToggleAutoSyncDownloads,
+        onSyncDownloadsNow = viewModel::onSyncDownloadsNow,
         onRenamePlaylist = viewModel::onRenamePlaylist,
         onDeletePlaylist = viewModel::onDeletePlaylist,
     )
@@ -115,6 +122,8 @@ fun PlaylistDetailScreen(
     onToggleReorderMode: () -> Unit,
     onMoveTrack: (Int, Int) -> Unit,
     onRemoveTrack: (String) -> Unit,
+    onToggleAutoSyncDownloads: (Boolean) -> Unit,
+    onSyncDownloadsNow: () -> Unit,
     onRenamePlaylist: (String) -> Unit,
     onDeletePlaylist: () -> Unit,
     modifier: Modifier = Modifier,
@@ -253,6 +262,66 @@ fun PlaylistDetailScreen(
                     onPlayClick = onPlayAll,
                     onShuffleClick = onShuffleAll,
                 )
+            }
+            state.playlist?.let { playlist ->
+                item(key = "playlist_auto_sync_card") {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Sync,
+                                    contentDescription = null,
+                                    tint = if (playlist.isAutoSyncDownloaded) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.playlist_auto_sync),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.playlist_auto_sync_subtitle),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Switch(
+                                    checked = playlist.isAutoSyncDownloaded,
+                                    onCheckedChange = onToggleAutoSyncDownloads,
+                                )
+                            }
+                            if (playlist.isAutoSyncDownloaded && !state.isOffline) {
+                                TextButton(
+                                    onClick = onSyncDownloadsNow,
+                                    modifier = Modifier.align(Alignment.End),
+                                ) {
+                                    Text(stringResource(R.string.playlist_sync_downloads_now))
+                                }
+                            }
+                        }
+                    }
+                }
             }
             if (!state.isSyncing && state.entries.isEmpty()) {
                 item(key = "playlist_empty") {

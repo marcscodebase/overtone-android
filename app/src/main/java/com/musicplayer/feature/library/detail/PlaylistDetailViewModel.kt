@@ -166,6 +166,16 @@ class PlaylistDetailViewModel @Inject constructor(
         }
     }
 
+    fun onToggleAutoSyncDownloads(enabled: Boolean) {
+        viewModelScope.launch {
+            playlistRepository.setAutoSyncDownloaded(playlistId, enabled)
+        }
+    }
+
+    fun onSyncDownloadsNow() {
+        playlistRepository.triggerPlaylistDownloadSync(playlistId)
+    }
+
     fun onRenamePlaylist(newName: String) {
         viewModelScope.launch {
             when (val result = playlistRepository.renamePlaylist(playlistId, newName)) {

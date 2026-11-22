@@ -16,6 +16,7 @@ import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.remote.JellyfinArtworkUrlBuilder
 import com.musicplayer.data.remote.JellyfinMappers.toDomain
+import com.musicplayer.data.worker.PlaylistSyncScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -69,6 +70,8 @@ interface PlaylistRepository {
         fromIndex: Int,
         toIndex: Int,
     ): AppResult<Unit>
+    suspend fun setAutoSyncDownloaded(playlistId: String, enabled: Boolean)
+    fun triggerPlaylistDownloadSync(playlistId: String)
 }
 
 @Singleton
@@ -79,6 +82,7 @@ class JellyfinPlaylistRepository @Inject constructor(
     private val preferencesDataStore: UserPreferencesDataStore,
     private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
+    private val playlistSyncScheduler: PlaylistSyncScheduler,
     private val playlistDao: PlaylistDao,
     private val downloadDao: DownloadDao,
     private val artworkUrlBuilder: JellyfinArtworkUrlBuilder,
@@ -314,6 +318,23 @@ class JellyfinPlaylistRepository @Inject constructor(
             syncRepository.enqueuePlaylistMutation(payload)
             AppResult.Success(Unit)
         }
+    }
+
+    override suspend fun setAutoSyncDownloaded(playlistId: String, enabled: Boolean) {
+        withContext(ioDispatcher) {
+            playlistDao.setAutoSyncDownloaded(playlistId, enabled)
+            if (enabled) {
+                val wifiOnly = preferencesDataStore.userPreferences.first().wifiOnlyDownloads
+                playlistSyncScheduler.ensurePeriodicSyncScheduled(wifiOnly)
+                playlistSyncScheduler.syncPlaylistNow(playlistId)
+            } else if (playlistDao.getAutoSyncPlaylists().isEmpty()) {
+                playlistSyncScheduler.cancelPeriodicSync()
+            }
+        }
+    }
+
+    override fun triggerPlaylistDownloadSync(playlistId: String) {
+        playlistSyncScheduler.syncPlaylistNow(playlistId)
     }
 
     private suspend fun isOffline(): Boolean {

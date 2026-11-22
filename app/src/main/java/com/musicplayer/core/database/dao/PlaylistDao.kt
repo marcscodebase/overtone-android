@@ -85,6 +85,9 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET isAutoSyncDownloaded = :enabled WHERE id = :playlistId")
     suspend fun setAutoSyncDownloaded(playlistId: String, enabled: Boolean)
 
+    @Query("UPDATE playlists SET lastSyncedAt = :syncedAt WHERE id = :playlistId")
+    suspend fun updateLastSyncedAt(playlistId: String, syncedAt: Long)
+
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deleteById(playlistId: String)
 

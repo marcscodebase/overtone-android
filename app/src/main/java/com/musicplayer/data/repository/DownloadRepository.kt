@@ -51,6 +51,34 @@ data class StorageSummary(
     val items: List<DownloadedTrackItem> = emptyList(),
 )
 
+data class PlaylistDownloadDiff(
+    val trackIdsToDownload: Set<String>,
+    val trackIdsToUnref: Set<String>,
+)
+
+data class PlaylistSyncSummary(
+    val queuedDownloads: Int = 0,
+    val prunedFiles: Int = 0,
+)
+
+object PlaylistDownloadDiffCalculator {
+
+    fun calculate(
+        remoteTrackIds: Set<String>,
+        existingPlaylistRefTrackIds: Set<String>,
+        completedTrackIds: Set<String>,
+    ): PlaylistDownloadDiff {
+        val toDownload = remoteTrackIds.filterTo(linkedSetOf()) { trackId ->
+            trackId !in existingPlaylistRefTrackIds || trackId !in completedTrackIds
+        }
+        val toUnref = existingPlaylistRefTrackIds - remoteTrackIds
+        return PlaylistDownloadDiff(
+            trackIdsToDownload = toDownload,
+            trackIdsToUnref = toUnref,
+        )
+    }
+}
+
 /**
  * Pure reference-counting orphan evaluation helper for unit-tested deletion semantics.
  */
@@ -97,6 +125,11 @@ interface DownloadRepository {
     suspend fun downloadTrack(trackId: String, qualityOverride: DownloadQuality? = null)
     suspend fun downloadAlbum(albumId: String, qualityOverride: DownloadQuality? = null): Int
     suspend fun downloadPlaylist(playlistId: String, qualityOverride: DownloadQuality? = null): Int
+    suspend fun syncPlaylistDownloads(
+        playlistId: String,
+        remoteTrackIds: Set<String>,
+        qualityOverride: DownloadQuality? = null,
+    ): PlaylistSyncSummary
 
     suspend fun removeTrackDownload(trackId: String)
     suspend fun removeAlbumDownload(albumId: String): Int
@@ -267,6 +300,71 @@ class JellyfinDownloadRepository @Inject constructor(
             }
         }
         enqueued
+    }
+
+    override suspend fun syncPlaylistDownloads(
+        playlistId: String,
+        remoteTrackIds: Set<String>,
+        qualityOverride: DownloadQuality?,
+    ): PlaylistSyncSummary = withContext(ioDispatcher) {
+        val existingRefs = downloadDao.getRefsByOwner(DownloadOwnerType.PLAYLIST, playlistId)
+            .map { it.trackId }
+            .toSet()
+        val completedIds = downloadDao.getCompletedRecords()
+            .map { it.trackId }
+            .toSet()
+
+        val diff = PlaylistDownloadDiffCalculator.calculate(
+            remoteTrackIds = remoteTrackIds,
+            existingPlaylistRefTrackIds = existingRefs,
+            completedTrackIds = completedIds,
+        )
+
+        val prefs = preferencesDataStore.userPreferences.first()
+        val quality = qualityOverride ?: prefs.defaultDownloadQuality
+
+        if (remoteTrackIds.isNotEmpty()) {
+            downloadDao.upsertRefs(
+                remoteTrackIds.map { trackId ->
+                    DownloadRefEntity(
+                        trackId = trackId,
+                        ownerType = DownloadOwnerType.PLAYLIST,
+                        ownerId = playlistId,
+                    )
+                },
+            )
+        }
+
+        var queued = 0
+        for (trackId in diff.trackIdsToDownload) {
+            if (enqueueTrackDownload(
+                    trackId = trackId,
+                    quality = quality,
+                    wifiOnly = prefs.wifiOnlyDownloads,
+                    replaceIfDifferentQuality = qualityOverride != null,
+                )
+            ) {
+                queued++
+            }
+        }
+
+        for (removedTrackId in diff.trackIdsToUnref) {
+            downloadDao.deleteRef(
+                trackId = removedTrackId,
+                ownerType = DownloadOwnerType.PLAYLIST,
+                ownerId = playlistId,
+            )
+        }
+
+        val orphans = downloadDao.findOrphanedTrackIds()
+        orphans.forEach { orphanId ->
+            purgeTrackFileAndRecord(orphanId)
+        }
+
+        PlaylistSyncSummary(
+            queuedDownloads = queued,
+            prunedFiles = orphans.size,
+        )
     }
 
     override suspend fun removeTrackDownload(trackId: String) = withContext(ioDispatcher) {

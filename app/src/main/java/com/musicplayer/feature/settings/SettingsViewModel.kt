@@ -3,6 +3,7 @@ package com.musicplayer.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
+import com.musicplayer.core.database.dao.PlaylistDao
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.core.model.CellularBitrateCap
@@ -13,6 +14,7 @@ import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.data.worker.OfflineSyncScheduler
+import com.musicplayer.data.worker.PlaylistSyncScheduler
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +42,8 @@ class SettingsViewModel @Inject constructor(
     downloadRepository: DownloadRepository,
     private val syncRepository: SyncRepository,
     private val offlineSyncScheduler: OfflineSyncScheduler,
+    private val playlistDao: PlaylistDao,
+    private val playlistSyncScheduler: PlaylistSyncScheduler,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
@@ -114,6 +118,9 @@ class SettingsViewModel @Inject constructor(
     fun onToggleWifiOnlyDownloads(wifiOnly: Boolean) {
         viewModelScope.launch {
             preferencesDataStore.setWifiOnlyDownloads(wifiOnly)
+            if (playlistDao.getAutoSyncPlaylists().isNotEmpty()) {
+                playlistSyncScheduler.ensurePeriodicSyncScheduled(wifiOnly)
+            }
         }
     }
 

@@ -1,7 +1,9 @@
 package com.musicplayer.data.repository
 
 import com.musicplayer.data.worker.OfflineSyncScheduler
+import com.musicplayer.data.worker.PlaylistSyncScheduler
 import com.musicplayer.data.worker.WorkManagerOfflineSyncScheduler
+import com.musicplayer.data.worker.WorkManagerPlaylistSyncScheduler
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -47,4 +49,10 @@ abstract class RepositoryModule {
     abstract fun bindOfflineSyncScheduler(
         impl: WorkManagerOfflineSyncScheduler,
     ): OfflineSyncScheduler
+
+    @Binds
+    @Singleton
+    abstract fun bindPlaylistSyncScheduler(
+        impl: WorkManagerPlaylistSyncScheduler,
+    ): PlaylistSyncScheduler
 }

@@ -111,6 +111,8 @@ class LibraryViewModelTest {
         override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun removeTrackFromPlaylist(playlistId: String, playlistItemId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun moveTrackInPlaylist(playlistId: String, playlistItemId: String, fromIndex: Int, toIndex: Int): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun setAutoSyncDownloaded(playlistId: String, enabled: Boolean) = Unit
+        override fun triggerPlaylistDownloadSync(playlistId: String) = Unit
     }
 
     private class FakeSyncRepository : SyncRepository {
