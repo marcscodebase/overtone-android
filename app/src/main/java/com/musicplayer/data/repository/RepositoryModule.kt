@@ -15,4 +15,10 @@ abstract class RepositoryModule {
     abstract fun bindAuthRepository(
         impl: JellyfinAuthRepository,
     ): AuthRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLibraryRepository(
+        impl: JellyfinLibraryRepository,
+    ): LibraryRepository
 }
