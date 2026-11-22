@@ -41,6 +41,7 @@ import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.AlbumCarouselCard
 import com.musicplayer.core.designsystem.component.ArtistCircleCard
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.PlaylistCarouselCard
 import com.musicplayer.core.designsystem.component.SectionHeader
 import com.musicplayer.core.designsystem.component.TrackRow
@@ -126,6 +127,7 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            OfflineStatusBanner(status = state.offlineStatus)
             OutlinedTextField(
                 value = state.query,
                 onValueChange = onQueryChanged,
@@ -199,6 +201,7 @@ fun SearchScreen(
                                 TrackRow(
                                     track = track,
                                     isPlaying = track.id == state.activeTrackId,
+                                    enabled = !state.isOffline || track.isDownloaded,
                                     onClick = { onTrackClick(state.results.tracks, index) },
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },

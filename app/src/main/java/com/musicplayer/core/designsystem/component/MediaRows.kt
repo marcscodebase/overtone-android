@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -69,6 +70,7 @@ fun TrackRow(
     isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
     onPlayNext: (() -> Unit)? = null,
@@ -79,7 +81,7 @@ fun TrackRow(
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
-    if (onAddToQueue != null) {
+    if (enabled && onAddToQueue != null) {
         val haptic = LocalHapticFeedback.current
         val dismissState = rememberSwipeToDismissBoxState(
             confirmValueChange = { value ->
@@ -123,6 +125,7 @@ fun TrackRow(
                 track = track,
                 isPlaying = isPlaying,
                 onClick = onClick,
+                enabled = enabled,
                 showArtwork = showArtwork,
                 trackNumberOverride = trackNumberOverride,
                 onPlayNext = onPlayNext,
@@ -140,9 +143,10 @@ fun TrackRow(
             isPlaying = isPlaying,
             onClick = onClick,
             modifier = modifier,
+            enabled = enabled,
             showArtwork = showArtwork,
             trackNumberOverride = trackNumberOverride,
-            onPlayNext = onPlayNext,
+            onPlayNext = if (enabled) onPlayNext else null,
             onAddToQueue = null,
             onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
@@ -159,6 +163,7 @@ private fun TrackRowContent(
     isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
     onPlayNext: (() -> Unit)? = null,
@@ -178,7 +183,8 @@ private fun TrackRowContent(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.42f)
             .padding(start = 16.dp, end = if (hasMenu) 4.dp else 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

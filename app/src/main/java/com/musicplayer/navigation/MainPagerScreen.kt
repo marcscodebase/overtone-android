@@ -27,9 +27,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CloudDone
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
+import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.home.HomeContent
 import com.musicplayer.feature.home.HomeViewModel
@@ -79,21 +83,30 @@ fun MainPagerRoute(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
     val currentPage by remember { derivedStateOf { pagerState.currentPage } }
+    val offlineStatus by libraryViewModel.offlineStatus.collectAsStateWithLifecycle()
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            CompactTopTabBar(
-                selectedPage = currentPage,
-                onSelectPage = { page ->
-                    coroutineScope.launch { pagerState.animateScrollToPage(page) }
-                },
-                onRefreshClick = homeViewModel::refreshLibrary,
-                onToggleSortClick = libraryViewModel::onToggleSort,
-                onSettingsClick = onSettingsClick,
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                CompactTopTabBar(
+                    selectedPage = currentPage,
+                    manualOfflineMode = offlineStatus.manualOfflineMode,
+                    onSelectPage = { page ->
+                        coroutineScope.launch { pagerState.animateScrollToPage(page) }
+                    },
+                    onRefreshClick = homeViewModel::refreshLibrary,
+                    onToggleOfflineMode = libraryViewModel::onToggleOfflineMode,
+                    onToggleSortClick = libraryViewModel::onToggleSort,
+                    onSettingsClick = onSettingsClick,
+                )
+                OfflineStatusBanner(
+                    status = offlineStatus,
+                    onGoOnlineClick = libraryViewModel::onDisableManualOfflineMode,
+                )
+            }
         },
         floatingActionButton = {
             Column(
@@ -222,8 +235,10 @@ private fun LibraryPagerPage(
 @Composable
 private fun CompactTopTabBar(
     selectedPage: Int,
+    manualOfflineMode: Boolean,
     onSelectPage: (Int) -> Unit,
     onRefreshClick: () -> Unit,
+    onToggleOfflineMode: () -> Unit,
     onToggleSortClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
@@ -258,6 +273,15 @@ private fun CompactTopTabBar(
                     )
                 }
             } else {
+                FilledTonalIconToggleButton(
+                    checked = manualOfflineMode,
+                    onCheckedChange = { onToggleOfflineMode() },
+                ) {
+                    Icon(
+                        imageVector = if (manualOfflineMode) Icons.Rounded.CloudOff else Icons.Rounded.CloudDone,
+                        contentDescription = stringResource(R.string.offline_toggle_desc),
+                    )
+                }
                 IconButton(onClick = onToggleSortClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.Sort,

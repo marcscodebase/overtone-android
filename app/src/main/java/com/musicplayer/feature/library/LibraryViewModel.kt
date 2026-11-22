@@ -6,6 +6,8 @@ import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
@@ -48,7 +50,10 @@ data class LibraryUiState(
     val artists: List<Artist> = emptyList(),
     val tracks: List<Track> = emptyList(),
     val activeTrackId: String? = null,
-)
+    val offlineStatus: OfflineStatus = OfflineStatus(),
+) {
+    val isOffline: Boolean get() = offlineStatus.isOffline
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -57,7 +62,10 @@ class LibraryViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
+    private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
+
+    val offlineStatus: StateFlow<OfflineStatus> = offlineStateProvider.offlineStatus
 
     private val selectedFilter = MutableStateFlow(LibraryFilter.ALBUMS)
     private val selectedSort = MutableStateFlow(LibrarySort.ALPHABETICAL)
@@ -120,8 +128,12 @@ class LibraryViewModel @Inject constructor(
     val uiState: StateFlow<LibraryUiState> = combine(
         activeCollectionState,
         activeTrackId,
-    ) { state, activeId ->
-        state.copy(activeTrackId = activeId)
+        offlineStateProvider.offlineStatus,
+    ) { state, activeId, offline ->
+        state.copy(
+            activeTrackId = activeId,
+            offlineStatus = offline,
+        )
     }
         .distinctUntilChanged()
         .stateIn(
@@ -129,6 +141,22 @@ class LibraryViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = LibraryUiState(),
         )
+
+    fun onToggleOfflineMode() {
+        val target = !offlineStateProvider.offlineStatus.value.manualOfflineMode
+        if (target) {
+            selectedFilter.value = LibraryFilter.DOWNLOADED
+        }
+        viewModelScope.launch {
+            offlineStateProvider.setManualOfflineMode(target)
+        }
+    }
+
+    fun onDisableManualOfflineMode() {
+        viewModelScope.launch {
+            offlineStateProvider.setManualOfflineMode(false)
+        }
+    }
 
     fun onFilterSelected(filter: LibraryFilter) {
         selectedFilter.value = filter
@@ -142,7 +170,14 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onPlayTracks(tracks: List<Track>, startIndex: Int) {
-        playbackController.playTracks(tracks = tracks, startIndex = startIndex)
+        val tapped = tracks.getOrNull(startIndex) ?: return
+        val isOffline = uiState.value.isOffline
+        if (isOffline && !tapped.isDownloaded) return
+        val playable = if (isOffline) tracks.filter { it.isDownloaded } else tracks
+        val resolvedIndex = playable.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0)
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(tracks = playable, startIndex = resolvedIndex)
+        }
     }
 
     fun onPlayNext(track: Track) = playbackController.playNext(track)

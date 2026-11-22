@@ -52,6 +52,7 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
@@ -233,6 +234,9 @@ fun PlaylistDetailScreen(
                 .padding(innerPadding),
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
+            item(key = "playlist_offline_banner") {
+                OfflineStatusBanner(status = state.offlineStatus)
+            }
             if (state.isSyncing) {
                 item(key = "playlist_syncing") {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -245,7 +249,7 @@ fun PlaylistDetailScreen(
                     metadata = metadata,
                     artworkUrl = state.playlist?.artworkUrl,
                     isCircularArtwork = false,
-                    canPlay = state.entries.isNotEmpty(),
+                    canPlay = state.playableTracks.isNotEmpty(),
                     onPlayClick = onPlayAll,
                     onShuffleClick = onShuffleAll,
                 )
@@ -275,6 +279,7 @@ fun PlaylistDetailScreen(
                         TrackRow(
                             track = entry.track,
                             isPlaying = entry.track.id == state.activeTrackId,
+                            enabled = !state.isOffline || entry.track.isDownloaded,
                             onClick = { onTrackClick(index) },
                             onPlayNext = { onPlayNext(entry.track) },
                             onAddToQueue = { onAddToQueue(entry.track) },

@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -26,8 +28,11 @@ data class SearchUiState(
     val isSearching: Boolean = false,
     val results: SearchResults = SearchResults(),
     val activeTrackId: String? = null,
+    val offlineStatus: OfflineStatus = OfflineStatus(),
     val errorMessage: String? = null,
-)
+) {
+    val isOffline: Boolean get() = offlineStatus.isOffline
+}
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
@@ -35,6 +40,7 @@ class SearchViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
+    private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -42,6 +48,11 @@ class SearchViewModel @Inject constructor(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            offlineStateProvider.offlineStatus.collectLatest { status ->
+                _uiState.update { it.copy(offlineStatus = status) }
+            }
+        }
         viewModelScope.launch {
             playbackController.playbackState
                 .map { it.currentTrack?.id }
@@ -102,7 +113,14 @@ class SearchViewModel @Inject constructor(
     }
 
     fun onPlayTrack(tracks: List<Track>, index: Int) {
-        playbackController.playTracks(tracks = tracks, startIndex = index)
+        val tapped = tracks.getOrNull(index) ?: return
+        val isOffline = uiState.value.isOffline
+        if (isOffline && !tapped.isDownloaded) return
+        val playable = if (isOffline) tracks.filter { it.isDownloaded } else tracks
+        val resolvedIndex = playable.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0)
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(tracks = playable, startIndex = resolvedIndex)
+        }
     }
 
     fun onPlayNext(track: Track) = playbackController.playNext(track)

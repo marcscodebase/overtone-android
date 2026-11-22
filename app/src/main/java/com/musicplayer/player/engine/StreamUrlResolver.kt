@@ -43,12 +43,16 @@ class StreamUrlResolver @Inject constructor(
         }
 
         val prefs = preferencesDataStore.userPreferences.first()
-        val isMetered = networkMonitor.networkState.value.isMetered
+        val netState = networkMonitor.networkState.value
+        if (prefs.offlineModeEnabled || !netState.isConnected) {
+            return null
+        }
         return resolveForContext(
             track = track,
             baseUrl = clientProvider.getClient().baseUrl,
-            isMetered = isMetered,
+            isMetered = netState.isMetered,
             cellularBitrateCap = prefs.cellularBitrateCap,
+            isOffline = false,
         )
     }
 
@@ -58,10 +62,12 @@ class StreamUrlResolver @Inject constructor(
             baseUrl: String?,
             isMetered: Boolean = false,
             cellularBitrateCap: CellularBitrateCap = CellularBitrateCap.ORIGINAL,
+            isOffline: Boolean = false,
         ): ResolvedAudioSource? {
             if (track.isDownloaded && !track.localUri.isNullOrBlank()) {
                 return ResolvedAudioSource(uri = track.localUri, isLocal = true)
             }
+            if (isOffline) return null
 
             val cleanBase = baseUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
             val cappedKbps = if (isMetered) cellularBitrateCap.kbps else null

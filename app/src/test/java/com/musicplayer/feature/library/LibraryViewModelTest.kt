@@ -8,6 +8,8 @@ import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
@@ -56,6 +58,7 @@ class LibraryViewModelTest {
             playlistRepository = FakePlaylistRepository(),
             syncRepository = FakeSyncRepository(),
             playbackController = FakePlaybackController(),
+            offlineStateProvider = FakeOfflineStateProvider(),
         )
 
         viewModel.uiState.test {
@@ -142,5 +145,13 @@ class LibraryViewModelTest {
         override fun cycleRepeatMode() = Unit
         override fun stopAndClear() = Unit
         override fun clearError() = Unit
+    }
+
+    private class FakeOfflineStateProvider : OfflineStateProvider {
+        private val state = MutableStateFlow(OfflineStatus())
+        override val offlineStatus: StateFlow<OfflineStatus> = state
+        override suspend fun setManualOfflineMode(enabled: Boolean) {
+            state.value = state.value.copy(manualOfflineMode = enabled)
+        }
     }
 }

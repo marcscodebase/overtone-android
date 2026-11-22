@@ -20,6 +20,7 @@ import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.JellyfinClientProvider
+import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.remote.JellyfinArtworkUrlBuilder
 import com.musicplayer.data.remote.JellyfinMappers
 import com.musicplayer.data.remote.JellyfinMappers.toDomain
@@ -68,6 +69,7 @@ interface LibraryRepository {
 @Singleton
 class JellyfinLibraryRepository @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
+    private val networkMonitor: NetworkMonitor,
     private val authSessionStore: AuthSessionStore,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val artworkUrlBuilder: JellyfinArtworkUrlBuilder,
@@ -244,13 +246,18 @@ class JellyfinLibraryRepository @Inject constructor(
         }
 
     override suspend fun syncLibrary(): AppResult<Unit> = withContext(ioDispatcher) {
+        val prefs = preferencesDataStore.userPreferences.first()
+        if (prefs.offlineModeEnabled || !networkMonitor.networkState.value.isConnected) {
+            return@withContext AppResult.Error(AppError.Network("Offline mode — using cached library"))
+        }
+
         val session = authSessionStore.getSession()
             ?: return@withContext AppResult.Error(AppError.Unauthorized("Not signed in"))
 
         val userUuid = runCatching { UUID.fromString(session.userId) }.getOrNull()
             ?: return@withContext AppResult.Error(AppError.Unauthorized("Invalid user session"))
 
-        val selectedLibraries = preferencesDataStore.userPreferences.first().selectedMusicLibraryIds
+        val selectedLibraries = prefs.selectedMusicLibraryIds
         val parentIds: List<UUID?> = if (selectedLibraries.isEmpty()) {
             listOf(null)
         } else {
@@ -278,6 +285,10 @@ class JellyfinLibraryRepository @Inject constructor(
 
     override suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit> =
         withContext(ioDispatcher) {
+            val prefs = preferencesDataStore.userPreferences.first()
+            if (prefs.offlineModeEnabled || !networkMonitor.networkState.value.isConnected) {
+                return@withContext AppResult.Success(Unit)
+            }
             val session = authSessionStore.getSession()
                 ?: return@withContext AppResult.Error(AppError.Unauthorized("Not signed in"))
             val userUuid = runCatching { UUID.fromString(session.userId) }.getOrNull()
@@ -321,7 +332,7 @@ class JellyfinLibraryRepository @Inject constructor(
             }
 
             val prefs = preferencesDataStore.userPreferences.first()
-            if (prefs.offlineModeEnabled) {
+            if (prefs.offlineModeEnabled || !networkMonitor.networkState.value.isConnected) {
                 return@withContext AppResult.Success(searchLocal(trimmed, isOfflineFallback = true))
             }
 
@@ -417,6 +428,8 @@ class JellyfinLibraryRepository @Inject constructor(
                 ),
                 downloadRecord = downloads[entity.id],
             )
+        }.let { tracks ->
+            if (isOfflineFallback) tracks.sortedByDescending { it.isDownloaded } else tracks
         }
         val matchedAlbums = albumDao.observeAll().first()
             .filter {

@@ -150,6 +150,7 @@ fun HomeContent(
                             TrackRow(
                                 track = track,
                                 isPlaying = track.id == state.activeTrackId,
+                                enabled = !state.isOffline || track.isDownloaded,
                                 onClick = { onTrackClick(state.favoriteTracks, index) },
                                 onPlayNext = { onPlayNext(track) },
                                 onAddToQueue = { onAddToQueue(track) },
@@ -174,6 +175,7 @@ fun HomeContent(
                             TrackRow(
                                 track = track,
                                 isPlaying = track.id == state.activeTrackId,
+                                enabled = !state.isOffline || track.isDownloaded,
                                 onClick = { onTrackClick(state.recentlyPlayedTracks, index) },
                                 onPlayNext = { onPlayNext(track) },
                                 onAddToQueue = { onAddToQueue(track) },

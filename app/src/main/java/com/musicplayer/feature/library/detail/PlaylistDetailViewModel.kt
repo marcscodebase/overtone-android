@@ -9,6 +9,8 @@ import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
@@ -29,6 +31,7 @@ data class PlaylistDetailUiState(
     val playlist: Playlist? = null,
     val entries: List<PlaylistTrackEntry> = emptyList(),
     val activeTrackId: String? = null,
+    val offlineStatus: OfflineStatus = OfflineStatus(),
     val isPlaylistPinnedDownloaded: Boolean = false,
     val isDownloadingAny: Boolean = false,
     val isSyncing: Boolean = false,
@@ -36,8 +39,11 @@ data class PlaylistDetailUiState(
     val isDeleted: Boolean = false,
     val errorMessage: String? = null,
 ) {
+    val isOffline: Boolean get() = offlineStatus.isOffline
     val tracks: List<Track>
         get() = entries.map { it.track }
+    val playableTracks: List<Track>
+        get() = if (isOffline) tracks.filter { it.isDownloaded } else tracks
 }
 
 @HiltViewModel
@@ -48,6 +54,7 @@ class PlaylistDetailViewModel @Inject constructor(
     downloadRepository: DownloadRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
+    private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     private val playlistId: String = checkNotNull(savedStateHandle["playlistId"])
@@ -68,8 +75,9 @@ class PlaylistDetailViewModel @Inject constructor(
     private val downloadMetaState = combine(
         downloadRepository.observeOwnerHasDownloadRefs(DownloadOwnerType.PLAYLIST, playlistId),
         downloadRepository.observeAllRecords(),
-    ) { hasRefs, records ->
-        hasRefs to records
+        offlineStateProvider.offlineStatus,
+    ) { hasRefs, records, offline ->
+        Triple(hasRefs, records, offline)
     }
 
     val uiState: StateFlow<PlaylistDetailUiState> = combine(
@@ -78,7 +86,7 @@ class PlaylistDetailViewModel @Inject constructor(
         playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
         downloadMetaState,
         metaState,
-    ) { playlist, entries, activeId, (hasRefs, records), meta ->
+    ) { playlist, entries, activeId, (hasRefs, records, offline), meta ->
         val downloadingAny = entries.any { entry ->
             val st = records[entry.track.id]?.status
             st == DownloadStatus.QUEUED || st == DownloadStatus.DOWNLOADING || st == DownloadStatus.TRANSCODING
@@ -87,6 +95,7 @@ class PlaylistDetailViewModel @Inject constructor(
             playlist = playlist,
             entries = entries,
             activeTrackId = activeId,
+            offlineStatus = offline,
             isPlaylistPinnedDownloaded = hasRefs,
             isDownloadingAny = downloadingAny,
             isSyncing = meta.isSyncing,
@@ -121,23 +130,27 @@ class PlaylistDetailViewModel @Inject constructor(
     }
 
     fun onPlayAll() {
-        val tracks = uiState.value.tracks
+        val tracks = uiState.value.playableTracks
         if (tracks.isNotEmpty()) {
             playbackController.playTracks(tracks = tracks, startIndex = 0, shuffle = false)
         }
     }
 
     fun onShuffleAll() {
-        val tracks = uiState.value.tracks
+        val tracks = uiState.value.playableTracks
         if (tracks.isNotEmpty()) {
             playbackController.playTracks(tracks = tracks, startIndex = 0, shuffle = true)
         }
     }
 
     fun onTrackClick(index: Int) {
-        val tracks = uiState.value.tracks
-        if (index in tracks.indices) {
-            playbackController.playTracks(tracks = tracks, startIndex = index, shuffle = false)
+        val state = uiState.value
+        val tapped = state.tracks.getOrNull(index) ?: return
+        if (state.isOffline && !tapped.isDownloaded) return
+        val playable = state.playableTracks
+        val startIdx = playable.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0)
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(tracks = playable, startIndex = startIdx, shuffle = false)
         }
     }
 

@@ -236,6 +236,7 @@ fun LibraryContent(
                             TrackRow(
                                 track = track,
                                 isPlaying = track.id == state.activeTrackId,
+                                enabled = !state.isOffline || track.isDownloaded,
                                 onClick = { onTrackClick(state.tracks, index) },
                                 onPlayNext = { onPlayNext(track) },
                                 onAddToQueue = { onAddToQueue(track) },

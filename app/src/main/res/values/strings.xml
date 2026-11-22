@@ -137,4 +137,13 @@
     <string name="storage_clear_all">Clear all</string>
     <string name="storage_clear_all_title">Clear all downloads?</string>
     <string name="storage_clear_all_message">This deletes all downloaded audio files from Music/music-player/ on your device. Your Jellyfin library will not be affected.</string>
+    <string name="offline_banner_manual">Offline Mode — showing downloaded &amp; cached music</string>
+    <string name="offline_banner_no_network">No internet connection — playing downloaded tracks</string>
+    <string name="offline_go_online">Go online</string>
+    <string name="offline_toggle_desc">Toggle Offline Mode</string>
+    <string name="offline_sync_pending">%1$d offline changes waiting to sync</string>
+    <string name="offline_sync_now">Sync now</string>
+    <string name="playlist_auto_sync">Auto-Sync Downloads</string>
+    <string name="playlist_auto_sync_subtitle">Automatically download added songs and clean up removed tracks</string>
+    <string name="playlist_sync_downloads_now">Sync downloads</string>
 </resources>

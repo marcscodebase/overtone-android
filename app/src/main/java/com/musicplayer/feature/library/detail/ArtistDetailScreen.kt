@@ -31,6 +31,7 @@ import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.AlbumCarouselCard
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.SectionHeader
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.Track
@@ -130,6 +131,9 @@ fun ArtistDetailScreen(
                     .padding(innerPadding),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
+                item(key = "artist_offline_banner") {
+                    OfflineStatusBanner(status = state.offlineStatus)
+                }
                 item(key = "artist_header") {
                     CollectionDetailHeader(
                         title = artist?.name ?: state.tracks.firstOrNull()?.artistName.orEmpty(),
@@ -137,7 +141,7 @@ fun ArtistDetailScreen(
                         metadata = "${state.albums.size} albums • ${state.tracks.size} songs",
                         artworkUrl = artist?.artworkUrl,
                         isCircularArtwork = true,
-                        canPlay = state.tracks.isNotEmpty(),
+                        canPlay = state.playableTracks.isNotEmpty(),
                         onPlayClick = onPlayAll,
                         onShuffleClick = onShuffleAll,
                     )
@@ -174,6 +178,7 @@ fun ArtistDetailScreen(
                         TrackRow(
                             track = track,
                             isPlaying = track.id == state.activeTrackId,
+                            enabled = !state.isOffline || track.isDownloaded,
                             onClick = { onTrackClick(index) },
                             onPlayNext = { onPlayNext(track) },
                             onAddToQueue = { onAddToQueue(track) },

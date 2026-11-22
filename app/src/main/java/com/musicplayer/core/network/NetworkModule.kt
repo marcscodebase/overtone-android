@@ -89,4 +89,10 @@ abstract class NetworkBindingsModule {
     abstract fun bindNetworkMonitor(
         impl: ConnectivityManagerNetworkMonitor,
     ): NetworkMonitor
+
+    @Binds
+    @Singleton
+    abstract fun bindOfflineStateProvider(
+        impl: DefaultOfflineStateProvider,
+    ): OfflineStateProvider
 }

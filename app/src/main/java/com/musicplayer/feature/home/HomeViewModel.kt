@@ -6,6 +6,8 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -28,9 +30,11 @@ data class HomeUiState(
     val favoriteTracks: List<Track> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val activeTrackId: String? = null,
+    val offlineStatus: OfflineStatus = OfflineStatus(),
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
 ) {
+    val isOffline: Boolean get() = offlineStatus.isOffline
     val isEmpty: Boolean
         get() = recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() &&
             favoriteTracks.isEmpty() && playlists.isEmpty()
@@ -41,6 +45,7 @@ class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
+    private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     private val isRefreshing = MutableStateFlow(false)
@@ -55,21 +60,30 @@ class HomeViewModel @Inject constructor(
         libraryRepository.observeFavoriteTracks(),
     ) { recent, favorites -> recent to favorites.take(10) }
 
+    private val statusBundle = combine(
+        activeTrackId,
+        offlineStateProvider.offlineStatus,
+        isRefreshing,
+        errorMessage,
+    ) { activeId, offline, refreshing, error ->
+        HomeStatusBundle(activeId, offline, refreshing, error)
+    }
+
     val uiState: StateFlow<HomeUiState> = combine(
         libraryRepository.observeRecentlyAddedAlbums(limit = 16),
         trackFeeds,
         libraryRepository.observeAllPlaylists(),
-        activeTrackId,
-        combine(isRefreshing, errorMessage) { refreshing, error -> refreshing to error },
-    ) { albums, (recentTracks, favorites), playlists, activeId, (refreshing, error) ->
+        statusBundle,
+    ) { albums, (recentTracks, favorites), playlists, status ->
         HomeUiState(
             recentlyAddedAlbums = albums,
             recentlyPlayedTracks = recentTracks,
             favoriteTracks = favorites,
             playlists = playlists,
-            activeTrackId = activeId,
-            isRefreshing = refreshing,
-            errorMessage = error,
+            activeTrackId = status.activeTrackId,
+            offlineStatus = status.offlineStatus,
+            isRefreshing = status.isRefreshing,
+            errorMessage = status.errorMessage,
         )
     }
         .flowOn(Dispatchers.Default)
@@ -78,6 +92,13 @@ class HomeViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = HomeUiState(isRefreshing = true),
         )
+
+    private data class HomeStatusBundle(
+        val activeTrackId: String?,
+        val offlineStatus: OfflineStatus,
+        val isRefreshing: Boolean,
+        val errorMessage: String?,
+    )
 
     init {
         refreshLibrary()
@@ -97,7 +118,14 @@ class HomeViewModel @Inject constructor(
     }
 
     fun onTrackClick(tracks: List<Track>, index: Int) {
-        playbackController.playTracks(tracks = tracks, startIndex = index)
+        val tapped = tracks.getOrNull(index) ?: return
+        val isOffline = uiState.value.isOffline
+        if (isOffline && !tapped.isDownloaded) return
+        val playable = if (isOffline) tracks.filter { it.isDownloaded } else tracks
+        val startIdx = playable.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0)
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(tracks = playable, startIndex = startIdx)
+        }
     }
 
     fun onPlayNext(track: Track) = playbackController.playNext(track)
