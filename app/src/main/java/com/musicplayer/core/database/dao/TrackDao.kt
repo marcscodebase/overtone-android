@@ -36,6 +36,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET isFavorite = :isFavorite WHERE id = :trackId")
     suspend fun setFavorite(trackId: String, isFavorite: Boolean)
 
+    @Query("UPDATE tracks SET playCount = playCount + 1, lastPlayedAt = :playedAt WHERE id = :trackId")
+    suspend fun recordPlay(trackId: String, playedAt: Long)
+
     @Query("DELETE FROM tracks")
     suspend fun clearAll()
 }

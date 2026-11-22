@@ -14,6 +14,8 @@ import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.ApplicationScope
 import com.musicplayer.core.common.Dispatcher
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.NetworkMonitor
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.engine.StreamUrlResolver
 import com.musicplayer.player.queue.QueueOrderHelper
 import com.musicplayer.player.queue.QueuePersistenceManager
@@ -65,6 +67,8 @@ class MediaControllerPlaybackController @Inject constructor(
     @param:Dispatcher(AppDispatcher.Main) private val mainDispatcher: CoroutineDispatcher,
     private val streamUrlResolver: StreamUrlResolver,
     private val queuePersistenceManager: QueuePersistenceManager,
+    private val syncRepository: SyncRepository,
+    private val networkMonitor: NetworkMonitor,
 ) : PlaybackController {
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -77,27 +81,61 @@ class MediaControllerPlaybackController @Inject constructor(
     private var needsPrepareOnPlay = false
     private var pendingRestoreIndex = 0
     private var pendingRestorePositionMs = 0L
+    private var lastReportedTrackId: String? = null
+    private var lastReportedPositionMs: Long = 0L
+    private var lastProgressReportTimeMs: Long = 0L
 
     private val localIds = mutableSetOf<String>()
+
+    init {
+        appScope.launch {
+            networkMonitor.networkState.collect { netState ->
+                if (netState.isConnected) {
+                    syncRepository.flushPendingSyncActions()
+                }
+            }
+        }
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             syncFromPlayer()
+            val state = _playbackState.value
+            val active = state.currentTrack
             if (isPlaying) {
                 startPositionTicker()
+                if (active != null) {
+                    if (lastReportedTrackId != active.id) {
+                        reportTrackTransition(active.id, state.positionMs, state.transcodedBitrateKbps != null)
+                    } else {
+                        reportProgressAsync(active.id, state.positionMs, isPaused = false, state.transcodedBitrateKbps != null)
+                    }
+                }
             } else {
                 stopPositionTicker()
                 persistPositionAsync()
+                if (active != null) {
+                    lastReportedPositionMs = state.positionMs
+                    reportProgressAsync(active.id, state.positionMs, isPaused = true, state.transcodedBitrateKbps != null)
+                }
             }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             syncFromPlayer()
+            if (playbackState == Player.STATE_ENDED) {
+                reportStoppedForLastTrack()
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             syncFromPlayer()
             persistPositionAsync()
+            val state = _playbackState.value
+            val newTrack = state.currentTrack
+            if (newTrack != null && newTrack.id != lastReportedTrackId) {
+                reportTrackTransition(newTrack.id, state.positionMs, state.transcodedBitrateKbps != null)
+            }
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -441,6 +479,7 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun stopAndClear() {
         appScope.launch(mainDispatcher) {
+            reportStoppedForLastTrack()
             stopPositionTicker()
             needsPrepareOnPlay = false
             controller?.stop()
@@ -538,10 +577,23 @@ class MediaControllerPlaybackController @Inject constructor(
             while (isActive) {
                 val player = controller
                 if (player != null && player.isPlaying) {
+                    val pos = player.currentPosition.coerceAtLeast(0L)
+                    lastReportedPositionMs = pos
                     _playbackState.update { current ->
                         current.copy(
-                            positionMs = player.currentPosition.coerceAtLeast(0L),
+                            positionMs = pos,
                             durationMs = player.duration.takeIf { it > 0L } ?: current.durationMs,
+                        )
+                    }
+                    val now = System.currentTimeMillis()
+                    val active = _playbackState.value.currentTrack
+                    if (active != null && now - lastProgressReportTimeMs >= PROGRESS_REPORT_INTERVAL_MS) {
+                        lastProgressReportTimeMs = now
+                        reportProgressAsync(
+                            trackId = active.id,
+                            positionMs = pos,
+                            isPaused = false,
+                            isTranscoded = _playbackState.value.transcodedBitrateKbps != null,
                         )
                     }
                 }
@@ -553,6 +605,46 @@ class MediaControllerPlaybackController @Inject constructor(
     private fun stopPositionTicker() {
         positionTickerJob?.cancel()
         positionTickerJob = null
+    }
+
+    private fun reportTrackTransition(
+        newTrackId: String,
+        startPositionMs: Long,
+        isTranscoded: Boolean,
+    ) {
+        val previousTrackId = lastReportedTrackId
+        val previousPos = lastReportedPositionMs
+        lastReportedTrackId = newTrackId
+        lastReportedPositionMs = startPositionMs
+        lastProgressReportTimeMs = System.currentTimeMillis()
+
+        appScope.launch {
+            if (previousTrackId != null && previousTrackId != newTrackId) {
+                syncRepository.reportPlaybackStopped(previousTrackId, previousPos)
+            }
+            syncRepository.reportPlaybackStart(newTrackId, startPositionMs, isTranscoded)
+        }
+    }
+
+    private fun reportProgressAsync(
+        trackId: String,
+        positionMs: Long,
+        isPaused: Boolean,
+        isTranscoded: Boolean,
+    ) {
+        appScope.launch {
+            syncRepository.reportPlaybackProgress(trackId, positionMs, isPaused, isTranscoded)
+        }
+    }
+
+    private fun reportStoppedForLastTrack() {
+        val trackId = lastReportedTrackId ?: return
+        val pos = lastReportedPositionMs
+        lastReportedTrackId = null
+        lastReportedPositionMs = 0L
+        appScope.launch {
+            syncRepository.reportPlaybackStopped(trackId, pos)
+        }
     }
 
     private fun persistQueueAsync() {
@@ -607,6 +699,7 @@ class MediaControllerPlaybackController @Inject constructor(
         private const val EXTRA_IS_LOCAL = "com.musicplayer.extra.IS_LOCAL"
         private const val EXTRA_TRANSCODED_BITRATE_KBPS = "com.musicplayer.extra.TRANSCODED_BITRATE_KBPS"
         private const val POSITION_POLL_INTERVAL_MS = 500L
+        private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
     }
 }

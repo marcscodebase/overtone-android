@@ -21,4 +21,10 @@ abstract class RepositoryModule {
     abstract fun bindLibraryRepository(
         impl: JellyfinLibraryRepository,
     ): LibraryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncRepository(
+        impl: JellyfinSyncRepository,
+    ): SyncRepository
 }
