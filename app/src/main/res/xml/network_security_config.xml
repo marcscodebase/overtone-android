@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Allow both HTTPS and HTTP connections so users can connect to self-hosted
+        Jellyfin servers over LAN IPs, Tailscale hostnames, custom ports, or reverse proxies.
+        Also trust user-installed CA certificates for private home-lab PKI setups.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
