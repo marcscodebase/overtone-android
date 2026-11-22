@@ -3,13 +3,10 @@ package com.musicplayer.navigation
 import kotlinx.serialization.Serializable
 
 @Serializable
-data object HomeDestination
+data object MainDestination
 
 @Serializable
 data object SearchDestination
-
-@Serializable
-data object LibraryDestination
 
 @Serializable
 data class AlbumDetailDestination(val albumId: String)

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,8 +27,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,6 +48,7 @@ import com.musicplayer.core.model.Track
 
 @Composable
 fun SearchRoute(
+    onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
@@ -52,6 +58,7 @@ fun SearchRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     SearchScreen(
         state = state,
+        onBackClick = onBackClick,
         onQueryChanged = viewModel::onQueryChanged,
         onClearQuery = viewModel::onClearQuery,
         onAlbumClick = onAlbumClick,
@@ -69,6 +76,7 @@ fun SearchRoute(
 @Composable
 fun SearchScreen(
     state: SearchUiState,
+    onBackClick: () -> Unit,
     onQueryChanged: (String) -> Unit,
     onClearQuery: () -> Unit,
     onAlbumClick: (String) -> Unit,
@@ -81,6 +89,14 @@ fun SearchScreen(
     onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        if (state.query.isEmpty()) {
+            focusRequester.requestFocus()
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -90,6 +106,14 @@ fun SearchScreen(
                         text = stringResource(R.string.nav_search),
                         style = MaterialTheme.typography.headlineMedium,
                     )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
                 },
             )
         },
@@ -115,7 +139,8 @@ fun SearchScreen(
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .focusRequester(focusRequester),
             )
 
             if (state.isSearching) {

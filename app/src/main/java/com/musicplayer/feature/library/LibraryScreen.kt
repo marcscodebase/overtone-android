@@ -18,73 +18,29 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.automirrored.rounded.Sort
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.Track
-import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 
 @Composable
-fun LibraryRoute(
-    onAlbumClick: (String) -> Unit,
-    onArtistClick: (String) -> Unit,
-    onPlaylistClick: (String) -> Unit,
-    onAddToPlaylist: (Track) -> Unit,
-    onSettingsClick: () -> Unit,
-    viewModel: LibraryViewModel = hiltViewModel(),
-) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LibraryScreen(
-        state = state,
-        onFilterSelected = viewModel::onFilterSelected,
-        onToggleSort = viewModel::onToggleSort,
-        onAlbumClick = onAlbumClick,
-        onArtistClick = onArtistClick,
-        onPlaylistClick = onPlaylistClick,
-        onTrackClick = viewModel::onPlayTracks,
-        onPlayNext = viewModel::onPlayNext,
-        onAddToQueue = viewModel::onAddToQueue,
-        onToggleFavorite = viewModel::onToggleFavorite,
-        onAddToPlaylist = onAddToPlaylist,
-        onCreatePlaylist = viewModel::onCreatePlaylist,
-        onSettingsClick = onSettingsClick,
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun LibraryScreen(
+fun LibraryContent(
     state: LibraryUiState,
     onFilterSelected: (LibraryFilter) -> Unit,
-    onToggleSort: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
@@ -93,244 +49,188 @@ fun LibraryScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
-    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
-
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showCreatePlaylistDialog = true }) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = stringResource(R.string.playlist_create_new),
+    Column(modifier = modifier.fillMaxSize()) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(
+                items = LibraryFilter.entries,
+                key = { it.name },
+            ) { filter ->
+                val labelRes = when (filter) {
+                    LibraryFilter.DOWNLOADED -> R.string.library_filter_downloaded
+                    LibraryFilter.PLAYLISTS -> R.string.library_filter_playlists
+                    LibraryFilter.ALBUMS -> R.string.library_filter_albums
+                    LibraryFilter.ARTISTS -> R.string.library_filter_artists
+                    LibraryFilter.SONGS -> R.string.library_filter_songs
+                }
+                FilterChip(
+                    selected = state.selectedFilter == filter,
+                    onClick = { onFilterSelected(filter) },
+                    label = { Text(stringResource(labelRes)) },
+                    leadingIcon = if (filter == LibraryFilter.DOWNLOADED) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.DownloadDone,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
-        },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.nav_library),
-                        style = MaterialTheme.typography.headlineMedium,
+        }
+
+        when (state.selectedFilter) {
+            LibraryFilter.DOWNLOADED -> {
+                if (state.downloadedTracks.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_downloaded_empty_title),
+                        subtitle = stringResource(R.string.library_downloaded_empty_subtitle),
+                        icon = Icons.Rounded.DownloadDone,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                },
-                actions = {
-                    IconButton(onClick = onToggleSort) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.Sort,
-                            contentDescription = stringResource(R.string.library_sort),
-                        )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        itemsIndexed(
+                            items = state.downloadedTracks,
+                            key = { _, track -> "dl_${track.id}" },
+                        ) { index, track ->
+                            TrackRow(
+                                track = track,
+                                isPlaying = track.id == state.activeTrackId,
+                                onClick = { onTrackClick(state.downloadedTracks, index) },
+                                onPlayNext = { onPlayNext(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onToggleFavorite = { onToggleFavorite(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
+                            )
+                        }
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = stringResource(R.string.action_settings),
-                        )
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(
-                    items = LibraryFilter.entries,
-                    key = { it.name },
-                ) { filter ->
-                    val labelRes = when (filter) {
-                        LibraryFilter.DOWNLOADED -> R.string.library_filter_downloaded
-                        LibraryFilter.PLAYLISTS -> R.string.library_filter_playlists
-                        LibraryFilter.ALBUMS -> R.string.library_filter_albums
-                        LibraryFilter.ARTISTS -> R.string.library_filter_artists
-                        LibraryFilter.SONGS -> R.string.library_filter_songs
-                    }
-                    FilterChip(
-                        selected = state.selectedFilter == filter,
-                        onClick = { onFilterSelected(filter) },
-                        label = { Text(stringResource(labelRes)) },
-                        leadingIcon = if (filter == LibraryFilter.DOWNLOADED) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Rounded.DownloadDone,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                    )
                 }
             }
 
-            when (state.selectedFilter) {
-                LibraryFilter.DOWNLOADED -> {
-                    if (state.downloadedTracks.isEmpty()) {
-                        EmptyState(
-                            title = stringResource(R.string.library_downloaded_empty_title),
-                            subtitle = stringResource(R.string.library_downloaded_empty_subtitle),
-                            icon = Icons.Rounded.DownloadDone,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                        ) {
-                            itemsIndexed(
-                                items = state.downloadedTracks,
-                                key = { _, track -> "dl_${track.id}" },
-                            ) { index, track ->
-                                TrackRow(
-                                    track = track,
-                                    isPlaying = track.id == state.activeTrackId,
-                                    onClick = { onTrackClick(state.downloadedTracks, index) },
-                                    onPlayNext = { onPlayNext(track) },
-                                    onAddToQueue = { onAddToQueue(track) },
-                                    onToggleFavorite = { onToggleFavorite(track) },
-                                    onAddToPlaylist = { onAddToPlaylist(track) },
-                                )
-                            }
+            LibraryFilter.PLAYLISTS -> {
+                if (state.playlists.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_empty_title),
+                        subtitle = stringResource(R.string.library_playlists_empty_subtitle),
+                        icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        items(items = state.playlists, key = { it.id }) { playlist ->
+                            LibraryCollectionRow(
+                                title = playlist.name,
+                                subtitle = "${playlist.trackCount} songs",
+                                imageUrl = playlist.artworkUrl,
+                                isCircular = false,
+                                onClick = { onPlaylistClick(playlist.id) },
+                            )
                         }
                     }
                 }
+            }
 
-                LibraryFilter.PLAYLISTS -> {
-                    if (state.playlists.isEmpty()) {
-                        EmptyState(
-                            title = stringResource(R.string.library_empty_title),
-                            subtitle = stringResource(R.string.library_playlists_empty_subtitle),
-                            icon = Icons.AutoMirrored.Rounded.QueueMusic,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                        ) {
-                            items(items = state.playlists, key = { it.id }) { playlist ->
-                                LibraryCollectionRow(
-                                    title = playlist.name,
-                                    subtitle = "${playlist.trackCount} songs",
-                                    imageUrl = playlist.artworkUrl,
-                                    isCircular = false,
-                                    onClick = { onPlaylistClick(playlist.id) },
-                                )
-                            }
+            LibraryFilter.ALBUMS -> {
+                if (state.albums.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_empty_title),
+                        subtitle = stringResource(R.string.library_empty_subtitle),
+                        icon = Icons.Rounded.Album,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        items(items = state.albums, key = { it.id }) { album ->
+                            val subtitle = listOfNotNull(
+                                album.artistName,
+                                album.year?.toString(),
+                            ).joinToString(" • ")
+                            LibraryCollectionRow(
+                                title = album.title,
+                                subtitle = subtitle,
+                                imageUrl = album.artworkUrl,
+                                isCircular = false,
+                                onClick = { onAlbumClick(album.id) },
+                            )
                         }
                     }
                 }
+            }
 
-                LibraryFilter.ALBUMS -> {
-                    if (state.albums.isEmpty()) {
-                        EmptyState(
-                            title = stringResource(R.string.library_empty_title),
-                            subtitle = stringResource(R.string.library_empty_subtitle),
-                            icon = Icons.Rounded.Album,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                        ) {
-                            items(items = state.albums, key = { it.id }) { album ->
-                                val subtitle = listOfNotNull(
-                                    album.artistName,
-                                    album.year?.toString(),
-                                ).joinToString(" • ")
-                                LibraryCollectionRow(
-                                    title = album.title,
-                                    subtitle = subtitle,
-                                    imageUrl = album.artworkUrl,
-                                    isCircular = false,
-                                    onClick = { onAlbumClick(album.id) },
-                                )
-                            }
+            LibraryFilter.ARTISTS -> {
+                if (state.artists.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_empty_title),
+                        subtitle = stringResource(R.string.library_empty_subtitle),
+                        icon = Icons.Rounded.Person,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        items(items = state.artists, key = { it.id }) { artist ->
+                            LibraryCollectionRow(
+                                title = artist.name,
+                                subtitle = "${artist.albumCount} albums",
+                                imageUrl = artist.artworkUrl,
+                                isCircular = true,
+                                onClick = { onArtistClick(artist.id) },
+                            )
                         }
                     }
                 }
+            }
 
-                LibraryFilter.ARTISTS -> {
-                    if (state.artists.isEmpty()) {
-                        EmptyState(
-                            title = stringResource(R.string.library_empty_title),
-                            subtitle = stringResource(R.string.library_empty_subtitle),
-                            icon = Icons.Rounded.Person,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                        ) {
-                            items(items = state.artists, key = { it.id }) { artist ->
-                                LibraryCollectionRow(
-                                    title = artist.name,
-                                    subtitle = "${artist.albumCount} albums",
-                                    imageUrl = artist.artworkUrl,
-                                    isCircular = true,
-                                    onClick = { onArtistClick(artist.id) },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                LibraryFilter.SONGS -> {
-                    if (state.tracks.isEmpty()) {
-                        EmptyState(
-                            title = stringResource(R.string.library_empty_title),
-                            subtitle = stringResource(R.string.library_empty_subtitle),
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                        ) {
-                            itemsIndexed(
-                                items = state.tracks,
-                                key = { _, track -> track.id },
-                            ) { index, track ->
-                                TrackRow(
-                                    track = track,
-                                    isPlaying = track.id == state.activeTrackId,
-                                    onClick = { onTrackClick(state.tracks, index) },
-                                    onPlayNext = { onPlayNext(track) },
-                                    onAddToQueue = { onAddToQueue(track) },
-                                    onToggleFavorite = { onToggleFavorite(track) },
-                                    onAddToPlaylist = { onAddToPlaylist(track) },
-                                )
-                            }
+            LibraryFilter.SONGS -> {
+                if (state.tracks.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_empty_title),
+                        subtitle = stringResource(R.string.library_empty_subtitle),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        itemsIndexed(
+                            items = state.tracks,
+                            key = { _, track -> track.id },
+                        ) { index, track ->
+                            TrackRow(
+                                track = track,
+                                isPlaying = track.id == state.activeTrackId,
+                                onClick = { onTrackClick(state.tracks, index) },
+                                onPlayNext = { onPlayNext(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onToggleFavorite = { onToggleFavorite(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
+                            )
                         }
                     }
                 }
             }
         }
-    }
-
-    if (showCreatePlaylistDialog) {
-        PlaylistNameDialog(
-            title = stringResource(R.string.playlist_create_new),
-            confirmLabel = stringResource(R.string.action_create),
-            onDismiss = { showCreatePlaylistDialog = false },
-            onConfirm = { name ->
-                showCreatePlaylistDialog = false
-                onCreatePlaylist(name)
-            },
-        )
     }
 }
 
