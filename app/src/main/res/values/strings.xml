@@ -65,6 +65,11 @@
     <string name="playlist_empty_subtitle">This Jellyfin playlist does not contain any tracks yet.</string>
 
     <string name="settings_signed_in_as">Signed in as %1$s</string>
+    <string name="settings_wifi_quality">Wi-Fi Streaming Quality</string>
+    <string name="settings_wifi_quality_value">Always Lossless (Direct Play)</string>
+    <string name="settings_cellular_quality">Mobile Data Streaming Quality</string>
+    <string name="settings_quality_original">Original (Lossless)</string>
+    <string name="action_close">Close</string>
     <string name="settings_offline_mode">Offline Mode</string>
     <string name="settings_offline_mode_subtitle">Browse cached metadata and prefer downloaded local files</string>
 

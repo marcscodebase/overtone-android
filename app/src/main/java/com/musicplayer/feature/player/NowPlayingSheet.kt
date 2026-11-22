@@ -92,14 +92,18 @@ fun NowPlayingSheet(
             state.progressFraction
         }
 
-        val qualityBadge = Formatters.formatAudioQualityBadge(
-            container = track.container,
-            codec = track.codec,
-            bitrate = track.bitrate,
-            sampleRate = track.sampleRate,
-            bitDepth = track.bitDepth,
-            isLocal = state.isLocalPlayback,
-        )
+        val qualityBadge = if (state.transcodedBitrateKbps != null && !state.isLocalPlayback) {
+            "MP3 • ${state.transcodedBitrateKbps} kbps • Mobile Data"
+        } else {
+            Formatters.formatAudioQualityBadge(
+                container = track.container,
+                codec = track.codec,
+                bitrate = track.bitrate,
+                sampleRate = track.sampleRate,
+                bitDepth = track.bitDepth,
+                isLocal = state.isLocalPlayback,
+            )
+        }
 
         Column(
             modifier = Modifier

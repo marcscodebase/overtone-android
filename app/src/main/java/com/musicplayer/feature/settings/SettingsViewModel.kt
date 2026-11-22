@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AuthSession
+import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
 import com.musicplayer.data.repository.LibraryRepository
@@ -57,6 +58,12 @@ class SettingsViewModel @Inject constructor(
     fun onToggleOfflineMode(enabled: Boolean) {
         viewModelScope.launch {
             preferencesDataStore.setOfflineModeEnabled(enabled)
+        }
+    }
+
+    fun onSelectCellularBitrateCap(cap: CellularBitrateCap) {
+        viewModelScope.launch {
+            preferencesDataStore.setCellularBitrateCap(cap)
         }
     }
 

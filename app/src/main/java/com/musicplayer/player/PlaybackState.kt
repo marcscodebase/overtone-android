@@ -26,6 +26,7 @@ data class PlaybackState(
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val isLocalPlayback: Boolean = false,
+    val transcodedBitrateKbps: Int? = null,
     val errorMessage: String? = null,
 ) {
     val progressFraction: Float

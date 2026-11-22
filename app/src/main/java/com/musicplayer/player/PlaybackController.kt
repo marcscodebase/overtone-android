@@ -159,7 +159,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 val resolved = streamUrlResolver.resolve(track) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
-                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal)
+                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
             }
 
             if (mediaItems.isEmpty()) {
@@ -209,7 +209,10 @@ class MediaControllerPlaybackController @Inject constructor(
 
             val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
             val mutated = QueueOrderHelper.insertNext(current.queue, current.currentIndex, track)
-            mediaController.addMediaItem(insertIndex, track.toMediaItem(resolved.uri, resolved.isLocal))
+            mediaController.addMediaItem(
+                insertIndex,
+                track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps),
+            )
 
             _playbackState.update {
                 it.copy(
@@ -242,7 +245,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 val resolved = streamUrlResolver.resolve(track) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
-                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal)
+                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
             }
             if (mediaItems.isEmpty()) return@launch
 
@@ -452,7 +455,7 @@ class MediaControllerPlaybackController @Inject constructor(
         _playbackState.update { it.copy(errorMessage = null) }
     }
 
-    private fun hydrateControllerFromState(
+    private suspend fun hydrateControllerFromState(
         mediaController: MediaController,
         autoPlay: Boolean,
     ) {
@@ -462,7 +465,7 @@ class MediaControllerPlaybackController @Inject constructor(
         state.queue.forEach { track ->
             val resolved = streamUrlResolver.resolve(track) ?: return@forEach
             if (resolved.isLocal) localIds += track.id
-            items += track.toMediaItem(resolved.uri, resolved.isLocal)
+            items += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
         }
         needsPrepareOnPlay = false
         if (items.isEmpty()) return
@@ -509,8 +512,9 @@ class MediaControllerPlaybackController @Inject constructor(
             Player.REPEAT_MODE_ONE -> RepeatMode.ONE
             else -> RepeatMode.OFF
         }
-        val isLocal = player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(EXTRA_IS_LOCAL)
-            ?: (activeTrack?.id in localIds)
+        val extras = player.currentMediaItem?.mediaMetadata?.extras
+        val isLocal = extras?.getBoolean(EXTRA_IS_LOCAL) ?: (activeTrack?.id in localIds)
+        val transcodedBitrate = extras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
 
         _playbackState.update { state ->
             state.copy(
@@ -523,6 +527,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 shuffleEnabled = player.shuffleModeEnabled,
                 repeatMode = repeatMode,
                 isLocalPlayback = isLocal,
+                transcodedBitrateKbps = transcodedBitrate,
             )
         }
     }
@@ -572,9 +577,16 @@ class MediaControllerPlaybackController @Inject constructor(
         }
     }
 
-    private fun Track.toMediaItem(uri: String, isLocal: Boolean): MediaItem {
+    private fun Track.toMediaItem(
+        uri: String,
+        isLocal: Boolean,
+        transcodedBitrateKbps: Int?,
+    ): MediaItem {
         val extras = Bundle().apply {
             putBoolean(EXTRA_IS_LOCAL, isLocal)
+            if (transcodedBitrateKbps != null) {
+                putInt(EXTRA_TRANSCODED_BITRATE_KBPS, transcodedBitrateKbps)
+            }
         }
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
@@ -593,6 +605,7 @@ class MediaControllerPlaybackController @Inject constructor(
 
     companion object {
         private const val EXTRA_IS_LOCAL = "com.musicplayer.extra.IS_LOCAL"
+        private const val EXTRA_TRANSCODED_BITRATE_KBPS = "com.musicplayer.extra.TRANSCODED_BITRATE_KBPS"
         private const val POSITION_POLL_INTERVAL_MS = 500L
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
     }

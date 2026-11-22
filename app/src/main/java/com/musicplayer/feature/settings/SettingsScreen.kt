@@ -1,5 +1,6 @@
 package com.musicplayer.feature.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,21 +18,28 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -39,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
+import com.musicplayer.core.model.CellularBitrateCap
 
 @Composable
 fun SettingsRoute(
@@ -50,6 +59,7 @@ fun SettingsRoute(
         state = state,
         onBackClick = onBackClick,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
+        onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onSyncLibrary = viewModel::onSyncLibrary,
         onSignOut = viewModel::onSignOut,
     )
@@ -61,10 +71,12 @@ fun SettingsScreen(
     state: SettingsUiState,
     onBackClick: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
+    onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onSyncLibrary: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showCellularDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -122,6 +134,50 @@ fun SettingsScreen(
                             text = stringResource(R.string.settings_signed_in_as, session.username),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_wifi_quality),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_wifi_quality_value),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showCellularDialog = true }
+                            .padding(16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_cellular_quality),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = formatCellularCapLabel(state.preferences.cellularBitrateCap),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -199,4 +255,51 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showCellularDialog) {
+        AlertDialog(
+            onDismissRequest = { showCellularDialog = false },
+            title = { Text(stringResource(R.string.settings_cellular_quality)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CellularBitrateCap.entries.forEach { cap ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectCellularBitrateCap(cap)
+                                    showCellularDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = state.preferences.cellularBitrateCap == cap,
+                                onClick = {
+                                    onSelectCellularBitrateCap(cap)
+                                    showCellularDialog = false
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = formatCellularCapLabel(cap),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCellularDialog = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun formatCellularCapLabel(cap: CellularBitrateCap): String = when (cap) {
+    CellularBitrateCap.ORIGINAL -> stringResource(R.string.settings_quality_original)
+    else -> "${cap.kbps} kbps (MP3)"
 }

@@ -1,5 +1,6 @@
 package com.musicplayer.player.engine
 
+import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.Track
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
@@ -39,10 +40,12 @@ class StreamUrlResolverTest {
     )
 
     @Test
-    fun prefersLocalMediaStoreUriWhenTrackIsDownloaded() {
-        val resolved = StreamUrlResolver.resolveForBaseUrl(
+    fun prefersLocalMediaStoreUriEvenOnMeteredNetworkWithCap() {
+        val resolved = StreamUrlResolver.resolveForContext(
             track = sampleTrack(isDownloaded = true, localUri = "content://media/external/audio/media/42"),
             baseUrl = "https://music.example.com",
+            isMetered = true,
+            cellularBitrateCap = CellularBitrateCap.KBPS_128,
         )
 
         assertEquals(
@@ -52,22 +55,63 @@ class StreamUrlResolverTest {
     }
 
     @Test
-    fun resolvesLosslessDirectPlayUrlWithoutQueryToken() {
-        val resolved = StreamUrlResolver.resolveForBaseUrl(
+    fun alwaysStreamsLosslessDirectPlayOnWifiEvenWhenCellularCapConfigured() {
+        val resolved = StreamUrlResolver.resolveForContext(
             track = sampleTrack(),
             baseUrl = "http://192.168.1.20:8096/",
+            isMetered = false,
+            cellularBitrateCap = CellularBitrateCap.KBPS_128,
         )
 
         assertEquals(
-            ResolvedAudioSource("http://192.168.1.20:8096/Audio/track-123/stream?static=true", isLocal = false),
+            ResolvedAudioSource(
+                uri = "http://192.168.1.20:8096/Audio/track-123/stream?static=true",
+                isLocal = false,
+                transcodedBitrateKbps = null,
+            ),
             resolved,
         )
         assertFalse(resolved!!.uri.contains("api_key"))
     }
 
     @Test
+    fun streamsLosslessOnMobileDataByDefaultWhenCapIsOriginal() {
+        val resolved = StreamUrlResolver.resolveForContext(
+            track = sampleTrack(),
+            baseUrl = "https://music.example.com",
+            isMetered = true,
+            cellularBitrateCap = CellularBitrateCap.ORIGINAL,
+        )
+
+        assertEquals(
+            ResolvedAudioSource(
+                uri = "https://music.example.com/Audio/track-123/stream?static=true",
+                isLocal = false,
+                transcodedBitrateKbps = null,
+            ),
+            resolved,
+        )
+    }
+
+    @Test
+    fun appliesBitrateCapOnMobileDataWithoutQueryToken() {
+        val resolved = StreamUrlResolver.resolveForContext(
+            track = sampleTrack(),
+            baseUrl = "https://music.example.com",
+            isMetered = true,
+            cellularBitrateCap = CellularBitrateCap.KBPS_192,
+        )
+
+        assertEquals(192, resolved?.transcodedBitrateKbps)
+        assertFalse(resolved!!.isLocal)
+        assertTrue(resolved.uri.contains("/Audio/track-123/universal?"))
+        assertTrue(resolved.uri.contains("maxStreamingBitrate=192000"))
+        assertFalse(resolved.uri.contains("api_key"))
+    }
+
+    @Test
     fun returnsNullWhenOfflineAndNotDownloaded() {
-        assertNull(StreamUrlResolver.resolveForBaseUrl(sampleTrack(), baseUrl = null))
+        assertNull(StreamUrlResolver.resolveForContext(sampleTrack(), baseUrl = null))
     }
 
     @Test
