@@ -6,6 +6,7 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.core.model.CellularBitrateCap
+import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
 import com.musicplayer.data.repository.LibraryRepository
@@ -64,6 +65,24 @@ class SettingsViewModel @Inject constructor(
     fun onSelectCellularBitrateCap(cap: CellularBitrateCap) {
         viewModelScope.launch {
             preferencesDataStore.setCellularBitrateCap(cap)
+        }
+    }
+
+    fun onSelectDefaultDownloadQuality(quality: DownloadQuality) {
+        viewModelScope.launch {
+            preferencesDataStore.setDefaultDownloadQuality(quality)
+        }
+    }
+
+    fun onToggleWifiOnlyDownloads(wifiOnly: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setWifiOnlyDownloads(wifiOnly)
+        }
+    }
+
+    fun onToggleAskDownloadQuality(askEachTime: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setAskDownloadQualityEachTime(askEachTime)
         }
     }
 

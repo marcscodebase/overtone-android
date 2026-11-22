@@ -48,6 +48,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.model.CellularBitrateCap
+import com.musicplayer.core.model.DownloadQuality
+import com.musicplayer.core.model.DownloadQualityMode
+import com.musicplayer.feature.download.downloadQualityPresets
+import com.musicplayer.feature.download.formatDownloadQualityLabel
 
 @Composable
 fun SettingsRoute(
@@ -60,6 +64,9 @@ fun SettingsRoute(
         onBackClick = onBackClick,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
+        onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
+        onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
+        onToggleAskDownloadQuality = viewModel::onToggleAskDownloadQuality,
         onSyncLibrary = viewModel::onSyncLibrary,
         onSignOut = viewModel::onSignOut,
     )
@@ -72,11 +79,15 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
+    onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
+    onToggleWifiOnlyDownloads: (Boolean) -> Unit,
+    onToggleAskDownloadQuality: (Boolean) -> Unit,
     onSyncLibrary: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showCellularDialog by rememberSaveable { mutableStateOf(false) }
+    var showDownloadQualityDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -178,6 +189,81 @@ fun SettingsScreen(
                             text = formatCellularCapLabel(state.preferences.cellularBitrateCap),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDownloadQualityDialog = true }
+                            .padding(16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_download_quality),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = formatDownloadQualityLabel(state.preferences.defaultDownloadQuality),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_wifi_only_downloads),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_wifi_only_downloads_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.preferences.wifiOnlyDownloads,
+                            onCheckedChange = onToggleWifiOnlyDownloads,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_ask_download_quality),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_ask_download_quality_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.preferences.askDownloadQualityEachTime,
+                            onCheckedChange = onToggleAskDownloadQuality,
                         )
                     }
                 }
@@ -291,6 +377,49 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showCellularDialog = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
+    if (showDownloadQualityDialog) {
+        val current = state.preferences.defaultDownloadQuality
+        AlertDialog(
+            onDismissRequest = { showDownloadQualityDialog = false },
+            title = { Text(stringResource(R.string.settings_download_quality)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    downloadQualityPresets.forEach { preset ->
+                        val selected = current.mode == preset.mode &&
+                            (preset.mode == DownloadQualityMode.LOSSLESS || current.mp3Bitrate == preset.mp3Bitrate)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectDefaultDownloadQuality(preset)
+                                    showDownloadQualityDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = selected,
+                                onClick = {
+                                    onSelectDefaultDownloadQuality(preset)
+                                    showDownloadQualityDialog = false
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = formatDownloadQualityLabel(preset),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDownloadQualityDialog = false }) {
                     Text(stringResource(R.string.action_close))
                 }
             },

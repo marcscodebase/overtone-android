@@ -107,4 +107,17 @@
     <string name="action_save">Save</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
+    <string name="action_download">Download</string>
+    <string name="download_choose_quality">Download Quality</string>
+    <string name="download_quality_lossless">Original (Lossless)</string>
+    <string name="download_quality_lossless_desc">Untouched original file from Jellyfin (FLAC, ALAC, WAV…)</string>
+    <string name="download_quality_mp3_kbps">MP3 • %1$d kbps</string>
+    <string name="download_quality_mp3_desc">Compressed MP3 (server transcoding with on-device fallback)</string>
+    <string name="settings_download_quality">Default Download Quality</string>
+    <string name="settings_wifi_only_downloads">Download on Wi-Fi Only</string>
+    <string name="settings_wifi_only_downloads_subtitle">Pause queued downloads while on metered mobile data</string>
+    <string name="settings_ask_download_quality">Ask Quality Every Time</string>
+    <string name="settings_ask_download_quality_subtitle">Show Lossless vs. MP3 picker before each download</string>
+    <string name="settings_storage_manager">Downloads &amp; Storage</string>
+    <string name="settings_storage_manager_subtitle">Inspect local Music/music-player files and free up space</string>
 </resources>
