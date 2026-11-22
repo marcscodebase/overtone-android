@@ -37,6 +37,7 @@ import com.musicplayer.feature.library.detail.ArtistDetailRoute
 import com.musicplayer.feature.library.detail.PlaylistDetailRoute
 import com.musicplayer.feature.library.playlist.AddToPlaylistSheet
 import com.musicplayer.feature.library.playlist.PlaylistPickerViewModel
+import com.musicplayer.feature.player.LyricsSheet
 import com.musicplayer.feature.player.MiniPlayer
 import com.musicplayer.feature.player.NowPlayingSheet
 import com.musicplayer.feature.player.PlayerViewModel
@@ -83,6 +84,7 @@ private fun AuthenticatedShell(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
+    val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     val downloadRecords by downloadActionsViewModel.downloadRecords.collectAsStateWithLifecycle()
     val downloadPrefs by downloadActionsViewModel.preferences.collectAsStateWithLifecycle()
@@ -90,6 +92,7 @@ private fun AuthenticatedShell(
     val snackbarHostState = remember { SnackbarHostState() }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylistPicker by remember { mutableStateOf<Track?>(null) }
 
     LaunchedEffect(playerViewModel) {
@@ -230,6 +233,17 @@ private fun AuthenticatedShell(
             onToggleShuffle = playerViewModel::onToggleShuffle,
             onCycleRepeatMode = playerViewModel::onCycleRepeatMode,
             onOpenQueue = { showQueueSheet = true },
+            onOpenLyrics = { showLyricsSheet = true },
+        )
+    }
+
+    if (showLyricsSheet && activeTrack != null) {
+        LyricsSheet(
+            playbackState = playbackState,
+            lyricsState = lyricsState,
+            onDismiss = { showLyricsSheet = false },
+            onTogglePlayPause = playerViewModel::onTogglePlayPause,
+            onSeekTo = playerViewModel::onSeekTo,
         )
     }
 

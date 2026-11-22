@@ -146,4 +146,11 @@
     <string name="playlist_auto_sync">Auto-Sync Downloads</string>
     <string name="playlist_auto_sync_subtitle">Automatically download added songs and clean up removed tracks</string>
     <string name="playlist_sync_downloads_now">Sync downloads</string>
+    <string name="lyrics_title">Lyrics</string>
+    <string name="lyrics_badge_synced_jellyfin">Synced • Jellyfin</string>
+    <string name="lyrics_badge_synced_local">Synced • Local</string>
+    <string name="lyrics_badge_plain_local">Plain • Local</string>
+    <string name="lyrics_badge_plain">Plain</string>
+    <string name="lyrics_empty_title">No lyrics available</string>
+    <string name="lyrics_empty_subtitle">Add LRC or embedded lyrics in Jellyfin to follow along here.</string>
 </resources>

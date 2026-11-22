@@ -46,6 +46,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindLyricsRepository(
+        impl: JellyfinLyricsRepository,
+    ): LyricsRepository
+
+    @Binds
+    @Singleton
     abstract fun bindOfflineSyncScheduler(
         impl: WorkManagerOfflineSyncScheduler,
     ): OfflineSyncScheduler

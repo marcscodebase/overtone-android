@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -83,6 +84,7 @@ fun NowPlayingSheet(
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenLyrics: () -> Unit,
 ) {
     val track = state.currentTrack ?: return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -160,6 +162,12 @@ fun NowPlayingSheet(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
+                    )
+                }
+                IconButton(onClick = onOpenLyrics) {
+                    Icon(
+                        imageVector = Icons.Rounded.Lyrics,
+                        contentDescription = stringResource(R.string.lyrics_title),
                     )
                 }
                 IconButton(onClick = onOpenQueue) {
