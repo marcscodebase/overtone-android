@@ -120,4 +120,7 @@
     <string name="settings_ask_download_quality_subtitle">Show Lossless vs. MP3 picker before each download</string>
     <string name="settings_storage_manager">Downloads &amp; Storage</string>
     <string name="settings_storage_manager_subtitle">Inspect local Music/music-player files and free up space</string>
+    <string name="download_notification_channel">Audio Downloads</string>
+    <string name="download_notification_downloading">Downloading %1$s</string>
+    <string name="download_notification_transcoding">Converting to MP3: %1$s</string>
 </resources>
