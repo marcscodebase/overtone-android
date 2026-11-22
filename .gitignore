@@ -1,0 +1,31 @@
+# Gradle & Build
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+local.properties
+*.hprof
+.cxx/
+.externalNativeBuild/
+captures/
+
+# Keystores & Secrets
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+
+# Native / NDK
+obj/
+
+# macOS / OS
+.DS_Store
+Thumbs.db
+
+# Logs & Temp
+*.log
+tmp/
