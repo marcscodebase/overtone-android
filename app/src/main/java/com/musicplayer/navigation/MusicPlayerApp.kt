@@ -30,6 +30,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.auth.AuthRoute
+import com.musicplayer.feature.download.DownloadActionsViewModel
+import com.musicplayer.feature.download.DownloadQualitySheet
 import com.musicplayer.feature.library.detail.AlbumDetailRoute
 import com.musicplayer.feature.library.detail.ArtistDetailRoute
 import com.musicplayer.feature.library.detail.PlaylistDetailRoute
@@ -41,6 +43,7 @@ import com.musicplayer.feature.player.PlayerViewModel
 import com.musicplayer.feature.player.QueueSheet
 import com.musicplayer.feature.search.SearchRoute
 import com.musicplayer.feature.settings.SettingsRoute
+import com.musicplayer.feature.settings.StorageManagerRoute
 
 @Composable
 fun MusicPlayerApp(
@@ -74,12 +77,16 @@ fun MusicPlayerApp(
 private fun AuthenticatedShell(
     playerViewModel: PlayerViewModel = hiltViewModel(),
     playlistPickerViewModel: PlaylistPickerViewModel = hiltViewModel(),
+    downloadActionsViewModel: DownloadActionsViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
+    val downloadRecords by downloadActionsViewModel.downloadRecords.collectAsStateWithLifecycle()
+    val downloadPrefs by downloadActionsViewModel.preferences.collectAsStateWithLifecycle()
+    val pendingDownload by downloadActionsViewModel.pendingRequest.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
@@ -95,8 +102,19 @@ private fun AuthenticatedShell(
         }
     }
 
+    LaunchedEffect(downloadActionsViewModel) {
+        downloadActionsViewModel.feedbackMessages.collect { message ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
+
     val showMiniPlayer = playbackState.currentTrack != null &&
-        currentDestination?.hasRoute(SettingsDestination::class) != true
+        currentDestination?.hasRoute(SettingsDestination::class) != true &&
+        currentDestination?.hasRoute(StorageManagerDestination::class) != true
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -137,6 +155,7 @@ private fun AuthenticatedShell(
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
                     onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                     onSettingsClick = { navController.navigate(SettingsDestination) },
                 )
             }
@@ -148,6 +167,7 @@ private fun AuthenticatedShell(
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
                     onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                 )
             }
 
@@ -155,6 +175,9 @@ private fun AuthenticatedShell(
                 AlbumDetailRoute(
                     onBackClick = { navController.popBackStack() },
                     onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
+                    onDownloadAlbum = downloadActionsViewModel::onDownloadAlbum,
+                    onRemoveAlbumDownload = downloadActionsViewModel::onRemoveAlbumDownload,
                 )
             }
 
@@ -163,6 +186,7 @@ private fun AuthenticatedShell(
                     onBackClick = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                 )
             }
 
@@ -170,23 +194,36 @@ private fun AuthenticatedShell(
                 PlaylistDetailRoute(
                     onBackClick = { navController.popBackStack() },
                     onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
+                    onDownloadPlaylist = downloadActionsViewModel::onDownloadPlaylist,
+                    onRemovePlaylistDownload = downloadActionsViewModel::onRemovePlaylistDownload,
                 )
             }
 
             composable<SettingsDestination> {
                 SettingsRoute(
                     onBackClick = { navController.popBackStack() },
+                    onOpenStorageManager = { navController.navigate(StorageManagerDestination) },
+                )
+            }
+
+            composable<StorageManagerDestination> {
+                StorageManagerRoute(
+                    onBackClick = { navController.popBackStack() },
                 )
             }
         }
     }
 
-    if (showNowPlaying && playbackState.currentTrack != null) {
+    val activeTrack = playbackState.currentTrack
+    if (showNowPlaying && activeTrack != null) {
         NowPlayingSheet(
             state = playbackState,
+            downloadStatus = downloadRecords[activeTrack.id]?.status,
             onDismiss = { showNowPlaying = false },
             onTogglePlayPause = playerViewModel::onTogglePlayPause,
             onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
+            onToggleDownload = { downloadActionsViewModel.onToggleTrackDownload(activeTrack) },
             onSkipNext = playerViewModel::onSkipNext,
             onSkipPrevious = playerViewModel::onSkipPrevious,
             onSeekTo = playerViewModel::onSeekTo,
@@ -220,6 +257,15 @@ private fun AuthenticatedShell(
                 playlistPickerViewModel.createPlaylistWithTrack(newName, selectedTrack)
                 trackForPlaylistPicker = null
             },
+        )
+    }
+
+    pendingDownload?.let { request ->
+        DownloadQualitySheet(
+            title = request.displayTitle,
+            defaultQuality = downloadPrefs.defaultDownloadQuality,
+            onDismiss = downloadActionsViewModel::onDismissPendingDownload,
+            onConfirm = downloadActionsViewModel::onConfirmPendingDownload,
         )
     }
 }

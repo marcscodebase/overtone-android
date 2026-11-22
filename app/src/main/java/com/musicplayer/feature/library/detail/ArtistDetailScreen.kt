@@ -40,6 +40,7 @@ fun ArtistDetailRoute(
     onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -55,6 +56,7 @@ fun ArtistDetailRoute(
         onToggleArtistFavorite = viewModel::onToggleArtistFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
     )
 }
 
@@ -72,6 +74,7 @@ fun ArtistDetailScreen(
     onToggleArtistFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -176,6 +179,7 @@ fun ArtistDetailScreen(
                             onAddToQueue = { onAddToQueue(track) },
                             onToggleFavorite = { onToggleTrackFavorite(track) },
                             onAddToPlaylist = { onAddToPlaylist(track) },
+                            onToggleDownload = { onToggleTrackDownload(track) },
                         )
                     }
                 }

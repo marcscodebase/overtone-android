@@ -18,9 +18,12 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +62,9 @@ import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 fun PlaylistDetailRoute(
     onBackClick: () -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
+    onDownloadPlaylist: (playlistId: String, name: String) -> Unit,
+    onRemovePlaylistDownload: (playlistId: String, name: String) -> Unit,
     viewModel: PlaylistDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -79,6 +85,9 @@ fun PlaylistDetailRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
+        onDownloadPlaylist = onDownloadPlaylist,
+        onRemovePlaylistDownload = onRemovePlaylistDownload,
         onToggleReorderMode = viewModel::onToggleReorderMode,
         onMoveTrack = viewModel::onMoveTrack,
         onRemoveTrack = viewModel::onRemoveTrack,
@@ -99,6 +108,9 @@ fun PlaylistDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
+    onDownloadPlaylist: (playlistId: String, name: String) -> Unit,
+    onRemovePlaylistDownload: (playlistId: String, name: String) -> Unit,
     onToggleReorderMode: () -> Unit,
     onMoveTrack: (Int, Int) -> Unit,
     onRemoveTrack: (String) -> Unit,
@@ -124,6 +136,45 @@ fun PlaylistDetailScreen(
                     }
                 },
                 actions = {
+                    state.playlist?.let { playlist ->
+                        if (state.entries.isNotEmpty()) {
+                            val allTracksDownloaded = state.entries.all { it.track.isDownloaded }
+                            IconButton(
+                                onClick = {
+                                    if (state.isPlaylistPinnedDownloaded || allTracksDownloaded) {
+                                        onRemovePlaylistDownload(playlist.id, playlist.name)
+                                    } else {
+                                        onDownloadPlaylist(playlist.id, playlist.name)
+                                    }
+                                },
+                            ) {
+                                when {
+                                    state.isDownloadingAny -> {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    }
+
+                                    state.isPlaylistPinnedDownloaded || allTracksDownloaded -> {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DownloadDone,
+                                            contentDescription = stringResource(R.string.download_remove_playlist),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+
+                                    else -> {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Download,
+                                            contentDescription = stringResource(R.string.download_playlist),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (state.entries.size > 1) {
                         IconButton(onClick = onToggleReorderMode) {
                             Icon(
@@ -229,6 +280,7 @@ fun PlaylistDetailScreen(
                             onAddToQueue = { onAddToQueue(entry.track) },
                             onToggleFavorite = { onToggleTrackFavorite(entry.track) },
                             onAddToPlaylist = { onAddToPlaylist(entry.track) },
+                            onToggleDownload = { onToggleTrackDownload(entry.track) },
                             extraMenuActionLabel = stringResource(R.string.playlist_remove_track),
                             onExtraMenuAction = { onRemoveTrack(entry.playlistItemId) },
                         )

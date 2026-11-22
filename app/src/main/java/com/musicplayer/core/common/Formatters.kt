@@ -50,6 +50,16 @@ object Formatters {
         return parts.joinToString(" • ")
     }
 
+    fun formatBytes(bytes: Long): String {
+        val safe = bytes.coerceAtLeast(0L)
+        return when {
+            safe >= 1_073_741_824L -> String.format(Locale.US, "%.2f GB", safe / 1_073_741_824.0)
+            safe >= 1_048_576L -> String.format(Locale.US, "%.1f MB", safe / 1_048_576.0)
+            safe >= 1024L -> String.format(Locale.US, "%d KB", safe / 1024L)
+            else -> "$safe B"
+        }
+    }
+
     private fun buildLosslessSpec(bitDepth: Int?, sampleRate: Int?): String? {
         val rateText = sampleRate?.takeIf { it > 0 }?.let { hz ->
             val khz = hz / 1000.0

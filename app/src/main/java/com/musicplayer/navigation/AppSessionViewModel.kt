@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.data.repository.AuthRepository
+import com.musicplayer.data.repository.DownloadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ sealed interface AppSessionState {
 @HiltViewModel
 class AppSessionViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
 
     private val _sessionState = MutableStateFlow<AppSessionState>(AppSessionState.Loading)
@@ -30,10 +32,11 @@ class AppSessionViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.restoreSession()
             authRepository.session.collectLatest { session ->
-                _sessionState.value = if (session != null) {
-                    AppSessionState.Authenticated(session)
+                if (session != null) {
+                    _sessionState.value = AppSessionState.Authenticated(session)
+                    launch { runCatching { downloadRepository.reconcileDownloads() } }
                 } else {
-                    AppSessionState.Unauthenticated
+                    _sessionState.value = AppSessionState.Unauthenticated
                 }
             }
         }

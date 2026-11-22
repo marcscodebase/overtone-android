@@ -38,6 +38,7 @@ fun HomeContent(
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     PullToRefreshBox(
@@ -154,6 +155,7 @@ fun HomeContent(
                                 onAddToQueue = { onAddToQueue(track) },
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
                             )
                         }
                         item(key = "spacer_favorites") {
@@ -177,6 +179,7 @@ fun HomeContent(
                                 onAddToQueue = { onAddToQueue(track) },
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
                             )
                         }
                     }

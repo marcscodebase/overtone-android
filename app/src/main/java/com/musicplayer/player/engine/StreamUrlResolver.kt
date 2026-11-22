@@ -1,7 +1,10 @@
 package com.musicplayer.player.engine
 
+import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.CellularBitrateCap
+import com.musicplayer.core.model.DownloadQualityMode
+import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.NetworkMonitor
@@ -20,8 +23,25 @@ class StreamUrlResolver @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
     private val networkMonitor: NetworkMonitor,
     private val preferencesDataStore: UserPreferencesDataStore,
+    private val downloadDao: DownloadDao,
 ) {
     suspend fun resolve(track: Track): ResolvedAudioSource? {
+        val localRecord = downloadDao.getByTrackId(track.id)
+        if (localRecord != null &&
+            localRecord.status == DownloadStatus.COMPLETED &&
+            !localRecord.mediaStoreUri.isNullOrBlank()
+        ) {
+            return ResolvedAudioSource(
+                uri = localRecord.mediaStoreUri,
+                isLocal = true,
+                transcodedBitrateKbps = if (localRecord.qualityMode == DownloadQualityMode.MP3) {
+                    localRecord.bitrateKbps
+                } else {
+                    null
+                },
+            )
+        }
+
         val prefs = preferencesDataStore.userPreferences.first()
         val isMetered = networkMonitor.networkState.value.isMetered
         return resolveForContext(

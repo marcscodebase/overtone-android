@@ -19,3 +19,6 @@ data class PlaylistDetailDestination(val playlistId: String)
 
 @Serializable
 data object SettingsDestination
+
+@Serializable
+data object StorageManagerDestination

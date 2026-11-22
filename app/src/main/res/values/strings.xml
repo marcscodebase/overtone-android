@@ -123,4 +123,18 @@
     <string name="download_notification_channel">Audio Downloads</string>
     <string name="download_notification_downloading">Downloading %1$s</string>
     <string name="download_notification_transcoding">Converting to MP3: %1$s</string>
+    <string name="download_remove">Remove download</string>
+    <string name="download_album">Download album</string>
+    <string name="download_remove_album">Remove album download</string>
+    <string name="download_playlist">Download playlist</string>
+    <string name="download_remove_playlist">Remove playlist download</string>
+    <string name="download_status_queued">Queued…</string>
+    <string name="download_status_downloading">Downloading…</string>
+    <string name="download_status_transcoding">Converting to MP3…</string>
+    <string name="download_status_failed">Download failed</string>
+    <string name="storage_breakdown">%1$d downloaded (%2$d lossless, %3$d MP3)</string>
+    <string name="storage_reconcile">Verify files</string>
+    <string name="storage_clear_all">Clear all</string>
+    <string name="storage_clear_all_title">Clear all downloads?</string>
+    <string name="storage_clear_all_message">This deletes all downloaded audio files from Music/music-player/ on your device. Your Jellyfin library will not be affected.</string>
 </resources>

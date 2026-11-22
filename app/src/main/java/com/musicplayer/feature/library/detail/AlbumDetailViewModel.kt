@@ -4,7 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.model.Album
+import com.musicplayer.core.model.DownloadOwnerType
+import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Track
+import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -22,12 +25,15 @@ data class AlbumDetailUiState(
     val album: Album? = null,
     val tracks: List<Track> = emptyList(),
     val activeTrackId: String? = null,
+    val isAlbumPinnedDownloaded: Boolean = false,
+    val isDownloadingAny: Boolean = false,
 )
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     libraryRepository: LibraryRepository,
+    downloadRepository: DownloadRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
@@ -38,11 +44,19 @@ class AlbumDetailViewModel @Inject constructor(
         libraryRepository.observeAlbum(albumId),
         libraryRepository.observeAlbumTracks(albumId),
         playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
-    ) { album, tracks, activeId ->
+        downloadRepository.observeOwnerHasDownloadRefs(DownloadOwnerType.ALBUM, albumId),
+        downloadRepository.observeAllRecords(),
+    ) { album, tracks, activeId, hasAlbumRefs, records ->
+        val downloadingAny = tracks.any { track ->
+            val st = records[track.id]?.status
+            st == DownloadStatus.QUEUED || st == DownloadStatus.DOWNLOADING || st == DownloadStatus.TRANSCODING
+        }
         AlbumDetailUiState(
             album = album,
             tracks = tracks,
             activeTrackId = activeId,
+            isAlbumPinnedDownloaded = hasAlbumRefs,
+            isDownloadingAny = downloadingAny,
         )
     }.stateIn(
         scope = viewModelScope,

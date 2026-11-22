@@ -53,6 +53,7 @@ fun SearchRoute(
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -69,6 +70,7 @@ fun SearchRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
     )
 }
 
@@ -87,6 +89,7 @@ fun SearchScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -201,6 +204,7 @@ fun SearchScreen(
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
                                     onAddToPlaylist = { onAddToPlaylist(track) },
+                                    onToggleDownload = { onToggleTrackDownload(track) },
                                 )
                             }
                         }

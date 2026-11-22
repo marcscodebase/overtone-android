@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -61,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.ArtworkCard
+import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
 
@@ -68,9 +72,11 @@ import com.musicplayer.player.RepeatMode
 @Composable
 fun NowPlayingSheet(
     state: PlaybackState,
+    downloadStatus: DownloadStatus?,
     onDismiss: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleDownload: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -103,17 +109,25 @@ fun NowPlayingSheet(
             state.progressFraction
         }
 
-        val qualityBadge = if (state.transcodedBitrateKbps != null && !state.isLocalPlayback) {
-            "MP3 • ${state.transcodedBitrateKbps} kbps • Mobile Data"
-        } else {
-            Formatters.formatAudioQualityBadge(
-                container = track.container,
-                codec = track.codec,
-                bitrate = track.bitrate,
-                sampleRate = track.sampleRate,
-                bitDepth = track.bitDepth,
-                isLocal = state.isLocalPlayback,
-            )
+        val qualityBadge = when {
+            state.isLocalPlayback && state.transcodedBitrateKbps != null -> {
+                "MP3 • ${state.transcodedBitrateKbps} kbps • Local"
+            }
+
+            state.transcodedBitrateKbps != null && !state.isLocalPlayback -> {
+                "MP3 • ${state.transcodedBitrateKbps} kbps • Mobile Data"
+            }
+
+            else -> {
+                Formatters.formatAudioQualityBadge(
+                    container = track.container,
+                    codec = track.codec,
+                    bitrate = track.bitrate,
+                    sampleRate = track.sampleRate,
+                    bitDepth = track.bitDepth,
+                    isLocal = state.isLocalPlayback,
+                )
+            }
         }
 
         Column(
@@ -202,6 +216,43 @@ fun NowPlayingSheet(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                IconButton(onClick = onToggleDownload) {
+                    when (downloadStatus) {
+                        DownloadStatus.QUEUED,
+                        DownloadStatus.DOWNLOADING,
+                        DownloadStatus.TRANSCODING,
+                        -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
+
+                        DownloadStatus.COMPLETED -> {
+                            Icon(
+                                imageVector = Icons.Rounded.DownloadDone,
+                                contentDescription = stringResource(R.string.download_remove),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        DownloadStatus.FAILED -> {
+                            Icon(
+                                imageVector = Icons.Rounded.ErrorOutline,
+                                contentDescription = stringResource(R.string.action_retry),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+
+                        null -> {
+                            Icon(
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = stringResource(R.string.action_download),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 IconButton(onClick = onToggleFavorite) {
                     Icon(

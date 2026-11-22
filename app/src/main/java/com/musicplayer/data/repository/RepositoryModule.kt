@@ -33,4 +33,10 @@ abstract class RepositoryModule {
     abstract fun bindPlaylistRepository(
         impl: JellyfinPlaylistRepository,
     ): PlaylistRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadRepository(
+        impl: JellyfinDownloadRepository,
+    ): DownloadRepository
 }

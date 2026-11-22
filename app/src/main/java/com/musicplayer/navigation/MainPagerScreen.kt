@@ -71,6 +71,7 @@ fun MainPagerRoute(
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     homeViewModel: HomeViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
@@ -142,6 +143,7 @@ fun MainPagerRoute(
                     onAlbumClick = onAlbumClick,
                     onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
+                    onToggleTrackDownload = onToggleTrackDownload,
                 )
 
                 1 -> LibraryPagerPage(
@@ -150,6 +152,7 @@ fun MainPagerRoute(
                     onArtistClick = onArtistClick,
                     onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
+                    onToggleTrackDownload = onToggleTrackDownload,
                 )
             }
         }
@@ -174,6 +177,7 @@ private fun HomePagerPage(
     onAlbumClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     HomeContent(
@@ -186,6 +190,7 @@ private fun HomePagerPage(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
     )
 }
 
@@ -196,6 +201,7 @@ private fun LibraryPagerPage(
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LibraryContent(
@@ -209,6 +215,7 @@ private fun LibraryPagerPage(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
     )
 }
 

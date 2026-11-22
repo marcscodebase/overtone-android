@@ -48,6 +48,27 @@ interface DownloadDao {
     @Query("DELETE FROM download_refs WHERE ownerType = :ownerType AND ownerId = :ownerId")
     suspend fun deleteRefsForOwner(ownerType: DownloadOwnerType, ownerId: String)
 
+    @Query("DELETE FROM download_refs WHERE trackId = :trackId")
+    suspend fun deleteAllRefsForTrack(trackId: String)
+
+    @Query("SELECT * FROM download_refs")
+    fun observeAllRefs(): Flow<List<DownloadRefEntity>>
+
+    @Query("SELECT * FROM download_refs WHERE ownerType = :ownerType AND ownerId = :ownerId")
+    fun observeRefsByOwner(ownerType: DownloadOwnerType, ownerId: String): Flow<List<DownloadRefEntity>>
+
+    @Query("SELECT * FROM download_refs WHERE ownerType = :ownerType AND ownerId = :ownerId")
+    suspend fun getRefsByOwner(ownerType: DownloadOwnerType, ownerId: String): List<DownloadRefEntity>
+
+    @Query("SELECT * FROM download_records")
+    suspend fun getAllRecordsSnapshot(): List<DownloadRecordEntity>
+
+    @Query("DELETE FROM download_records")
+    suspend fun deleteAllRecords()
+
+    @Query("DELETE FROM download_refs")
+    suspend fun deleteAllRefs()
+
     @Query("SELECT COUNT(*) FROM download_refs WHERE trackId = :trackId")
     suspend fun countRefsForTrack(trackId: String): Int
 

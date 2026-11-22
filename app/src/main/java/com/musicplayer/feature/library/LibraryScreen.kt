@@ -49,6 +49,7 @@ fun LibraryContent(
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -114,6 +115,7 @@ fun LibraryContent(
                                 onAddToQueue = { onAddToQueue(track) },
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
                             )
                         }
                     }
@@ -239,6 +241,7 @@ fun LibraryContent(
                                 onAddToQueue = { onAddToQueue(track) },
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
                             )
                         }
                     }

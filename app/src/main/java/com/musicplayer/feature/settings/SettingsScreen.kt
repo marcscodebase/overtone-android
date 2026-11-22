@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Sync
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
+import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
@@ -56,12 +58,14 @@ import com.musicplayer.feature.download.formatDownloadQualityLabel
 @Composable
 fun SettingsRoute(
     onBackClick: () -> Unit,
+    onOpenStorageManager: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     SettingsScreen(
         state = state,
         onBackClick = onBackClick,
+        onOpenStorageManager = onOpenStorageManager,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
@@ -77,6 +81,7 @@ fun SettingsRoute(
 fun SettingsScreen(
     state: SettingsUiState,
     onBackClick: () -> Unit,
+    onOpenStorageManager: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
@@ -264,6 +269,40 @@ fun SettingsScreen(
                         Switch(
                             checked = state.preferences.askDownloadQualityEachTime,
                             onCheckedChange = onToggleAskDownloadQuality,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenStorageManager)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_storage_manager),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = if (state.downloadedCount > 0) {
+                                    "${state.downloadedCount} songs • ${Formatters.formatBytes(state.downloadedBytes)}"
+                                } else {
+                                    stringResource(R.string.settings_storage_manager_subtitle)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (state.downloadedCount > 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

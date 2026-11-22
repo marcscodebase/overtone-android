@@ -3,12 +3,16 @@ package com.musicplayer.feature.library.detail
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +37,9 @@ import com.musicplayer.core.model.Track
 fun AlbumDetailRoute(
     onBackClick: () -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
+    onDownloadAlbum: (albumId: String, title: String) -> Unit,
+    onRemoveAlbumDownload: (albumId: String, title: String) -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -47,6 +54,9 @@ fun AlbumDetailRoute(
         onToggleAlbumFavorite = viewModel::onToggleAlbumFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
         onAddToPlaylist = onAddToPlaylist,
+        onToggleTrackDownload = onToggleTrackDownload,
+        onDownloadAlbum = onDownloadAlbum,
+        onRemoveAlbumDownload = onRemoveAlbumDownload,
     )
 }
 
@@ -63,6 +73,9 @@ fun AlbumDetailScreen(
     onToggleAlbumFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
+    onDownloadAlbum: (albumId: String, title: String) -> Unit,
+    onRemoveAlbumDownload: (albumId: String, title: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -80,6 +93,41 @@ fun AlbumDetailScreen(
                 },
                 actions = {
                     state.album?.let { album ->
+                        val allTracksDownloaded = state.tracks.isNotEmpty() && state.tracks.all { it.isDownloaded }
+                        IconButton(
+                            onClick = {
+                                if (state.isAlbumPinnedDownloaded || allTracksDownloaded) {
+                                    onRemoveAlbumDownload(album.id, album.title)
+                                } else {
+                                    onDownloadAlbum(album.id, album.title)
+                                }
+                            },
+                        ) {
+                            when {
+                                state.isDownloadingAny -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
+
+                                state.isAlbumPinnedDownloaded || allTracksDownloaded -> {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DownloadDone,
+                                        contentDescription = stringResource(R.string.download_remove_album),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+
+                                else -> {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Download,
+                                        contentDescription = stringResource(R.string.download_album),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = onToggleAlbumFavorite) {
                             Icon(
                                 imageVector = if (album.isFavorite) {
@@ -151,6 +199,7 @@ fun AlbumDetailScreen(
                         onAddToQueue = { onAddToQueue(track) },
                         onToggleFavorite = { onToggleTrackFavorite(track) },
                         onAddToPlaylist = { onAddToPlaylist(track) },
+                        onToggleDownload = { onToggleTrackDownload(track) },
                     )
                 }
             }

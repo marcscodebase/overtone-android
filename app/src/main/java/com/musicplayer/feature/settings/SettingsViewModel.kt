@@ -9,6 +9,7 @@ import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
+import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +24,8 @@ import javax.inject.Inject
 data class SettingsUiState(
     val session: AuthSession? = null,
     val preferences: UserPreferences = UserPreferences(),
+    val downloadedCount: Int = 0,
+    val downloadedBytes: Long = 0L,
     val isSyncing: Boolean = false,
     val statusMessage: String? = null,
 )
@@ -31,6 +34,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val libraryRepository: LibraryRepository,
+    downloadRepository: DownloadRepository,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
@@ -41,12 +45,15 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         authRepository.session,
         preferencesDataStore.userPreferences,
+        downloadRepository.observeStorageSummary(),
         isSyncing,
         statusMessage,
-    ) { session, prefs, syncing, status ->
+    ) { session, prefs, storage, syncing, status ->
         SettingsUiState(
             session = session,
             preferences = prefs,
+            downloadedCount = storage.completedCount,
+            downloadedBytes = storage.totalBytes,
             isSyncing = syncing,
             statusMessage = status,
         )

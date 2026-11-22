@@ -23,6 +23,7 @@ class MediaStoreReconciler @Inject constructor(
         var removedCount = 0
         for (record in completed) {
             if (!mediaStoreAudioWriter.exists(record.mediaStoreUri)) {
+                downloadDao.deleteAllRefsForTrack(record.trackId)
                 downloadDao.deleteRecord(record.trackId)
                 removedCount++
             }

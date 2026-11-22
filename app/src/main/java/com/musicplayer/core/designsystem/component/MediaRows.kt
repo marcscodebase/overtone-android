@@ -19,6 +19,8 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
@@ -73,6 +75,7 @@ fun TrackRow(
     onAddToQueue: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onToggleDownload: (() -> Unit)? = null,
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
@@ -126,6 +129,7 @@ fun TrackRow(
                 onAddToQueue = onAddToQueue,
                 onToggleFavorite = onToggleFavorite,
                 onAddToPlaylist = onAddToPlaylist,
+                onToggleDownload = onToggleDownload,
                 extraMenuActionLabel = extraMenuActionLabel,
                 onExtraMenuAction = onExtraMenuAction,
             )
@@ -142,6 +146,7 @@ fun TrackRow(
             onAddToQueue = null,
             onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
+            onToggleDownload = onToggleDownload,
             extraMenuActionLabel = extraMenuActionLabel,
             onExtraMenuAction = onExtraMenuAction,
         )
@@ -160,12 +165,14 @@ private fun TrackRowContent(
     onAddToQueue: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onToggleDownload: (() -> Unit)? = null,
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val hasMenu = onPlayNext != null || onAddToQueue != null || onToggleFavorite != null ||
-        onAddToPlaylist != null || (extraMenuActionLabel != null && onExtraMenuAction != null)
+        onAddToPlaylist != null || onToggleDownload != null ||
+        (extraMenuActionLabel != null && onExtraMenuAction != null)
 
     Row(
         modifier = modifier
@@ -332,6 +339,35 @@ private fun TrackRowContent(
                             onClick = {
                                 menuExpanded = false
                                 onAddToPlaylist()
+                            },
+                        )
+                    }
+                    if (onToggleDownload != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (track.isDownloaded) {
+                                            R.string.download_remove
+                                        } else {
+                                            R.string.action_download
+                                        },
+                                    ),
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (track.isDownloaded) {
+                                        Icons.Rounded.Delete
+                                    } else {
+                                        Icons.Rounded.Download
+                                    },
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onToggleDownload()
                             },
                         )
                     }
