@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -60,13 +62,13 @@ class PlaylistDetailViewModel @Inject constructor(
     val uiState: StateFlow<PlaylistDetailUiState> = combine(
         libraryRepository.observePlaylist(playlistId),
         playlistRepository.observePlaylistTrackEntries(playlistId),
-        playbackController.playbackState,
+        playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
         metaState,
-    ) { playlist, entries, playback, meta ->
+    ) { playlist, entries, activeId, meta ->
         PlaylistDetailUiState(
             playlist = playlist,
             entries = entries,
-            activeTrackId = playback.currentTrack?.id,
+            activeTrackId = activeId,
             isSyncing = meta.isSyncing,
             isReordering = meta.isReordering,
             isDeleted = meta.isDeleted,

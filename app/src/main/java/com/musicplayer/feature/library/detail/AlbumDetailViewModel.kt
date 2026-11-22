@@ -12,6 +12,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,12 +37,12 @@ class AlbumDetailViewModel @Inject constructor(
     val uiState: StateFlow<AlbumDetailUiState> = combine(
         libraryRepository.observeAlbum(albumId),
         libraryRepository.observeAlbumTracks(albumId),
-        playbackController.playbackState,
-    ) { album, tracks, playback ->
+        playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
+    ) { album, tracks, activeId ->
         AlbumDetailUiState(
             album = album,
             tracks = tracks,
-            activeTrackId = playback.currentTrack?.id,
+            activeTrackId = activeId,
         )
     }.stateIn(
         scope = viewModelScope,

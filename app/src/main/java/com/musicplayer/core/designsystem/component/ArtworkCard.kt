@@ -11,15 +11,22 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 
 @Composable
 fun ArtworkCard(
@@ -44,49 +51,39 @@ fun ArtworkCard(
         contentAlignment = Alignment.Center,
     ) {
         if (imageUrl.isNullOrBlank()) {
-            ArtworkFallbackIcon(
-                icon = fallbackIcon,
+            Icon(
+                imageVector = fallbackIcon,
                 contentDescription = contentDescription,
-                iconSize = fallbackIconSize,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(fallbackIconSize),
             )
         } else {
-            SubcomposeAsyncImage(
-                model = imageUrl,
+            val context = LocalContext.current
+            var showFallback by remember(imageUrl) { mutableStateOf(true) }
+            val request = remember(imageUrl) {
+                ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .crossfade(120)
+                    .build()
+            }
+
+            if (showFallback) {
+                Icon(
+                    imageVector = fallbackIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(fallbackIconSize),
+                )
+            }
+
+            AsyncImage(
+                model = request,
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
+                onSuccess = { showFallback = false },
+                onError = { showFallback = true },
                 modifier = Modifier.fillMaxSize(),
-                loading = {
-                    ShimmerBox(modifier = Modifier.fillMaxSize(), shape = shape)
-                },
-                error = {
-                    ArtworkFallbackIcon(
-                        icon = fallbackIcon,
-                        contentDescription = contentDescription,
-                        iconSize = fallbackIconSize,
-                    )
-                },
             )
         }
-    }
-}
-
-@Composable
-private fun ArtworkFallbackIcon(
-    icon: ImageVector,
-    contentDescription: String?,
-    iconSize: Dp,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(iconSize),
-        )
     }
 }

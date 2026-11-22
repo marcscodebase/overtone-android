@@ -1,9 +1,6 @@
 package com.musicplayer.data.remote
 
 import com.musicplayer.core.network.JellyfinClientProvider
-import org.jellyfin.sdk.api.client.extensions.imageApi
-import org.jellyfin.sdk.model.api.ImageType
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,28 +11,31 @@ class JellyfinArtworkUrlBuilder @Inject constructor(
     fun buildItemImageUrl(
         itemId: String?,
         imageTag: String? = null,
-        maxWidth: Int = DEFAULT_MAX_WIDTH,
+        maxWidth: Int = CARD_MAX_WIDTH,
     ): String? {
         if (itemId.isNullOrBlank()) return null
-        val api = clientProvider.getClient()
-        if (api.baseUrl.isNullOrBlank()) return null
-        val uuid = runCatching { UUID.fromString(itemId) }.getOrNull() ?: return null
-        return runCatching {
-            api.imageApi.getItemImageUrl(
-                itemId = uuid,
-                imageType = ImageType.PRIMARY,
-                maxWidth = maxWidth,
-                tag = imageTag,
-                quality = IMAGE_QUALITY,
-            )
-        }.getOrNull()
+        val cleanBase = clientProvider.getClient().baseUrl?.trimEnd('/')
+        if (cleanBase.isNullOrBlank()) return null
+        return buildString(cleanBase.length + 72) {
+            append(cleanBase)
+            append("/Items/")
+            append(itemId)
+            append("/Images/Primary?maxWidth=")
+            append(maxWidth)
+            append("&quality=")
+            append(IMAGE_QUALITY)
+            if (!imageTag.isNullOrBlank()) {
+                append("&tag=")
+                append(imageTag)
+            }
+        }
     }
 
     fun buildTrackArtworkUrl(
         trackId: String,
         albumId: String?,
         imageTag: String?,
-        maxWidth: Int = DEFAULT_MAX_WIDTH,
+        maxWidth: Int = THUMBNAIL_MAX_WIDTH,
     ): String? {
         return when {
             !imageTag.isNullOrBlank() -> buildItemImageUrl(trackId, imageTag, maxWidth)
@@ -45,8 +45,10 @@ class JellyfinArtworkUrlBuilder @Inject constructor(
     }
 
     companion object {
-        const val DEFAULT_MAX_WIDTH = 512
-        const val LARGE_MAX_WIDTH = 1024
-        private const val IMAGE_QUALITY = 90
+        const val THUMBNAIL_MAX_WIDTH = 192
+        const val CARD_MAX_WIDTH = 384
+        const val DEFAULT_MAX_WIDTH = CARD_MAX_WIDTH
+        const val LARGE_MAX_WIDTH = 900
+        private const val IMAGE_QUALITY = 85
     }
 }

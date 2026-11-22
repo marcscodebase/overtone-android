@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,9 +43,12 @@ class SearchViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            playbackController.playbackState.collectLatest { playback ->
-                _uiState.update { it.copy(activeTrackId = playback.currentTrack?.id) }
-            }
+            playbackController.playbackState
+                .map { it.currentTrack?.id }
+                .distinctUntilChanged()
+                .collectLatest { trackId ->
+                    _uiState.update { it.copy(activeTrackId = trackId) }
+                }
         }
 
         viewModelScope.launch {

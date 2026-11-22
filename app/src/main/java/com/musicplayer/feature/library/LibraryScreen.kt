@@ -99,11 +99,12 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 140.dp),
                     ) {
                         itemsIndexed(
                             items = state.downloadedTracks,
                             key = { _, track -> "dl_${track.id}" },
+                            contentType = { _, _ -> "track" },
                         ) { index, track ->
                             TrackRow(
                                 track = track,
@@ -130,9 +131,13 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 140.dp),
                     ) {
-                        items(items = state.playlists, key = { it.id }) { playlist ->
+                        items(
+                            items = state.playlists,
+                            key = { it.id },
+                            contentType = { "collection" },
+                        ) { playlist ->
                             LibraryCollectionRow(
                                 title = playlist.name,
                                 subtitle = "${playlist.trackCount} songs",
@@ -156,9 +161,13 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 140.dp),
                     ) {
-                        items(items = state.albums, key = { it.id }) { album ->
+                        items(
+                            items = state.albums,
+                            key = { it.id },
+                            contentType = { "collection" },
+                        ) { album ->
                             val subtitle = listOfNotNull(
                                 album.artistName,
                                 album.year?.toString(),
@@ -186,9 +195,13 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 140.dp),
                     ) {
-                        items(items = state.artists, key = { it.id }) { artist ->
+                        items(
+                            items = state.artists,
+                            key = { it.id },
+                            contentType = { "artist" },
+                        ) { artist ->
                             LibraryCollectionRow(
                                 title = artist.name,
                                 subtitle = "${artist.albumCount} albums",
@@ -211,11 +224,12 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 140.dp),
                     ) {
                         itemsIndexed(
                             items = state.tracks,
                             key = { _, track -> track.id },
+                            contentType = { _, _ -> "track" },
                         ) { index, track ->
                             TrackRow(
                                 track = track,

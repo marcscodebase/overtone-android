@@ -1,14 +1,16 @@
 package com.musicplayer.navigation
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,11 +32,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -67,10 +72,9 @@ fun MainPagerRoute(
     homeViewModel: HomeViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
 ) {
-    val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
-    val libraryState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
+    val currentPage by remember { derivedStateOf { pagerState.currentPage } }
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
@@ -78,7 +82,7 @@ fun MainPagerRoute(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CompactTopTabBar(
-                selectedPage = pagerState.currentPage,
+                selectedPage = currentPage,
                 onSelectPage = { page ->
                     coroutineScope.launch { pagerState.animateScrollToPage(page) }
                 },
@@ -88,34 +92,31 @@ fun MainPagerRoute(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (pagerState.currentPage == 0) {
-                        onSearchClick()
-                    } else {
-                        showCreatePlaylistDialog = true
-                    }
-                },
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AnimatedContent(
-                    targetState = pagerState.currentPage,
-                    transitionSpec = {
-                        (fadeIn() + scaleIn(initialScale = 0.85f)) togetherWith
-                            (fadeOut() + scaleOut(targetScale = 0.85f))
-                    },
-                    label = "main_fab_icon",
-                ) { page ->
-                    if (page == 0) {
-                        Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = stringResource(R.string.nav_search),
-                        )
-                    } else {
+                AnimatedVisibility(
+                    visible = currentPage == 1,
+                    enter = fadeIn() + scaleIn(initialScale = 0.8f) + expandVertically(expandFrom = Alignment.Bottom),
+                    exit = fadeOut() + scaleOut(targetScale = 0.8f) + shrinkVertically(shrinkTowards = Alignment.Bottom),
+                ) {
+                    SmallFloatingActionButton(
+                        onClick = { showCreatePlaylistDialog = true },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ) {
                         Icon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = stringResource(R.string.playlist_create_new),
                         )
                     }
+                }
+                FloatingActionButton(onClick = onSearchClick) {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = stringResource(R.string.nav_search),
+                    )
                 }
             }
         },
@@ -128,28 +129,18 @@ fun MainPagerRoute(
                 .padding(innerPadding),
         ) { page ->
             when (page) {
-                0 -> HomeContent(
-                    state = homeState,
-                    onRefresh = homeViewModel::refreshLibrary,
+                0 -> HomePagerPage(
+                    viewModel = homeViewModel,
                     onAlbumClick = onAlbumClick,
                     onPlaylistClick = onPlaylistClick,
-                    onTrackClick = homeViewModel::onTrackClick,
-                    onPlayNext = homeViewModel::onPlayNext,
-                    onAddToQueue = homeViewModel::onAddToQueue,
-                    onToggleFavorite = homeViewModel::onToggleFavorite,
                     onAddToPlaylist = onAddToPlaylist,
                 )
 
-                1 -> LibraryContent(
-                    state = libraryState,
-                    onFilterSelected = libraryViewModel::onFilterSelected,
+                1 -> LibraryPagerPage(
+                    viewModel = libraryViewModel,
                     onAlbumClick = onAlbumClick,
                     onArtistClick = onArtistClick,
                     onPlaylistClick = onPlaylistClick,
-                    onTrackClick = libraryViewModel::onPlayTracks,
-                    onPlayNext = libraryViewModel::onPlayNext,
-                    onAddToQueue = libraryViewModel::onAddToQueue,
-                    onToggleFavorite = libraryViewModel::onToggleFavorite,
                     onAddToPlaylist = onAddToPlaylist,
                 )
             }
@@ -167,6 +158,50 @@ fun MainPagerRoute(
             },
         )
     }
+}
+
+@Composable
+private fun HomePagerPage(
+    viewModel: HomeViewModel,
+    onAlbumClick: (String) -> Unit,
+    onPlaylistClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    HomeContent(
+        state = state,
+        onRefresh = viewModel::refreshLibrary,
+        onAlbumClick = onAlbumClick,
+        onPlaylistClick = onPlaylistClick,
+        onTrackClick = viewModel::onTrackClick,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
+        onToggleFavorite = viewModel::onToggleFavorite,
+        onAddToPlaylist = onAddToPlaylist,
+    )
+}
+
+@Composable
+private fun LibraryPagerPage(
+    viewModel: LibraryViewModel,
+    onAlbumClick: (String) -> Unit,
+    onArtistClick: (String) -> Unit,
+    onPlaylistClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LibraryContent(
+        state = state,
+        onFilterSelected = viewModel::onFilterSelected,
+        onAlbumClick = onAlbumClick,
+        onArtistClick = onArtistClick,
+        onPlaylistClick = onPlaylistClick,
+        onTrackClick = viewModel::onPlayTracks,
+        onPlayNext = viewModel::onPlayNext,
+        onAddToQueue = viewModel::onAddToQueue,
+        onToggleFavorite = viewModel::onToggleFavorite,
+        onAddToPlaylist = onAddToPlaylist,
+    )
 }
 
 @Composable

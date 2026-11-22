@@ -10,10 +10,14 @@ import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,32 +46,38 @@ class HomeViewModel @Inject constructor(
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
 
+    private val activeTrackId = playbackController.playbackState
+        .map { it.currentTrack?.id }
+        .distinctUntilChanged()
+
     private val trackFeeds = combine(
         libraryRepository.observeRecentlyPlayedTracks(limit = 10),
         libraryRepository.observeFavoriteTracks(),
-    ) { recent, favorites -> recent to favorites }
+    ) { recent, favorites -> recent to favorites.take(10) }
 
     val uiState: StateFlow<HomeUiState> = combine(
         libraryRepository.observeRecentlyAddedAlbums(limit = 16),
         trackFeeds,
         libraryRepository.observeAllPlaylists(),
-        playbackController.playbackState,
+        activeTrackId,
         combine(isRefreshing, errorMessage) { refreshing, error -> refreshing to error },
-    ) { albums, (recentTracks, favorites), playlists, playback, (refreshing, error) ->
+    ) { albums, (recentTracks, favorites), playlists, activeId, (refreshing, error) ->
         HomeUiState(
             recentlyAddedAlbums = albums,
             recentlyPlayedTracks = recentTracks,
-            favoriteTracks = favorites.take(10),
+            favoriteTracks = favorites,
             playlists = playlists,
-            activeTrackId = playback.currentTrack?.id,
+            activeTrackId = activeId,
             isRefreshing = refreshing,
             errorMessage = error,
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = HomeUiState(isRefreshing = true),
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = HomeUiState(isRefreshing = true),
+        )
 
     init {
         refreshLibrary()
