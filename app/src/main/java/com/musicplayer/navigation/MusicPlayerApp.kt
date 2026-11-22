@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,12 +38,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.musicplayer.R
+import com.musicplayer.core.model.Track
 import com.musicplayer.feature.auth.AuthRoute
 import com.musicplayer.feature.home.HomeRoute
 import com.musicplayer.feature.library.LibraryRoute
 import com.musicplayer.feature.library.detail.AlbumDetailRoute
 import com.musicplayer.feature.library.detail.ArtistDetailRoute
 import com.musicplayer.feature.library.detail.PlaylistDetailRoute
+import com.musicplayer.feature.library.playlist.AddToPlaylistSheet
+import com.musicplayer.feature.library.playlist.PlaylistPickerViewModel
 import com.musicplayer.feature.player.MiniPlayer
 import com.musicplayer.feature.player.NowPlayingSheet
 import com.musicplayer.feature.player.PlayerViewModel
@@ -113,13 +117,16 @@ private val topLevelTabs = listOf(
 @Composable
 private fun AuthenticatedShell(
     playerViewModel: PlayerViewModel = hiltViewModel(),
+    playlistPickerViewModel: PlaylistPickerViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
+    val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var trackForPlaylistPicker by remember { mutableStateOf<Track?>(null) }
 
     val showBottomBar = currentDestination == null ||
         currentDestination.hasRoute(HomeDestination::class) ||
@@ -185,6 +192,7 @@ private fun AuthenticatedShell(
                 HomeRoute(
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                     onSettingsClick = { navController.navigate(SettingsDestination) },
                 )
             }
@@ -194,6 +202,7 @@ private fun AuthenticatedShell(
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                 )
             }
 
@@ -202,6 +211,7 @@ private fun AuthenticatedShell(
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                     onSettingsClick = { navController.navigate(SettingsDestination) },
                 )
             }
@@ -209,6 +219,7 @@ private fun AuthenticatedShell(
             composable<AlbumDetailDestination> {
                 AlbumDetailRoute(
                     onBackClick = { navController.popBackStack() },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                 )
             }
 
@@ -216,12 +227,14 @@ private fun AuthenticatedShell(
                 ArtistDetailRoute(
                     onBackClick = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                 )
             }
 
             composable<PlaylistDetailDestination> {
                 PlaylistDetailRoute(
                     onBackClick = { navController.popBackStack() },
+                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
                 )
             }
 
@@ -256,6 +269,22 @@ private fun AuthenticatedShell(
             onRemoveIndex = playerViewModel::onRemoveQueueIndex,
             onMoveItem = playerViewModel::onMoveQueueItem,
             onClearUpNext = playerViewModel::onClearUpNext,
+        )
+    }
+
+    trackForPlaylistPicker?.let { selectedTrack ->
+        AddToPlaylistSheet(
+            track = selectedTrack,
+            playlists = allPlaylists,
+            onDismiss = { trackForPlaylistPicker = null },
+            onSelectPlaylist = { playlist ->
+                playlistPickerViewModel.addTrackToPlaylist(playlist.id, selectedTrack)
+                trackForPlaylistPicker = null
+            },
+            onCreateNewWithTrack = { newName ->
+                playlistPickerViewModel.createPlaylistWithTrack(newName, selectedTrack)
+                trackForPlaylistPicker = null
+            },
         )
     }
 }

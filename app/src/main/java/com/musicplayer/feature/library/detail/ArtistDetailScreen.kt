@@ -39,6 +39,7 @@ import com.musicplayer.core.model.Track
 fun ArtistDetailRoute(
     onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -53,6 +54,7 @@ fun ArtistDetailRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleArtistFavorite = viewModel::onToggleArtistFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onAddToPlaylist = onAddToPlaylist,
     )
 }
 
@@ -69,6 +71,7 @@ fun ArtistDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleArtistFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -172,6 +175,7 @@ fun ArtistDetailScreen(
                             onPlayNext = { onPlayNext(track) },
                             onAddToQueue = { onAddToQueue(track) },
                             onToggleFavorite = { onToggleTrackFavorite(track) },
+                            onAddToPlaylist = { onAddToPlaylist(track) },
                         )
                     }
                 }

@@ -95,4 +95,16 @@
     <string name="favorite_add">Add to Favorites</string>
     <string name="favorite_remove">Remove from Favorites</string>
     <string name="playlist_add_to">Add to Playlist</string>
+    <string name="playlist_create_new">New Playlist</string>
+    <string name="playlist_name_label">Playlist name</string>
+    <string name="playlist_rename">Rename playlist</string>
+    <string name="playlist_delete">Delete playlist</string>
+    <string name="playlist_delete_title">Delete playlist?</string>
+    <string name="playlist_delete_message">Delete \"%1$s\" from your Jellyfin server? Songs in your library won\'t be affected.</string>
+    <string name="playlist_reorder">Reorder tracks</string>
+    <string name="playlist_remove_track">Remove from playlist</string>
+    <string name="action_create">Create</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
 </resources>

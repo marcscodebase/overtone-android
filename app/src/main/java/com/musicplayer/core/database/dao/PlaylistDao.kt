@@ -1,6 +1,7 @@
 package com.musicplayer.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
@@ -8,6 +9,12 @@ import com.musicplayer.core.database.entity.PlaylistEntity
 import com.musicplayer.core.database.entity.PlaylistTrackCrossRef
 import com.musicplayer.core.database.entity.TrackEntity
 import kotlinx.coroutines.flow.Flow
+
+data class PlaylistTrackRow(
+    @Embedded val track: TrackEntity,
+    val playlistItemId: String,
+    val position: Int,
+)
 
 @Dao
 interface PlaylistDao {
@@ -31,11 +38,36 @@ interface PlaylistDao {
     )
     fun observeTracksForPlaylist(playlistId: String): Flow<List<TrackEntity>>
 
+    @Query(
+        """
+        SELECT t.*, pt.playlistItemId, pt.position FROM tracks t
+        INNER JOIN playlist_tracks pt ON t.id = pt.trackId
+        WHERE pt.playlistId = :playlistId
+        ORDER BY pt.position ASC
+        """,
+    )
+    fun observeTrackEntriesForPlaylist(playlistId: String): Flow<List<PlaylistTrackRow>>
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
+    suspend fun getTrackRefsSnapshot(playlistId: String): List<PlaylistTrackCrossRef>
+
     @Upsert
     suspend fun upsertAll(playlists: List<PlaylistEntity>)
 
+    @Upsert
+    suspend fun upsert(playlist: PlaylistEntity)
+
+    @Query("UPDATE playlists SET name = :name WHERE id = :playlistId")
+    suspend fun updateName(playlistId: String, name: String)
+
+    @Query("UPDATE playlists SET trackCount = :trackCount WHERE id = :playlistId")
+    suspend fun updateTrackCount(playlistId: String, trackCount: Int)
+
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun deleteTrackRefsForPlaylist(playlistId: String)
+
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND playlistItemId = :playlistItemId")
+    suspend fun deleteTrackRef(playlistId: String, playlistItemId: String)
 
     @Upsert
     suspend fun upsertTrackRefs(refs: List<PlaylistTrackCrossRef>)
@@ -47,6 +79,7 @@ interface PlaylistDao {
     ) {
         deleteTrackRefsForPlaylist(playlistId)
         upsertTrackRefs(refs)
+        updateTrackCount(playlistId, refs.size)
     }
 
     @Query("UPDATE playlists SET isAutoSyncDownloaded = :enabled WHERE id = :playlistId")
@@ -54,6 +87,12 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deleteById(playlistId: String)
+
+    @Transaction
+    suspend fun deletePlaylistAndRefs(playlistId: String) {
+        deleteTrackRefsForPlaylist(playlistId)
+        deleteById(playlistId)
+    }
 
     @Query("DELETE FROM playlists")
     suspend fun clearAll()

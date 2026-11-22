@@ -1,39 +1,74 @@
 package com.musicplayer.feature.library.detail
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
+import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
+import com.musicplayer.feature.library.playlist.DeletePlaylistDialog
+import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 
 @Composable
 fun PlaylistDetailRoute(
     onBackClick: () -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     viewModel: PlaylistDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.isDeleted) {
+        if (state.isDeleted) {
+            onBackClick()
+        }
+    }
+
     PlaylistDetailScreen(
         state = state,
         onBackClick = onBackClick,
@@ -43,6 +78,12 @@ fun PlaylistDetailRoute(
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onAddToPlaylist = onAddToPlaylist,
+        onToggleReorderMode = viewModel::onToggleReorderMode,
+        onMoveTrack = viewModel::onMoveTrack,
+        onRemoveTrack = viewModel::onRemoveTrack,
+        onRenamePlaylist = viewModel::onRenamePlaylist,
+        onDeletePlaylist = viewModel::onDeletePlaylist,
     )
 }
 
@@ -57,8 +98,18 @@ fun PlaylistDetailScreen(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onToggleReorderMode: () -> Unit,
+    onMoveTrack: (Int, Int) -> Unit,
+    onRemoveTrack: (String) -> Unit,
+    onRenamePlaylist: (String) -> Unit,
+    onDeletePlaylist: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -72,12 +123,56 @@ fun PlaylistDetailScreen(
                         )
                     }
                 },
+                actions = {
+                    if (state.entries.size > 1) {
+                        IconButton(onClick = onToggleReorderMode) {
+                            Icon(
+                                imageVector = if (state.isReordering) Icons.Rounded.Check else Icons.Rounded.SwapVert,
+                                contentDescription = stringResource(R.string.playlist_reorder),
+                                tint = if (state.isReordering) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Rounded.MoreVert,
+                                contentDescription = stringResource(R.string.track_more_options),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.playlist_rename)) },
+                                leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    showRenameDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.playlist_delete)) },
+                                leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    showDeleteDialog = true
+                                },
+                            )
+                        }
+                    }
+                },
             )
         },
     ) { innerPadding ->
-        val totalDurationMs = state.tracks.sumOf { it.durationMs }
+        val totalDurationMs = state.entries.sumOf { it.track.durationMs }
         val metadata = listOfNotNull(
-            "${state.tracks.size} songs",
+            "${state.entries.size} songs",
             totalDurationMs.takeIf { it > 0L }?.let(Formatters::formatDuration),
         ).joinToString(" • ")
 
@@ -99,12 +194,12 @@ fun PlaylistDetailScreen(
                     metadata = metadata,
                     artworkUrl = state.playlist?.artworkUrl,
                     isCircularArtwork = false,
-                    canPlay = state.tracks.isNotEmpty(),
+                    canPlay = state.entries.isNotEmpty(),
                     onPlayClick = onPlayAll,
                     onShuffleClick = onShuffleAll,
                 )
             }
-            if (!state.isSyncing && state.tracks.isEmpty()) {
+            if (!state.isSyncing && state.entries.isEmpty()) {
                 item(key = "playlist_empty") {
                     EmptyState(
                         title = stringResource(R.string.playlist_empty_title),
@@ -113,19 +208,121 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 itemsIndexed(
-                    items = state.tracks,
-                    key = { index, track -> "${track.id}_$index" },
-                ) { index, track ->
-                    TrackRow(
-                        track = track,
-                        isPlaying = track.id == state.activeTrackId,
-                        onClick = { onTrackClick(index) },
-                        onPlayNext = { onPlayNext(track) },
-                        onAddToQueue = { onAddToQueue(track) },
-                        onToggleFavorite = { onToggleTrackFavorite(track) },
-                    )
+                    items = state.entries,
+                    key = { _, entry -> entry.playlistItemId },
+                ) { index, entry ->
+                    if (state.isReordering) {
+                        PlaylistReorderRow(
+                            entry = entry,
+                            canMoveUp = index > 0,
+                            canMoveDown = index < state.entries.lastIndex,
+                            onMoveUp = { onMoveTrack(index, index - 1) },
+                            onMoveDown = { onMoveTrack(index, index + 1) },
+                            onRemove = { onRemoveTrack(entry.playlistItemId) },
+                        )
+                    } else {
+                        TrackRow(
+                            track = entry.track,
+                            isPlaying = entry.track.id == state.activeTrackId,
+                            onClick = { onTrackClick(index) },
+                            onPlayNext = { onPlayNext(entry.track) },
+                            onAddToQueue = { onAddToQueue(entry.track) },
+                            onToggleFavorite = { onToggleTrackFavorite(entry.track) },
+                            onAddToPlaylist = { onAddToPlaylist(entry.track) },
+                            extraMenuActionLabel = stringResource(R.string.playlist_remove_track),
+                            onExtraMenuAction = { onRemoveTrack(entry.playlistItemId) },
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    if (showRenameDialog) {
+        PlaylistNameDialog(
+            title = stringResource(R.string.playlist_rename),
+            confirmLabel = stringResource(R.string.action_save),
+            initialName = state.playlist?.name.orEmpty(),
+            onDismiss = { showRenameDialog = false },
+            onConfirm = { newName ->
+                showRenameDialog = false
+                onRenamePlaylist(newName)
+            },
+        )
+    }
+
+    if (showDeleteDialog) {
+        DeletePlaylistDialog(
+            playlistName = state.playlist?.name.orEmpty(),
+            onDismiss = { showDeleteDialog = false },
+            onConfirm = {
+                showDeleteDialog = false
+                onDeletePlaylist()
+            },
+        )
+    }
+}
+
+@Composable
+private fun PlaylistReorderRow(
+    entry: PlaylistTrackEntry,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtworkCard(
+            imageUrl = entry.track.artworkUrl,
+            contentDescription = entry.track.albumName,
+            shape = MaterialTheme.shapes.extraSmall,
+            fallbackIconSize = 20.dp,
+            modifier = Modifier.size(44.dp),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.track.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = entry.track.artistName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+            Icon(
+                imageVector = Icons.Rounded.ArrowUpward,
+                contentDescription = stringResource(R.string.queue_move_up),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+            Icon(
+                imageVector = Icons.Rounded.ArrowDownward,
+                contentDescription = stringResource(R.string.queue_move_down),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(
+                imageVector = Icons.Rounded.Delete,
+                contentDescription = stringResource(R.string.playlist_remove_track),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }

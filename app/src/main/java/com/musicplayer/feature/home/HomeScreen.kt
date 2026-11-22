@@ -43,6 +43,7 @@ import com.musicplayer.core.model.Track
 fun HomeRoute(
     onAlbumClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -56,6 +57,7 @@ fun HomeRoute(
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
+        onAddToPlaylist = onAddToPlaylist,
         onSettingsClick = onSettingsClick,
     )
 }
@@ -71,6 +73,7 @@ fun HomeScreen(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -216,6 +219,7 @@ fun HomeScreen(
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
                                 )
                             }
                             item(key = "spacer_favorites") {
@@ -238,6 +242,7 @@ fun HomeScreen(
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
                                 )
                             }
                         }

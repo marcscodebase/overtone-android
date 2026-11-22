@@ -32,6 +32,7 @@ import com.musicplayer.core.model.Track
 @Composable
 fun AlbumDetailRoute(
     onBackClick: () -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -45,6 +46,7 @@ fun AlbumDetailRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleAlbumFavorite = viewModel::onToggleAlbumFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onAddToPlaylist = onAddToPlaylist,
     )
 }
 
@@ -60,6 +62,7 @@ fun AlbumDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleAlbumFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -147,6 +150,7 @@ fun AlbumDetailScreen(
                         onPlayNext = { onPlayNext(track) },
                         onAddToQueue = { onAddToQueue(track) },
                         onToggleFavorite = { onToggleTrackFavorite(track) },
+                        onAddToPlaylist = { onAddToPlaylist(track) },
                     )
                 }
             }

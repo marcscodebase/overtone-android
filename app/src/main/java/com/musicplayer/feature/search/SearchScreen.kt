@@ -46,6 +46,7 @@ fun SearchRoute(
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -60,6 +61,7 @@ fun SearchRoute(
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
+        onAddToPlaylist = onAddToPlaylist,
     )
 }
 
@@ -76,6 +78,7 @@ fun SearchScreen(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -172,6 +175,7 @@ fun SearchScreen(
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
                                 )
                             }
                         }

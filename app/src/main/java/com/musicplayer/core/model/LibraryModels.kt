@@ -52,6 +52,12 @@ data class Playlist(
     val artworkUrl: String?,
 )
 
+data class PlaylistTrackEntry(
+    val track: Track,
+    val playlistItemId: String,
+    val position: Int,
+)
+
 data class SearchResults(
     val tracks: List<Track> = emptyList(),
     val albums: List<Album> = emptyList(),

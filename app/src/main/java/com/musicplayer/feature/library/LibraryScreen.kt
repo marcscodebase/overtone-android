@@ -19,12 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -45,12 +50,14 @@ import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.Track
+import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 
 @Composable
 fun LibraryRoute(
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
@@ -66,6 +73,8 @@ fun LibraryRoute(
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
         onToggleFavorite = viewModel::onToggleFavorite,
+        onAddToPlaylist = onAddToPlaylist,
+        onCreatePlaylist = viewModel::onCreatePlaylist,
         onSettingsClick = onSettingsClick,
     )
 }
@@ -83,11 +92,23 @@ fun LibraryScreen(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onCreatePlaylist: (String) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showCreatePlaylistDialog = true }) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = stringResource(R.string.playlist_create_new),
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -178,6 +199,7 @@ fun LibraryScreen(
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
                                 )
                             }
                         }
@@ -289,6 +311,7 @@ fun LibraryScreen(
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
                                     onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
                                 )
                             }
                         }
@@ -296,6 +319,18 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    if (showCreatePlaylistDialog) {
+        PlaylistNameDialog(
+            title = stringResource(R.string.playlist_create_new),
+            confirmLabel = stringResource(R.string.action_create),
+            onDismiss = { showCreatePlaylistDialog = false },
+            onConfirm = { name ->
+                showCreatePlaylistDialog = false
+                onCreatePlaylist(name)
+            },
+        )
     }
 }
 

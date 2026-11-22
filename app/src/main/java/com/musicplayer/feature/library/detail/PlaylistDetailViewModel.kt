@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,36 +22,55 @@ import javax.inject.Inject
 
 data class PlaylistDetailUiState(
     val playlist: Playlist? = null,
-    val tracks: List<Track> = emptyList(),
+    val entries: List<PlaylistTrackEntry> = emptyList(),
     val activeTrackId: String? = null,
     val isSyncing: Boolean = false,
+    val isReordering: Boolean = false,
+    val isDeleted: Boolean = false,
     val errorMessage: String? = null,
-)
+) {
+    val tracks: List<Track>
+        get() = entries.map { it.track }
+}
 
 @HiltViewModel
 class PlaylistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val libraryRepository: LibraryRepository,
+    private val playlistRepository: PlaylistRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
     private val playlistId: String = checkNotNull(savedStateHandle["playlistId"])
     private val isSyncing = MutableStateFlow(false)
+    private val isReordering = MutableStateFlow(false)
+    private val isDeleted = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+
+    private val metaState = combine(
+        isSyncing,
+        isReordering,
+        isDeleted,
+        errorMessage,
+    ) { syncing, reordering, deleted, err ->
+        PlaylistMeta(syncing, reordering, deleted, err)
+    }
 
     val uiState: StateFlow<PlaylistDetailUiState> = combine(
         libraryRepository.observePlaylist(playlistId),
-        libraryRepository.observePlaylistTracks(playlistId),
+        playlistRepository.observePlaylistTrackEntries(playlistId),
         playbackController.playbackState,
-        combine(isSyncing, errorMessage) { syncing, err -> syncing to err },
-    ) { playlist, tracks, playback, (syncing, err) ->
+        metaState,
+    ) { playlist, entries, playback, meta ->
         PlaylistDetailUiState(
             playlist = playlist,
-            tracks = tracks,
+            entries = entries,
             activeTrackId = playback.currentTrack?.id,
-            isSyncing = syncing,
-            errorMessage = err,
+            isSyncing = meta.isSyncing,
+            isReordering = meta.isReordering,
+            isDeleted = meta.isDeleted,
+            errorMessage = meta.errorMessage,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -71,6 +92,10 @@ class PlaylistDetailViewModel @Inject constructor(
             }
             isSyncing.value = false
         }
+    }
+
+    fun onToggleReorderMode() {
+        isReordering.value = !isReordering.value
     }
 
     fun onPlayAll() {
@@ -105,4 +130,55 @@ class PlaylistDetailViewModel @Inject constructor(
             syncRepository.setTrackFavorite(track.id, target)
         }
     }
+
+    fun onRenamePlaylist(newName: String) {
+        viewModelScope.launch {
+            when (val result = playlistRepository.renamePlaylist(playlistId, newName)) {
+                is AppResult.Success -> errorMessage.value = null
+                is AppResult.Error -> errorMessage.value = result.error.message
+            }
+        }
+    }
+
+    fun onDeletePlaylist() {
+        viewModelScope.launch {
+            when (val result = playlistRepository.deletePlaylist(playlistId)) {
+                is AppResult.Success -> isDeleted.value = true
+                is AppResult.Error -> errorMessage.value = result.error.message
+            }
+        }
+    }
+
+    fun onRemoveTrack(playlistItemId: String) {
+        viewModelScope.launch {
+            when (val result = playlistRepository.removeTrackFromPlaylist(playlistId, playlistItemId)) {
+                is AppResult.Success -> errorMessage.value = null
+                is AppResult.Error -> errorMessage.value = result.error.message
+            }
+        }
+    }
+
+    fun onMoveTrack(fromIndex: Int, toIndex: Int) {
+        val entry = uiState.value.entries.getOrNull(fromIndex) ?: return
+        viewModelScope.launch {
+            when (
+                val result = playlistRepository.moveTrackInPlaylist(
+                    playlistId = playlistId,
+                    playlistItemId = entry.playlistItemId,
+                    fromIndex = fromIndex,
+                    toIndex = toIndex,
+                )
+            ) {
+                is AppResult.Success -> errorMessage.value = null
+                is AppResult.Error -> errorMessage.value = result.error.message
+            }
+        }
+    }
+
+    private data class PlaylistMeta(
+        val isSyncing: Boolean,
+        val isReordering: Boolean,
+        val isDeleted: Boolean,
+        val errorMessage: String?,
+    )
 }

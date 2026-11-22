@@ -5,9 +5,11 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
@@ -49,6 +51,7 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = FakeLibraryRepository(albums),
+            playlistRepository = FakePlaylistRepository(),
             syncRepository = FakeSyncRepository(),
             playbackController = FakePlaybackController(),
         )
@@ -92,6 +95,17 @@ class LibraryViewModelTest {
         override suspend fun syncLibrary(): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun search(query: String): AppResult<SearchResults> = AppResult.Success(SearchResults())
+    }
+
+    private class FakePlaylistRepository : PlaylistRepository {
+        override fun observePlaylistTrackEntries(playlistId: String): Flow<List<PlaylistTrackEntry>> = flowOf(emptyList())
+        override suspend fun createPlaylist(name: String, initialTrackIds: List<String>): AppResult<Playlist> =
+            AppResult.Success(Playlist("p1", name, initialTrackIds.size, false, null))
+        override suspend fun renamePlaylist(playlistId: String, newName: String): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun deletePlaylist(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun removeTrackFromPlaylist(playlistId: String, playlistItemId: String): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun moveTrackInPlaylist(playlistId: String, playlistItemId: String, fromIndex: Int, toIndex: Int): AppResult<Unit> = AppResult.Success(Unit)
     }
 
     private class FakeSyncRepository : SyncRepository {

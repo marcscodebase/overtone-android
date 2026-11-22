@@ -7,6 +7,7 @@ import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,6 +46,7 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     libraryRepository: LibraryRepository,
+    private val playlistRepository: PlaylistRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
@@ -116,6 +118,12 @@ class LibraryViewModel @Inject constructor(
         playbackController.updateTrackFavorite(track.id, target)
         viewModelScope.launch {
             syncRepository.setTrackFavorite(track.id, target)
+        }
+    }
+
+    fun onCreatePlaylist(name: String) {
+        viewModelScope.launch {
+            playlistRepository.createPlaylist(name = name)
         }
     }
 
