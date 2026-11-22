@@ -18,6 +18,7 @@ media3 = "1.6.1"
 coil = "3.1.0"
 jellyfinSdk = "1.7.1"
 okhttp = "4.12.0"
+jump3r = "1.0.5"
 
 coroutines = "1.10.1"
 serializationJson = "1.8.1"
@@ -77,6 +78,7 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 # Jellyfin SDK & Networking
 jellyfin-core = { group = "org.jellyfin.sdk", name = "jellyfin-core", version.ref = "jellyfinSdk" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+jump3r = { group = "de.sciss", name = "jump3r", version.ref = "jump3r" }
 
 # Kotlin Coroutines & Serialization
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }

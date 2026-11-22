@@ -1,6 +1,10 @@
 package com.musicplayer.player
 
 import com.musicplayer.player.engine.JellyfinAuthHeaderInterceptor
+import com.musicplayer.player.transcoder.AndroidMediaCodecMp3Encoder
+import com.musicplayer.player.transcoder.AudioHttpFetcher
+import com.musicplayer.player.transcoder.OkHttpAudioFetcher
+import com.musicplayer.player.transcoder.OnDeviceMp3Encoder
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -38,4 +42,16 @@ abstract class PlayerBindingsModule {
     abstract fun bindPlaybackController(
         impl: MediaControllerPlaybackController,
     ): PlaybackController
+
+    @Binds
+    @Singleton
+    abstract fun bindOnDeviceMp3Encoder(
+        impl: AndroidMediaCodecMp3Encoder,
+    ): OnDeviceMp3Encoder
+
+    @Binds
+    @Singleton
+    abstract fun bindAudioHttpFetcher(
+        impl: OkHttpAudioFetcher,
+    ): AudioHttpFetcher
 }

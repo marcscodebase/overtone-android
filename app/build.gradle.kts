@@ -96,9 +96,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
-    // Jellyfin SDK & Networking
+    // Jellyfin SDK, Networking & On-Device MP3 Encoder
     implementation(libs.jellyfin.core)
     implementation(libs.okhttp)
+    implementation(libs.jump3r)
 
     // Coroutines & Serialization
     implementation(libs.kotlinx.coroutines.android)
