@@ -24,6 +24,7 @@ class AuthViewModel @Inject constructor(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     private var quickConnectPollJob: Job? = null
+    private var pendingAuthSession: com.musicplayer.core.model.AuthSession? = null
 
     fun onServerUrlChanged(value: String) {
         _uiState.update { it.copy(serverUrlInput = value, errorMessage = null) }
@@ -109,7 +110,7 @@ class AuthViewModel @Inject constructor(
                     password = current.password,
                 )
             ) {
-                is AppResult.Success -> onAuthenticated()
+                is AppResult.Success -> onAuthenticated(result.data)
                 is AppResult.Error -> {
                     _uiState.update {
                         it.copy(isLoading = false, errorMessage = result.error.message)
@@ -159,7 +160,7 @@ class AuthViewModel @Inject constructor(
                             is AppResult.Success -> {
                                 if (pollResult.data != null) {
                                     _uiState.update { it.copy(isPollingQuickConnect = false) }
-                                    onAuthenticated()
+                                    onAuthenticated(pollResult.data)
                                     break
                                 }
                             }
@@ -193,22 +194,24 @@ class AuthViewModel @Inject constructor(
 
     fun onConfirmLibraries() {
         val selected = _uiState.value.selectedLibraryIds
+        val session = pendingAuthSession ?: return
         if (selected.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "Select at least one music library") }
             return
         }
         viewModelScope.launch {
-            authRepository.saveSelectedMusicLibraries(selected)
+            authRepository.completeSignIn(session, selected)
             _uiState.update { it.copy(isCompleted = true) }
         }
     }
 
-    private suspend fun onAuthenticated() {
-        when (val librariesResult = authRepository.fetchMusicLibraries()) {
+    private suspend fun onAuthenticated(session: com.musicplayer.core.model.AuthSession) {
+        pendingAuthSession = session
+        when (val librariesResult = authRepository.fetchMusicLibraries(session.userId)) {
             is AppResult.Success -> {
                 val libraries = librariesResult.data
                 if (libraries.size <= 1) {
-                    authRepository.saveSelectedMusicLibraries(libraries.map { it.id }.toSet())
+                    authRepository.completeSignIn(session, libraries.map { it.id }.toSet())
                     _uiState.update { it.copy(isLoading = false, isCompleted = true) }
                 } else {
                     _uiState.update {
@@ -224,7 +227,7 @@ class AuthViewModel @Inject constructor(
 
             is AppResult.Error -> {
                 // Proceed even if library discovery fails; default to all music libraries
-                authRepository.saveSelectedMusicLibraries(emptySet())
+                authRepository.completeSignIn(session, emptySet())
                 _uiState.update { it.copy(isLoading = false, isCompleted = true) }
             }
         }

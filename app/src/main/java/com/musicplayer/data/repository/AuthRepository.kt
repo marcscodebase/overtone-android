@@ -46,8 +46,8 @@ interface AuthRepository {
         secret: String,
     ): AppResult<AuthSession?>
 
-    suspend fun fetchMusicLibraries(): AppResult<List<MusicLibrary>>
-    suspend fun saveSelectedMusicLibraries(libraryIds: Set<String>)
+    suspend fun fetchMusicLibraries(userId: String): AppResult<List<MusicLibrary>>
+    suspend fun completeSignIn(session: AuthSession, libraryIds: Set<String>)
     suspend fun logout()
 }
 
@@ -133,7 +133,6 @@ class JellyfinAuthRepository @Inject constructor(
                 accessToken = accessToken,
             )
             clientProvider.configure(baseUrl = authSession.serverUrl, accessToken = authSession.accessToken)
-            authSessionStore.saveSession(authSession)
             authSession
         }
     }
@@ -180,19 +179,15 @@ class JellyfinAuthRepository @Inject constructor(
                 accessToken = accessToken,
             )
             clientProvider.configure(baseUrl = authSession.serverUrl, accessToken = authSession.accessToken)
-            authSessionStore.saveSession(authSession)
             authSession
         }
     }
 
-    override suspend fun fetchMusicLibraries(): AppResult<List<MusicLibrary>> =
+    override suspend fun fetchMusicLibraries(userId: String): AppResult<List<MusicLibrary>> =
         withContext(ioDispatcher) {
-            val saved = authSessionStore.getSession()
-                ?: return@withContext AppResult.Error(AppError.Unauthorized("Not signed in"))
-
             runJellyfinCall {
                 val api = clientProvider.getClient()
-                val userUuid = runCatching { UUID.fromString(saved.userId) }.getOrNull()
+                val userUuid = runCatching { UUID.fromString(userId) }.getOrNull()
                 val views = api.userViewsApi.getUserViews(userId = userUuid).content.items.orEmpty()
                 val musicViews = views.filter { it.collectionType == CollectionType.MUSIC }
                 val effectiveViews = musicViews.ifEmpty { views }
@@ -206,9 +201,12 @@ class JellyfinAuthRepository @Inject constructor(
             }
         }
 
-    override suspend fun saveSelectedMusicLibraries(libraryIds: Set<String>) {
-        preferencesDataStore.setSelectedMusicLibraryIds(libraryIds)
-    }
+    override suspend fun completeSignIn(session: AuthSession, libraryIds: Set<String>) =
+        withContext(ioDispatcher) {
+            clientProvider.configure(baseUrl = session.serverUrl, accessToken = session.accessToken)
+            preferencesDataStore.setSelectedMusicLibraryIds(libraryIds)
+            authSessionStore.saveSession(session)
+        }
 
     override suspend fun logout() = withContext(ioDispatcher) {
         authSessionStore.clearSession()

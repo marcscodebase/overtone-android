@@ -153,11 +153,12 @@ class AuthViewModelTest {
             secret: String,
         ): AppResult<AuthSession?> = AppResult.Success(null)
 
-        override suspend fun fetchMusicLibraries(): AppResult<List<MusicLibrary>> =
+        override suspend fun fetchMusicLibraries(userId: String): AppResult<List<MusicLibrary>> =
             AppResult.Success(libraries)
 
-        override suspend fun saveSelectedMusicLibraries(libraryIds: Set<String>) {
+        override suspend fun completeSignIn(session: AuthSession, libraryIds: Set<String>) {
             savedLibraryIds = libraryIds
+            _session.value = session
         }
 
         override suspend fun logout() {
