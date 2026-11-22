@@ -31,4 +31,48 @@
     <string name="auth_select_libraries_title">Choose Music Libraries</string>
     <string name="auth_select_libraries_subtitle">Select which Jellyfin music libraries to include in your collection.</string>
     <string name="auth_continue">Start Listening</string>
+
+    <string name="home_recently_added">Recently Added</string>
+    <string name="home_playlists">Your Playlists</string>
+    <string name="home_recently_played">Recently Played</string>
+    <string name="home_sync_failed">Couldn\'t load your library</string>
+    <string name="home_empty_title">Your music library is empty</string>
+    <string name="home_empty_subtitle">Pull down to sync music from your Jellyfin server.</string>
+
+    <string name="library_sort">Sort library</string>
+    <string name="library_filter_downloaded">Downloaded</string>
+    <string name="library_filter_playlists">Playlists</string>
+    <string name="library_filter_albums">Albums</string>
+    <string name="library_filter_artists">Artists</string>
+    <string name="library_filter_songs">Songs</string>
+    <string name="library_downloaded_empty_title">No downloaded tracks yet</string>
+    <string name="library_downloaded_empty_subtitle">Downloaded lossless and MP3 tracks will appear here for offline playback.</string>
+    <string name="library_playlists_empty_subtitle">Playlists from your Jellyfin server will show up here.</string>
+    <string name="library_empty_title">Nothing here yet</string>
+    <string name="library_empty_subtitle">Sync your Jellyfin server from Home or Settings to populate your library.</string>
+
+    <string name="search_placeholder">Search songs, albums, artists, playlists</string>
+    <string name="search_offline_banner">Showing cached local library results</string>
+    <string name="search_prompt_title">Search your collection</string>
+    <string name="search_prompt_subtitle">Find lossless tracks, albums, artists, and playlists on your Jellyfin server.</string>
+    <string name="search_no_results_title">No matches found</string>
+    <string name="search_no_results_subtitle">Try a different keyword or refresh your library.</string>
+
+    <string name="detail_not_found_title">Item not found</string>
+    <string name="detail_not_found_subtitle">Try refreshing your Jellyfin library.</string>
+    <string name="playlist_label">Playlist</string>
+    <string name="playlist_empty_title">Empty playlist</string>
+    <string name="playlist_empty_subtitle">This Jellyfin playlist does not contain any tracks yet.</string>
+
+    <string name="settings_signed_in_as">Signed in as %1$s</string>
+    <string name="settings_offline_mode">Offline Mode</string>
+    <string name="settings_offline_mode_subtitle">Browse cached metadata and prefer downloaded local files</string>
+
+    <string name="player_play_pause">Play or pause</string>
+    <string name="player_next">Next track</string>
+    <string name="player_previous">Previous track</string>
+    <string name="player_shuffle">Toggle shuffle</string>
+    <string name="player_repeat">Cycle repeat mode</string>
+    <string name="player_dismiss">Collapse now playing</string>
+    <string name="player_playing_from">Playing from %1$s</string>
 </resources>

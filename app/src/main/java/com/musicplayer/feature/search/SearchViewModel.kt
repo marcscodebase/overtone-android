@@ -1,0 +1,101 @@
+package com.musicplayer.feature.search
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.musicplayer.core.common.AppResult
+import com.musicplayer.core.model.SearchResults
+import com.musicplayer.core.model.Track
+import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.player.PlaybackController
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class SearchUiState(
+    val query: String = "",
+    val isSearching: Boolean = false,
+    val results: SearchResults = SearchResults(),
+    val activeTrackId: String? = null,
+    val errorMessage: String? = null,
+)
+
+@OptIn(FlowPreview::class)
+@HiltViewModel
+class SearchViewModel @Inject constructor(
+    private val libraryRepository: LibraryRepository,
+    private val playbackController: PlaybackController,
+) : ViewModel() {
+
+    private val queryFlow = MutableStateFlow("")
+    private val _uiState = MutableStateFlow(SearchUiState())
+    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            playbackController.playbackState.collectLatest { playback ->
+                _uiState.update { it.copy(activeTrackId = playback.currentTrack?.id) }
+            }
+        }
+
+        viewModelScope.launch {
+            queryFlow
+                .debounce(300L)
+                .distinctUntilChanged()
+                .collectLatest { query ->
+                    if (query.isBlank()) {
+                        _uiState.update {
+                            it.copy(
+                                isSearching = false,
+                                results = SearchResults(),
+                                errorMessage = null,
+                            )
+                        }
+                        return@collectLatest
+                    }
+
+                    _uiState.update { it.copy(isSearching = true, errorMessage = null) }
+                    when (val result = libraryRepository.search(query)) {
+                        is AppResult.Success -> {
+                            _uiState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    results = result.data,
+                                    errorMessage = null,
+                                )
+                            }
+                        }
+
+                        is AppResult.Error -> {
+                            _uiState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    errorMessage = result.error.message,
+                                )
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    fun onQueryChanged(value: String) {
+        _uiState.update { it.copy(query = value) }
+        queryFlow.value = value
+    }
+
+    fun onClearQuery() {
+        onQueryChanged("")
+    }
+
+    fun onPlayTrack(tracks: List<Track>, index: Int) {
+        playbackController.playTracks(tracks = tracks, startIndex = index)
+    }
+}
