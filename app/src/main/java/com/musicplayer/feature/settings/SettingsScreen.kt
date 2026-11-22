@@ -71,6 +71,7 @@ fun SettingsRoute(
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
         onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
         onToggleAskDownloadQuality = viewModel::onToggleAskDownloadQuality,
+        onFlushPendingSync = viewModel::onFlushPendingSync,
         onSyncLibrary = viewModel::onSyncLibrary,
         onSignOut = viewModel::onSignOut,
     )
@@ -87,6 +88,7 @@ fun SettingsScreen(
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
     onToggleWifiOnlyDownloads: (Boolean) -> Unit,
     onToggleAskDownloadQuality: (Boolean) -> Unit,
+    onFlushPendingSync: () -> Unit,
     onSyncLibrary: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -314,28 +316,53 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.settings_offline_mode),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_offline_mode_subtitle),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_offline_mode),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_offline_mode_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.preferences.offlineModeEnabled,
+                            onCheckedChange = onToggleOfflineMode,
                         )
                     }
-                    Switch(
-                        checked = state.preferences.offlineModeEnabled,
-                        onCheckedChange = onToggleOfflineMode,
-                    )
+                    if (state.pendingSyncCount > 0) {
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.offline_sync_pending, state.pendingSyncCount),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = onFlushPendingSync,
+                                enabled = !state.preferences.offlineModeEnabled,
+                            ) {
+                                Text(stringResource(R.string.offline_sync_now))
+                            }
+                        }
+                    }
                 }
             }
 

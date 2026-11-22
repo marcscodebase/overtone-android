@@ -121,6 +121,7 @@ class LibraryViewModelTest {
         override suspend fun setTrackFavorite(trackId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun setAlbumFavorite(albumId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun setArtistFavorite(artistId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun enqueuePlaylistMutation(payload: com.musicplayer.data.repository.PlaylistMutationPayload) = Unit
         override suspend fun flushPendingSyncActions(): Int = 0
     }
 

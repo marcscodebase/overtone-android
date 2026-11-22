@@ -1,5 +1,7 @@
 package com.musicplayer.data.repository
 
+import com.musicplayer.data.worker.OfflineSyncScheduler
+import com.musicplayer.data.worker.WorkManagerOfflineSyncScheduler
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -39,4 +41,10 @@ abstract class RepositoryModule {
     abstract fun bindDownloadRepository(
         impl: JellyfinDownloadRepository,
     ): DownloadRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindOfflineSyncScheduler(
+        impl: WorkManagerOfflineSyncScheduler,
+    ): OfflineSyncScheduler
 }

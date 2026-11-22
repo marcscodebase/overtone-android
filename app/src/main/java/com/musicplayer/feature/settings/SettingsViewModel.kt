@@ -11,6 +11,8 @@ import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
 import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
+import com.musicplayer.data.worker.OfflineSyncScheduler
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,7 @@ data class SettingsUiState(
     val preferences: UserPreferences = UserPreferences(),
     val downloadedCount: Int = 0,
     val downloadedBytes: Long = 0L,
+    val pendingSyncCount: Int = 0,
     val isSyncing: Boolean = false,
     val statusMessage: String? = null,
 )
@@ -35,6 +38,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val libraryRepository: LibraryRepository,
     downloadRepository: DownloadRepository,
+    private val syncRepository: SyncRepository,
+    private val offlineSyncScheduler: OfflineSyncScheduler,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
@@ -42,18 +47,26 @@ class SettingsViewModel @Inject constructor(
     private val isSyncing = MutableStateFlow(false)
     private val statusMessage = MutableStateFlow<String?>(null)
 
+    private val syncMeta = combine(
+        syncRepository.observePendingSyncCount(),
+        isSyncing,
+        statusMessage,
+    ) { pending, syncing, status ->
+        Triple(pending, syncing, status)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         authRepository.session,
         preferencesDataStore.userPreferences,
         downloadRepository.observeStorageSummary(),
-        isSyncing,
-        statusMessage,
-    ) { session, prefs, storage, syncing, status ->
+        syncMeta,
+    ) { session, prefs, storage, (pendingCount, syncing, status) ->
         SettingsUiState(
             session = session,
             preferences = prefs,
             downloadedCount = storage.completedCount,
             downloadedBytes = storage.totalBytes,
+            pendingSyncCount = pendingCount,
             isSyncing = syncing,
             statusMessage = status,
         )
@@ -66,6 +79,23 @@ class SettingsViewModel @Inject constructor(
     fun onToggleOfflineMode(enabled: Boolean) {
         viewModelScope.launch {
             preferencesDataStore.setOfflineModeEnabled(enabled)
+            if (!enabled) {
+                offlineSyncScheduler.scheduleFlush()
+            }
+        }
+    }
+
+    fun onFlushPendingSync() {
+        viewModelScope.launch {
+            val flushed = syncRepository.flushPendingSyncActions()
+            statusMessage.value = if (flushed > 0) {
+                "Synced $flushed offline change${if (flushed == 1) "" else "s"} to Jellyfin"
+            } else {
+                "Scheduled offline sync when connected"
+            }
+            if (flushed == 0) {
+                offlineSyncScheduler.scheduleFlush()
+            }
         }
     }
 

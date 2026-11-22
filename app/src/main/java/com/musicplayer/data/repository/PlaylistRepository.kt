@@ -9,15 +9,18 @@ import com.musicplayer.core.database.dao.PlaylistDao
 import com.musicplayer.core.database.entity.PlaylistEntity
 import com.musicplayer.core.database.entity.PlaylistTrackCrossRef
 import com.musicplayer.core.datastore.AuthSessionStore
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.network.JellyfinClientProvider
+import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.remote.JellyfinArtworkUrlBuilder
 import com.musicplayer.data.remote.JellyfinMappers.toDomain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.extensions.libraryApi
@@ -71,8 +74,11 @@ interface PlaylistRepository {
 @Singleton
 class JellyfinPlaylistRepository @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
+    private val networkMonitor: NetworkMonitor,
     private val authSessionStore: AuthSessionStore,
+    private val preferencesDataStore: UserPreferencesDataStore,
     private val libraryRepository: LibraryRepository,
+    private val syncRepository: SyncRepository,
     private val playlistDao: PlaylistDao,
     private val downloadDao: DownloadDao,
     private val artworkUrlBuilder: JellyfinArtworkUrlBuilder,
@@ -154,12 +160,28 @@ class JellyfinPlaylistRepository @Inject constructor(
             val playlistUuid = parseUuid(playlistId)
                 ?: return@withContext AppResult.Error(AppError.Validation("Invalid playlist ID"))
 
-            runPlaylistCall {
+            playlistDao.updateName(playlistId, trimmed)
+            val payload = PlaylistMutationPayload(
+                operation = PlaylistMutationPayload.OP_RENAME,
+                playlistId = playlistId,
+                newName = trimmed,
+            )
+            if (isOffline()) {
+                syncRepository.enqueuePlaylistMutation(payload)
+                return@withContext AppResult.Success(Unit)
+            }
+
+            try {
                 clientProvider.getClient().playlistsApi.updatePlaylist(
                     playlistId = playlistUuid,
                     data = UpdatePlaylistDto(name = trimmed),
                 )
-                playlistDao.updateName(playlistId, trimmed)
+                AppResult.Success(Unit)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                syncRepository.enqueuePlaylistMutation(payload)
+                AppResult.Success(Unit)
             }
         }
 
@@ -183,17 +205,44 @@ class JellyfinPlaylistRepository @Inject constructor(
         val trackUuids = trackIds.mapNotNull(::parseUuid)
         if (trackUuids.isEmpty()) return@withContext AppResult.Success(Unit)
 
+        val currentRefs = playlistDao.getTrackRefsSnapshot(playlistId)
+        val basePos = currentRefs.size
+        val localAppended = trackIds.mapIndexed { idx, trackId ->
+            PlaylistTrackCrossRef(
+                playlistId = playlistId,
+                trackId = trackId,
+                playlistItemId = "local_${System.currentTimeMillis()}_$idx",
+                position = basePos + idx,
+            )
+        }
+        playlistDao.replacePlaylistTracks(playlistId, currentRefs + localAppended)
+
+        val payload = PlaylistMutationPayload(
+            operation = PlaylistMutationPayload.OP_ADD_TRACKS,
+            playlistId = playlistId,
+            trackIds = trackIds,
+        )
+        if (isOffline()) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            return@withContext AppResult.Success(Unit)
+        }
+
         val session = authSessionStore.getSession()
         val userUuid = session?.userId?.let(::parseUuid)
 
-        runPlaylistCall {
+        try {
             clientProvider.getClient().playlistsApi.addItemToPlaylist(
                 playlistId = playlistUuid,
                 ids = trackUuids,
                 userId = userUuid,
             )
             libraryRepository.syncPlaylistTracks(playlistId)
-            Unit
+            AppResult.Success(Unit)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            AppResult.Success(Unit)
         }
     }
 
@@ -201,14 +250,31 @@ class JellyfinPlaylistRepository @Inject constructor(
         playlistId: String,
         playlistItemId: String,
     ): AppResult<Unit> = withContext(ioDispatcher) {
-        runPlaylistCall {
+        val currentRefs = playlistDao.getTrackRefsSnapshot(playlistId)
+        val updated = PlaylistOrderHelper.removeByItemId(currentRefs, playlistItemId)
+        playlistDao.replacePlaylistTracks(playlistId, updated)
+
+        val payload = PlaylistMutationPayload(
+            operation = PlaylistMutationPayload.OP_REMOVE_TRACK,
+            playlistId = playlistId,
+            playlistItemId = playlistItemId,
+        )
+        if (isOffline()) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            return@withContext AppResult.Success(Unit)
+        }
+
+        try {
             clientProvider.getClient().playlistsApi.removeItemFromPlaylist(
                 playlistId = playlistId,
                 entryIds = listOf(playlistItemId),
             )
-            val currentRefs = playlistDao.getTrackRefsSnapshot(playlistId)
-            val updated = PlaylistOrderHelper.removeByItemId(currentRefs, playlistItemId)
-            playlistDao.replacePlaylistTracks(playlistId, updated)
+            AppResult.Success(Unit)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            AppResult.Success(Unit)
         }
     }
 
@@ -219,16 +285,40 @@ class JellyfinPlaylistRepository @Inject constructor(
         toIndex: Int,
     ): AppResult<Unit> = withContext(ioDispatcher) {
         if (fromIndex == toIndex) return@withContext AppResult.Success(Unit)
-        runPlaylistCall {
+
+        val currentRefs = playlistDao.getTrackRefsSnapshot(playlistId)
+        val reordered = PlaylistOrderHelper.reorder(currentRefs, fromIndex, toIndex)
+        playlistDao.replacePlaylistTracks(playlistId, reordered)
+
+        val payload = PlaylistMutationPayload(
+            operation = PlaylistMutationPayload.OP_MOVE_TRACK,
+            playlistId = playlistId,
+            playlistItemId = playlistItemId,
+            toIndex = toIndex,
+        )
+        if (isOffline()) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            return@withContext AppResult.Success(Unit)
+        }
+
+        try {
             clientProvider.getClient().playlistsApi.moveItem(
                 playlistId = playlistId,
                 itemId = playlistItemId,
                 newIndex = toIndex,
             )
-            val currentRefs = playlistDao.getTrackRefsSnapshot(playlistId)
-            val reordered = PlaylistOrderHelper.reorder(currentRefs, fromIndex, toIndex)
-            playlistDao.replacePlaylistTracks(playlistId, reordered)
+            AppResult.Success(Unit)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            AppResult.Success(Unit)
         }
+    }
+
+    private suspend fun isOffline(): Boolean {
+        val manualOffline = preferencesDataStore.userPreferences.first().offlineModeEnabled
+        return manualOffline || !networkMonitor.networkState.value.isConnected
     }
 
     private suspend inline fun <T> runPlaylistCall(block: () -> T): AppResult<T> {

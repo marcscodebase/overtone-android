@@ -13,6 +13,8 @@ import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.SyncActionType
 import com.musicplayer.core.network.JellyfinClientProvider
+import com.musicplayer.core.network.NetworkMonitor
+import com.musicplayer.data.worker.OfflineSyncScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -22,12 +24,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.playlistsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.PlayMethod
 import org.jellyfin.sdk.model.api.PlaybackOrder
 import org.jellyfin.sdk.model.api.PlaybackProgressInfo
 import org.jellyfin.sdk.model.api.PlaybackStartInfo
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
+import org.jellyfin.sdk.model.api.UpdatePlaylistDto
 import org.jellyfin.sdk.model.api.RepeatMode as JellyfinRepeatMode
 import java.util.UUID
 import javax.inject.Inject
@@ -43,6 +47,37 @@ data class PlaybackStopPayload(
 data class FavoriteMutationPayload(
     val itemId: String,
 )
+
+@Serializable
+data class PlaylistMutationPayload(
+    val operation: String,
+    val playlistId: String,
+    val newName: String? = null,
+    val trackIds: List<String> = emptyList(),
+    val playlistItemId: String? = null,
+    val toIndex: Int? = null,
+) {
+    companion object {
+        const val OP_RENAME = "RENAME"
+        const val OP_ADD_TRACKS = "ADD_TRACKS"
+        const val OP_REMOVE_TRACK = "REMOVE_TRACK"
+        const val OP_MOVE_TRACK = "MOVE_TRACK"
+    }
+}
+
+enum class OutboxActionDisposition {
+    DELETE_SUCCEEDED,
+    INCREMENT_RETRY,
+    DROP_MAX_RETRIES,
+}
+
+object OutboxRetryPolicy {
+    fun evaluate(succeeded: Boolean, currentRetryCount: Int, maxRetries: Int): OutboxActionDisposition = when {
+        succeeded -> OutboxActionDisposition.DELETE_SUCCEEDED
+        currentRetryCount + 1 >= maxRetries -> OutboxActionDisposition.DROP_MAX_RETRIES
+        else -> OutboxActionDisposition.INCREMENT_RETRY
+    }
+}
 
 interface SyncRepository {
     fun observePendingSyncCount(): Flow<Int>
@@ -68,6 +103,7 @@ interface SyncRepository {
     suspend fun setTrackFavorite(trackId: String, isFavorite: Boolean): AppResult<Unit>
     suspend fun setAlbumFavorite(albumId: String, isFavorite: Boolean): AppResult<Unit>
     suspend fun setArtistFavorite(artistId: String, isFavorite: Boolean): AppResult<Unit>
+    suspend fun enqueuePlaylistMutation(payload: PlaylistMutationPayload)
 
     suspend fun flushPendingSyncActions(): Int
 }
@@ -75,12 +111,14 @@ interface SyncRepository {
 @Singleton
 class JellyfinSyncRepository @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
+    private val networkMonitor: NetworkMonitor,
     private val authSessionStore: AuthSessionStore,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao,
     private val artistDao: ArtistDao,
     private val pendingSyncActionDao: PendingSyncActionDao,
+    private val offlineSyncScheduler: OfflineSyncScheduler,
     private val json: Json,
     @param:Dispatcher(AppDispatcher.IO) private val ioDispatcher: CoroutineDispatcher,
 ) : SyncRepository {
@@ -182,6 +220,19 @@ class JellyfinSyncRepository @Inject constructor(
             syncFavoriteRemotely(itemId = artistId, isFavorite = isFavorite)
         }
 
+    override suspend fun enqueuePlaylistMutation(payload: PlaylistMutationPayload) {
+        withContext(ioDispatcher) {
+            pendingSyncActionDao.enqueue(
+                PendingSyncActionEntity(
+                    actionType = SyncActionType.PLAYLIST_MUTATION,
+                    payloadJson = json.encodeToString(payload),
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+            offlineSyncScheduler.scheduleFlush()
+        }
+    }
+
     override suspend fun flushPendingSyncActions(): Int = withContext(ioDispatcher) {
         if (!canSyncRemotely()) return@withContext 0
         val pending = pendingSyncActionDao.getAllPending()
@@ -196,13 +247,19 @@ class JellyfinSyncRepository @Inject constructor(
                 false
             }
 
-            if (succeeded) {
-                pendingSyncActionDao.deleteById(action.id)
-                flushedCount++
-            } else if (action.retryCount + 1 >= MAX_RETRY_COUNT) {
-                pendingSyncActionDao.deleteById(action.id)
-            } else {
-                pendingSyncActionDao.incrementRetry(action.id)
+            when (OutboxRetryPolicy.evaluate(succeeded, action.retryCount, MAX_RETRY_COUNT)) {
+                OutboxActionDisposition.DELETE_SUCCEEDED -> {
+                    pendingSyncActionDao.deleteById(action.id)
+                    flushedCount++
+                }
+
+                OutboxActionDisposition.DROP_MAX_RETRIES -> {
+                    pendingSyncActionDao.deleteById(action.id)
+                }
+
+                OutboxActionDisposition.INCREMENT_RETRY -> {
+                    pendingSyncActionDao.incrementRetry(action.id)
+                }
             }
         }
         flushedCount
@@ -257,7 +314,64 @@ class JellyfinSyncRepository @Inject constructor(
                 true
             }
 
-            SyncActionType.PLAYLIST_MUTATION -> true
+            SyncActionType.PLAYLIST_MUTATION -> {
+                val payload = runCatching {
+                    json.decodeFromString<PlaylistMutationPayload>(action.payloadJson)
+                }.getOrNull() ?: return true
+                executePlaylistMutation(payload)
+            }
+        }
+    }
+
+    private suspend fun executePlaylistMutation(payload: PlaylistMutationPayload): Boolean {
+        val api = clientProvider.getClient()
+        val session = authSessionStore.getSession()
+        val userUuid = session?.userId?.let(::parseUuid)
+
+        return when (payload.operation) {
+            PlaylistMutationPayload.OP_RENAME -> {
+                val playlistUuid = parseUuid(payload.playlistId) ?: return true
+                val newName = payload.newName?.takeIf { it.isNotBlank() } ?: return true
+                api.playlistsApi.updatePlaylist(
+                    playlistId = playlistUuid,
+                    data = UpdatePlaylistDto(name = newName),
+                )
+                true
+            }
+
+            PlaylistMutationPayload.OP_ADD_TRACKS -> {
+                val playlistUuid = parseUuid(payload.playlistId) ?: return true
+                val trackUuids = payload.trackIds.mapNotNull(::parseUuid)
+                if (trackUuids.isEmpty()) return true
+                api.playlistsApi.addItemToPlaylist(
+                    playlistId = playlistUuid,
+                    ids = trackUuids,
+                    userId = userUuid,
+                )
+                true
+            }
+
+            PlaylistMutationPayload.OP_REMOVE_TRACK -> {
+                val itemId = payload.playlistItemId?.takeIf { it.isNotBlank() } ?: return true
+                api.playlistsApi.removeItemFromPlaylist(
+                    playlistId = payload.playlistId,
+                    entryIds = listOf(itemId),
+                )
+                true
+            }
+
+            PlaylistMutationPayload.OP_MOVE_TRACK -> {
+                val itemId = payload.playlistItemId?.takeIf { it.isNotBlank() } ?: return true
+                val targetIndex = payload.toIndex ?: return true
+                api.playlistsApi.moveItem(
+                    playlistId = payload.playlistId,
+                    itemId = itemId,
+                    newIndex = targetIndex,
+                )
+                true
+            }
+
+            else -> true
         }
     }
 
@@ -290,6 +404,7 @@ class JellyfinSyncRepository @Inject constructor(
                 createdAt = System.currentTimeMillis(),
             ),
         )
+        offlineSyncScheduler.scheduleFlush()
     }
 
     private suspend fun enqueueFavoriteMutation(itemId: String, isFavorite: Boolean) {
@@ -300,11 +415,12 @@ class JellyfinSyncRepository @Inject constructor(
                 createdAt = System.currentTimeMillis(),
             ),
         )
+        offlineSyncScheduler.scheduleFlush()
     }
 
     private suspend fun canSyncRemotely(): Boolean {
         val offline = preferencesDataStore.userPreferences.first().offlineModeEnabled
-        if (offline) return false
+        if (offline || !networkMonitor.networkState.value.isConnected) return false
         val session = authSessionStore.getSession() ?: return false
         return session.accessToken.isNotBlank() && !clientProvider.getClient().baseUrl.isNullOrBlank()
     }
