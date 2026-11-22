@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">music-player</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_library">Your Library</string>
+    <string name="shell_placeholder_title">Connect to Jellyfin</string>
+    <string name="shell_placeholder_subtitle">Sign in to your Jellyfin server to stream lossless audio and manage offline downloads.</string>
 </resources>
