@@ -59,6 +59,7 @@ fun SearchRoute(
         onTrackClick = viewModel::onPlayTrack,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleFavorite = viewModel::onToggleFavorite,
     )
 }
 
@@ -74,6 +75,7 @@ fun SearchScreen(
     onTrackClick: (List<Track>, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -169,6 +171,7 @@ fun SearchScreen(
                                     onClick = { onTrackClick(state.results.tracks, index) },
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
                                 )
                             }
                         }

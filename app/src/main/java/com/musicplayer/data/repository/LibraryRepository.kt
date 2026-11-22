@@ -45,6 +45,7 @@ import javax.inject.Singleton
 interface LibraryRepository {
     fun observeRecentlyAddedAlbums(limit: Int = 20): Flow<List<Album>>
     fun observeRecentlyPlayedTracks(limit: Int = 20): Flow<List<Track>>
+    fun observeFavoriteTracks(): Flow<List<Track>>
     fun observeAllAlbums(): Flow<List<Album>>
     fun observeAllArtists(): Flow<List<Artist>>
     fun observeAllTracks(): Flow<List<Track>>
@@ -88,6 +89,20 @@ class JellyfinLibraryRepository @Inject constructor(
 
     override fun observeRecentlyPlayedTracks(limit: Int): Flow<List<Track>> =
         combine(trackDao.observeRecentlyPlayed(limit), downloadsByTrackId) { tracks, downloads ->
+            tracks.map { entity ->
+                entity.toDomain(
+                    artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(
+                        trackId = entity.id,
+                        albumId = entity.albumId,
+                        imageTag = entity.primaryImageTag,
+                    ),
+                    downloadRecord = downloads[entity.id],
+                )
+            }
+        }
+
+    override fun observeFavoriteTracks(): Flow<List<Track>> =
+        combine(trackDao.observeFavorites(), downloadsByTrackId) { tracks, downloads ->
             tracks.map { entity ->
                 entity.toDomain(
                     artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(

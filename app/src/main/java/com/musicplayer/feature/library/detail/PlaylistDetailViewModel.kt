@@ -7,6 +7,7 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ data class PlaylistDetailUiState(
 class PlaylistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val libraryRepository: LibraryRepository,
+    private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
@@ -95,4 +97,12 @@ class PlaylistDetailViewModel @Inject constructor(
     fun onPlayNext(track: Track) = playbackController.playNext(track)
 
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+
+    fun onToggleTrackFavorite(track: Track) {
+        val target = !track.isFavorite
+        playbackController.updateTrackFavorite(track.id, target)
+        viewModelScope.launch {
+            syncRepository.setTrackFavorite(track.id, target)
+        }
+    }
 }

@@ -6,6 +6,7 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
@@ -31,6 +32,7 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
@@ -102,4 +104,21 @@ class SearchViewModel @Inject constructor(
     fun onPlayNext(track: Track) = playbackController.playNext(track)
 
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+
+    fun onToggleFavorite(track: Track) {
+        val target = !track.isFavorite
+        playbackController.updateTrackFavorite(track.id, target)
+        _uiState.update { state ->
+            state.copy(
+                results = state.results.copy(
+                    tracks = state.results.tracks.map {
+                        if (it.id == track.id) it.copy(isFavorite = target) else it
+                    },
+                ),
+            )
+        }
+        viewModelScope.launch {
+            syncRepository.setTrackFavorite(track.id, target)
+        }
+    }
 }

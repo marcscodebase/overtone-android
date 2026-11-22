@@ -42,6 +42,7 @@ fun PlaylistDetailRoute(
         onTrackClick = viewModel::onTrackClick,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
     )
 }
 
@@ -55,6 +56,7 @@ fun PlaylistDetailScreen(
     onTrackClick: (Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleTrackFavorite: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -120,6 +122,7 @@ fun PlaylistDetailScreen(
                         onClick = { onTrackClick(index) },
                         onPlayNext = { onPlayNext(track) },
                         onAddToQueue = { onAddToQueue(track) },
+                        onToggleFavorite = { onToggleTrackFavorite(track) },
                     )
                 }
             }

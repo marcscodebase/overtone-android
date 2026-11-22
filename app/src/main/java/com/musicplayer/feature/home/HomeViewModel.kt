@@ -7,6 +7,7 @@ import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,34 +21,43 @@ import javax.inject.Inject
 data class HomeUiState(
     val recentlyAddedAlbums: List<Album> = emptyList(),
     val recentlyPlayedTracks: List<Track> = emptyList(),
+    val favoriteTracks: List<Track> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val activeTrackId: String? = null,
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() && playlists.isEmpty()
+        get() = recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() &&
+            favoriteTracks.isEmpty() && playlists.isEmpty()
 }
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
 
+    private val trackFeeds = combine(
+        libraryRepository.observeRecentlyPlayedTracks(limit = 10),
+        libraryRepository.observeFavoriteTracks(),
+    ) { recent, favorites -> recent to favorites }
+
     val uiState: StateFlow<HomeUiState> = combine(
         libraryRepository.observeRecentlyAddedAlbums(limit = 16),
-        libraryRepository.observeRecentlyPlayedTracks(limit = 10),
+        trackFeeds,
         libraryRepository.observeAllPlaylists(),
         playbackController.playbackState,
         combine(isRefreshing, errorMessage) { refreshing, error -> refreshing to error },
-    ) { albums, recentTracks, playlists, playback, (refreshing, error) ->
+    ) { albums, (recentTracks, favorites), playlists, playback, (refreshing, error) ->
         HomeUiState(
             recentlyAddedAlbums = albums,
             recentlyPlayedTracks = recentTracks,
+            favoriteTracks = favorites.take(10),
             playlists = playlists,
             activeTrackId = playback.currentTrack?.id,
             isRefreshing = refreshing,
@@ -83,4 +93,12 @@ class HomeViewModel @Inject constructor(
     fun onPlayNext(track: Track) = playbackController.playNext(track)
 
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+
+    fun onToggleFavorite(track: Track) {
+        val target = !track.isFavorite
+        playbackController.updateTrackFavorite(track.id, target)
+        viewModelScope.launch {
+            syncRepository.setTrackFavorite(track.id, target)
+        }
+    }
 }

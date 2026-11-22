@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +42,7 @@ fun MiniPlayer(
     state: PlaybackState,
     onExpand: () -> Unit,
     onTogglePlayPause: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     modifier: Modifier = Modifier,
@@ -98,6 +101,24 @@ fun MiniPlayer(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (track.isFavorite) {
+                            Icons.Rounded.Favorite
+                        } else {
+                            Icons.Rounded.FavoriteBorder
+                        },
+                        contentDescription = stringResource(
+                            if (track.isFavorite) R.string.favorite_remove else R.string.favorite_add,
+                        ),
+                        tint = if (track.isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(22.dp),
                     )
                 }
                 IconButton(onClick = onTogglePlayPause) {

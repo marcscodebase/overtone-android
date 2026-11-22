@@ -1,16 +1,20 @@
 package com.musicplayer.feature.player
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.model.Track
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
+    private val syncRepository: SyncRepository,
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
@@ -32,4 +36,13 @@ class PlayerViewModel @Inject constructor(
     fun onMoveQueueItem(fromIndex: Int, toIndex: Int) = playbackController.moveQueueItem(fromIndex, toIndex)
     fun onClearUpNext() = playbackController.clearUpNext()
     fun onClearError() = playbackController.clearError()
+
+    fun onToggleCurrentTrackFavorite() {
+        val current = playbackState.value.currentTrack ?: return
+        val target = !current.isFavorite
+        playbackController.updateTrackFavorite(current.id, target)
+        viewModelScope.launch {
+            syncRepository.setTrackFavorite(current.id, target)
+        }
+    }
 }

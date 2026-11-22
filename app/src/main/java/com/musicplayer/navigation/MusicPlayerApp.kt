@@ -140,6 +140,7 @@ private fun AuthenticatedShell(
                             state = playbackState,
                             onExpand = { showNowPlaying = true },
                             onTogglePlayPause = playerViewModel::onTogglePlayPause,
+                            onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
                             onSkipNext = playerViewModel::onSkipNext,
                             onSkipPrevious = playerViewModel::onSkipPrevious,
                         )
@@ -237,6 +238,7 @@ private fun AuthenticatedShell(
             state = playbackState,
             onDismiss = { showNowPlaying = false },
             onTogglePlayPause = playerViewModel::onTogglePlayPause,
+            onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
             onSkipNext = playerViewModel::onSkipNext,
             onSkipPrevious = playerViewModel::onSkipPrevious,
             onSeekTo = playerViewModel::onSeekTo,

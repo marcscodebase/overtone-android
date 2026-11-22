@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -60,6 +62,7 @@ fun NowPlayingSheet(
     state: PlaybackState,
     onDismiss: () -> Unit,
     onTogglePlayPause: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -171,22 +174,44 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.weight(0.5f))
 
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = track.artistName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = track.artistName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (track.isFavorite) {
+                            Icons.Rounded.Favorite
+                        } else {
+                            Icons.Rounded.FavoriteBorder
+                        },
+                        contentDescription = stringResource(
+                            if (track.isFavorite) R.string.favorite_remove else R.string.favorite_add,
+                        ),
+                        tint = if (track.isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

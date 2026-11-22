@@ -12,9 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -48,6 +51,8 @@ fun ArtistDetailRoute(
         onTrackClick = viewModel::onTrackClick,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleArtistFavorite = viewModel::onToggleArtistFavorite,
+        onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
     )
 }
 
@@ -62,6 +67,8 @@ fun ArtistDetailScreen(
     onTrackClick: (Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleArtistFavorite: () -> Unit,
+    onToggleTrackFavorite: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -75,6 +82,27 @@ fun ArtistDetailScreen(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = stringResource(R.string.action_back),
                         )
+                    }
+                },
+                actions = {
+                    state.artist?.let { artist ->
+                        IconButton(onClick = onToggleArtistFavorite) {
+                            Icon(
+                                imageVector = if (artist.isFavorite) {
+                                    Icons.Rounded.Favorite
+                                } else {
+                                    Icons.Rounded.FavoriteBorder
+                                },
+                                contentDescription = stringResource(
+                                    if (artist.isFavorite) R.string.favorite_remove else R.string.favorite_add,
+                                ),
+                                tint = if (artist.isFavorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -143,6 +171,7 @@ fun ArtistDetailScreen(
                             onClick = { onTrackClick(index) },
                             onPlayNext = { onPlayNext(track) },
                             onAddToQueue = { onAddToQueue(track) },
+                            onToggleFavorite = { onToggleTrackFavorite(track) },
                         )
                     }
                 }

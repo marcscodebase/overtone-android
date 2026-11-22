@@ -55,6 +55,7 @@ fun HomeRoute(
         onTrackClick = viewModel::onTrackClick,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleFavorite = viewModel::onToggleFavorite,
         onSettingsClick = onSettingsClick,
     )
 }
@@ -69,6 +70,7 @@ fun HomeScreen(
     onTrackClick: (List<Track>, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -199,6 +201,28 @@ fun HomeScreen(
                             }
                         }
 
+                        if (state.favoriteTracks.isNotEmpty()) {
+                            item(key = "section_favorite_tracks") {
+                                SectionHeader(title = stringResource(R.string.home_favorites))
+                            }
+                            itemsIndexed(
+                                items = state.favoriteTracks,
+                                key = { _, track -> "fav_${track.id}" },
+                            ) { index, track ->
+                                TrackRow(
+                                    track = track,
+                                    isPlaying = track.id == state.activeTrackId,
+                                    onClick = { onTrackClick(state.favoriteTracks, index) },
+                                    onPlayNext = { onPlayNext(track) },
+                                    onAddToQueue = { onAddToQueue(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
+                                )
+                            }
+                            item(key = "spacer_favorites") {
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
+
                         if (state.recentlyPlayedTracks.isNotEmpty()) {
                             item(key = "section_recent_tracks") {
                                 SectionHeader(title = stringResource(R.string.home_recently_played))
@@ -213,6 +237,7 @@ fun HomeScreen(
                                     onClick = { onTrackClick(state.recentlyPlayedTracks, index) },
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
                                 )
                             }
                         }

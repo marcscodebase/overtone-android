@@ -8,6 +8,7 @@ import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class LibraryViewModelTest {
         )
         val viewModel = LibraryViewModel(
             libraryRepository = FakeLibraryRepository(albums),
+            syncRepository = FakeSyncRepository(),
             playbackController = FakePlaybackController(),
         )
 
@@ -74,6 +76,7 @@ class LibraryViewModelTest {
     ) : LibraryRepository {
         override fun observeRecentlyAddedAlbums(limit: Int): Flow<List<Album>> = flowOf(albums)
         override fun observeRecentlyPlayedTracks(limit: Int): Flow<List<Track>> = flowOf(emptyList())
+        override fun observeFavoriteTracks(): Flow<List<Track>> = flowOf(emptyList())
         override fun observeAllAlbums(): Flow<List<Album>> = flowOf(albums)
         override fun observeAllArtists(): Flow<List<Artist>> = flowOf(emptyList())
         override fun observeAllTracks(): Flow<List<Track>> = flowOf(emptyList())
@@ -89,6 +92,17 @@ class LibraryViewModelTest {
         override suspend fun syncLibrary(): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun search(query: String): AppResult<SearchResults> = AppResult.Success(SearchResults())
+    }
+
+    private class FakeSyncRepository : SyncRepository {
+        override fun observePendingSyncCount(): Flow<Int> = flowOf(0)
+        override suspend fun reportPlaybackStart(trackId: String, positionMs: Long, isTranscoded: Boolean) = Unit
+        override suspend fun reportPlaybackProgress(trackId: String, positionMs: Long, isPaused: Boolean, isTranscoded: Boolean) = Unit
+        override suspend fun reportPlaybackStopped(trackId: String, positionMs: Long) = Unit
+        override suspend fun setTrackFavorite(trackId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun setAlbumFavorite(albumId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun setArtistFavorite(artistId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun flushPendingSyncActions(): Int = 0
     }
 
     private class FakePlaybackController : PlaybackController {

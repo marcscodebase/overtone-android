@@ -65,6 +65,7 @@ fun LibraryRoute(
         onTrackClick = viewModel::onPlayTracks,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleFavorite = viewModel::onToggleFavorite,
         onSettingsClick = onSettingsClick,
     )
 }
@@ -81,6 +82,7 @@ fun LibraryScreen(
     onTrackClick: (List<Track>, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -175,6 +177,7 @@ fun LibraryScreen(
                                     onClick = { onTrackClick(state.downloadedTracks, index) },
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
                                 )
                             }
                         }
@@ -285,6 +288,7 @@ fun LibraryScreen(
                                     onClick = { onTrackClick(state.tracks, index) },
                                     onPlayNext = { onPlayNext(track) },
                                     onAddToQueue = { onAddToQueue(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
                                 )
                             }
                         }

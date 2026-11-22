@@ -33,6 +33,7 @@
     <string name="auth_continue">Start Listening</string>
 
     <string name="home_recently_added">Recently Added</string>
+    <string name="home_favorites">Favorites</string>
     <string name="home_playlists">Your Playlists</string>
     <string name="home_recently_played">Recently Played</string>
     <string name="home_sync_failed">Couldn\'t load your library</string>

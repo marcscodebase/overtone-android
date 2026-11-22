@@ -7,9 +7,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -40,6 +43,8 @@ fun AlbumDetailRoute(
         onTrackClick = viewModel::onTrackClick,
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
+        onToggleAlbumFavorite = viewModel::onToggleAlbumFavorite,
+        onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
     )
 }
 
@@ -53,6 +58,8 @@ fun AlbumDetailScreen(
     onTrackClick: (Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
+    onToggleAlbumFavorite: () -> Unit,
+    onToggleTrackFavorite: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -66,6 +73,27 @@ fun AlbumDetailScreen(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = stringResource(R.string.action_back),
                         )
+                    }
+                },
+                actions = {
+                    state.album?.let { album ->
+                        IconButton(onClick = onToggleAlbumFavorite) {
+                            Icon(
+                                imageVector = if (album.isFavorite) {
+                                    Icons.Rounded.Favorite
+                                } else {
+                                    Icons.Rounded.FavoriteBorder
+                                },
+                                contentDescription = stringResource(
+                                    if (album.isFavorite) R.string.favorite_remove else R.string.favorite_add,
+                                ),
+                                tint = if (album.isFavorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -118,6 +146,7 @@ fun AlbumDetailScreen(
                         onClick = { onTrackClick(index) },
                         onPlayNext = { onPlayNext(track) },
                         onAddToQueue = { onAddToQueue(track) },
+                        onToggleFavorite = { onToggleTrackFavorite(track) },
                     )
                 }
             }

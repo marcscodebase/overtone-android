@@ -7,12 +7,14 @@ import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.repository.LibraryRepository
+import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ArtistDetailUiState(
@@ -26,6 +28,7 @@ data class ArtistDetailUiState(
 class ArtistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     libraryRepository: LibraryRepository,
+    private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
@@ -73,4 +76,19 @@ class ArtistDetailViewModel @Inject constructor(
     fun onPlayNext(track: Track) = playbackController.playNext(track)
 
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+
+    fun onToggleArtistFavorite() {
+        val artist = uiState.value.artist ?: return
+        viewModelScope.launch {
+            syncRepository.setArtistFavorite(artist.id, !artist.isFavorite)
+        }
+    }
+
+    fun onToggleTrackFavorite(track: Track) {
+        val target = !track.isFavorite
+        playbackController.updateTrackFavorite(track.id, target)
+        viewModelScope.launch {
+            syncRepository.setTrackFavorite(track.id, target)
+        }
+    }
 }
