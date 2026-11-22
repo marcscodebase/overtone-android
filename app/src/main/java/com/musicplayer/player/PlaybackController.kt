@@ -25,8 +25,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.guava.await
@@ -40,6 +43,7 @@ import javax.inject.Singleton
 
 interface PlaybackController {
     val playbackState: StateFlow<PlaybackState>
+    val feedbackMessages: SharedFlow<String>
     fun restorePersistedQueue()
     fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffle: Boolean = false)
     fun playNext(track: Track)
@@ -73,6 +77,9 @@ class MediaControllerPlaybackController @Inject constructor(
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     override val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
+    private val _feedbackMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    override val feedbackMessages: SharedFlow<String> = _feedbackMessages.asSharedFlow()
 
     private val connectMutex = Mutex()
     private var controller: MediaController? = null
@@ -258,6 +265,7 @@ class MediaControllerPlaybackController @Inject constructor(
                     currentIndex = mutated.currentIndex,
                 )
             }
+            _feedbackMessages.tryEmit("Playing \"${track.title}\" next")
             persistQueueAsync()
         }
     }
@@ -270,6 +278,9 @@ class MediaControllerPlaybackController @Inject constructor(
             val current = _playbackState.value
             if (current.queue.isEmpty()) {
                 playTracks(tracks, startIndex = 0, shuffle = false)
+                if (tracks.size == 1) {
+                    _feedbackMessages.tryEmit("Added \"${tracks.first().title}\" to queue")
+                }
                 return@launch
             }
             val mediaController = ensureConnected() ?: return@launch
@@ -295,6 +306,12 @@ class MediaControllerPlaybackController @Inject constructor(
                     currentIndex = mutated.currentIndex,
                 )
             }
+            val message = if (resolvedTracks.size == 1) {
+                "Added \"${resolvedTracks.first().title}\" to queue"
+            } else {
+                "Added ${resolvedTracks.size} songs to queue"
+            }
+            _feedbackMessages.tryEmit(message)
             persistQueueAsync()
         }
     }
@@ -459,16 +476,19 @@ class MediaControllerPlaybackController @Inject constructor(
     }
 
     override fun toggleShuffle() {
+        val nextShuffle = !_playbackState.value.shuffleEnabled
+        _playbackState.update { it.copy(shuffleEnabled = nextShuffle) }
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
-            mediaController.shuffleModeEnabled = !mediaController.shuffleModeEnabled
+            mediaController.shuffleModeEnabled = nextShuffle
         }
     }
 
     override fun cycleRepeatMode() {
+        val nextMode = _playbackState.value.repeatMode.next()
+        _playbackState.update { it.copy(repeatMode = nextMode) }
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
-            val nextMode = _playbackState.value.repeatMode.next()
             mediaController.repeatMode = when (nextMode) {
                 RepeatMode.OFF -> Player.REPEAT_MODE_OFF
                 RepeatMode.ALL -> Player.REPEAT_MODE_ALL

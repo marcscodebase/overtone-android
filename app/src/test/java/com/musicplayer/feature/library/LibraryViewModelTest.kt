@@ -16,7 +16,9 @@ import com.musicplayer.player.PlaybackState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -121,6 +123,7 @@ class LibraryViewModelTest {
 
     private class FakePlaybackController : PlaybackController {
         override val playbackState: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState())
+        override val feedbackMessages: SharedFlow<String> = MutableSharedFlow()
         override fun restorePersistedQueue() = Unit
         override fun playTracks(tracks: List<Track>, startIndex: Int, shuffle: Boolean) = Unit
         override fun playNext(track: Track) = Unit

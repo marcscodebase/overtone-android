@@ -1,11 +1,13 @@
 package com.musicplayer.core.designsystem.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,11 +31,15 @@ import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +47,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,8 +60,96 @@ import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackRow(
+    track: Track,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    showArtwork: Boolean = true,
+    trackNumberOverride: Int? = null,
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    extraMenuActionLabel: String? = null,
+    onExtraMenuAction: (() -> Unit)? = null,
+) {
+    if (onAddToQueue != null) {
+        val haptic = LocalHapticFeedback.current
+        val dismissState = rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.StartToEnd) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onAddToQueue()
+                }
+                // Always snap the row back to its resting position like Spotify
+                false
+            },
+        )
+
+        SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = true,
+            enableDismissFromEndToStart = false,
+            modifier = modifier.fillMaxWidth(),
+            backgroundContent = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        contentDescription = stringResource(R.string.queue_add_to_queue),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    Text(
+                        text = stringResource(R.string.queue_add_to_queue),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            },
+        ) {
+            TrackRowContent(
+                track = track,
+                isPlaying = isPlaying,
+                onClick = onClick,
+                showArtwork = showArtwork,
+                trackNumberOverride = trackNumberOverride,
+                onPlayNext = onPlayNext,
+                onAddToQueue = onAddToQueue,
+                onToggleFavorite = onToggleFavorite,
+                onAddToPlaylist = onAddToPlaylist,
+                extraMenuActionLabel = extraMenuActionLabel,
+                onExtraMenuAction = onExtraMenuAction,
+            )
+        }
+    } else {
+        TrackRowContent(
+            track = track,
+            isPlaying = isPlaying,
+            onClick = onClick,
+            modifier = modifier,
+            showArtwork = showArtwork,
+            trackNumberOverride = trackNumberOverride,
+            onPlayNext = onPlayNext,
+            onAddToQueue = null,
+            onToggleFavorite = onToggleFavorite,
+            onAddToPlaylist = onAddToPlaylist,
+            extraMenuActionLabel = extraMenuActionLabel,
+            onExtraMenuAction = onExtraMenuAction,
+        )
+    }
+}
+
+@Composable
+private fun TrackRowContent(
     track: Track,
     isPlaying: Boolean,
     onClick: () -> Unit,
@@ -74,6 +170,7 @@ fun TrackRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(start = 16.dp, end = if (hasMenu) 4.dp else 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

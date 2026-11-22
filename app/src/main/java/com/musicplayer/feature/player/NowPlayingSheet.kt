@@ -1,6 +1,8 @@
 package com.musicplayer.feature.player
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +32,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -46,6 +49,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -253,17 +261,12 @@ fun NowPlayingSheet(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onToggleShuffle) {
-                    Icon(
-                        imageVector = Icons.Rounded.Shuffle,
-                        contentDescription = stringResource(R.string.player_shuffle),
-                        tint = if (state.shuffleEnabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
+                TransportToggleButton(
+                    icon = Icons.Rounded.Shuffle,
+                    contentDescription = stringResource(R.string.player_shuffle),
+                    active = state.shuffleEnabled,
+                    onClick = onToggleShuffle,
+                )
 
                 IconButton(
                     onClick = onSkipPrevious,
@@ -311,22 +314,17 @@ fun NowPlayingSheet(
                     )
                 }
 
-                IconButton(onClick = onCycleRepeatMode) {
-                    val repeatIcon = if (state.repeatMode == RepeatMode.ONE) {
-                        Icons.Rounded.RepeatOne
-                    } else {
-                        Icons.Rounded.Repeat
-                    }
-                    Icon(
-                        imageVector = repeatIcon,
-                        contentDescription = stringResource(R.string.player_repeat),
-                        tint = if (state.repeatMode != RepeatMode.OFF) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                val repeatIcon = if (state.repeatMode == RepeatMode.ONE) {
+                    Icons.Rounded.RepeatOne
+                } else {
+                    Icons.Rounded.Repeat
                 }
+                TransportToggleButton(
+                    icon = repeatIcon,
+                    contentDescription = stringResource(R.string.player_repeat),
+                    active = state.repeatMode != RepeatMode.OFF,
+                    onClick = onCycleRepeatMode,
+                )
             }
 
             state.errorMessage?.let { err ->
@@ -348,5 +346,54 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.weight(0.5f))
         }
+    }
+}
+
+@Composable
+private fun TransportToggleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        FilledTonalIconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+            shape = CircleShape,
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = if (active) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    Color.Transparent
+                },
+                contentColor = if (active) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                },
+            ),
+            modifier = Modifier.size(44.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(
+                    if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                ),
+        )
     }
 }
