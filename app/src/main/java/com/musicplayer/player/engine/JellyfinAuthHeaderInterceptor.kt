@@ -3,12 +3,13 @@ package com.musicplayer.player.engine
 import com.musicplayer.core.network.JellyfinClientProvider
 import okhttp3.Interceptor
 import okhttp3.Response
+import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Dynamically injects Jellyfin authentication headers onto playback requests so
- * access tokens never appear in query URLs or logs.
+ * Dynamically injects Jellyfin MediaBrowser Authorization & token headers onto playback
+ * and download requests so access tokens never appear in query URLs or logs.
  */
 @Singleton
 class JellyfinAuthHeaderInterceptor @Inject constructor(
@@ -23,7 +24,16 @@ class JellyfinAuthHeaderInterceptor @Inject constructor(
             return chain.proceed(original)
         }
 
+        val authHeader = AuthorizationHeaderBuilder.buildHeader(
+            clientName = api.clientInfo.name,
+            clientVersion = api.clientInfo.version,
+            deviceId = api.deviceInfo.id,
+            deviceName = api.deviceInfo.name,
+            accessToken = token,
+        )
+
         val authorized = original.newBuilder()
+            .header("Authorization", authHeader)
             .header("X-Emby-Token", token)
             .build()
         return chain.proceed(authorized)

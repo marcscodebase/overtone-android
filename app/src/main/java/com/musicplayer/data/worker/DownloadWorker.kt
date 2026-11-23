@@ -17,6 +17,7 @@ import com.musicplayer.core.database.dao.AlbumDao
 import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.database.entity.DownloadRecordEntity
+import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
@@ -41,6 +42,7 @@ class DownloadWorker @AssistedInject constructor(
     private val albumDao: AlbumDao,
     private val downloadDao: DownloadDao,
     private val authRepository: AuthRepository,
+    private val authSessionStore: AuthSessionStore,
     private val clientProvider: JellyfinClientProvider,
     private val hybridAudioDownloader: HybridAudioDownloader,
     private val mediaStoreAudioWriter: MediaStoreAudioWriter,
@@ -97,10 +99,14 @@ class DownloadWorker @AssistedInject constructor(
                 ),
             )
 
+            val api = clientProvider.getClient()
+            val userId = authSessionStore.getSession()?.userId
             val prepared = hybridAudioDownloader.downloadAndPrepare(
                 request = HybridDownloadRequest(
                     trackId = track.id,
                     baseUrl = baseUrl,
+                    userId = userId,
+                    deviceId = api.deviceInfo.id,
                     title = track.title,
                     artist = track.artistName,
                     album = track.albumName,

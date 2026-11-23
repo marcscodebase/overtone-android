@@ -1,6 +1,7 @@
 package com.musicplayer.player.engine
 
 import com.musicplayer.core.database.dao.DownloadDao
+import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQualityMode
@@ -23,6 +24,7 @@ data class ResolvedAudioSource(
 @Singleton
 class StreamUrlResolver @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
+    private val authSessionStore: AuthSessionStore,
     private val networkMonitor: NetworkMonitor,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val downloadDao: DownloadDao,
@@ -65,14 +67,18 @@ class StreamUrlResolver @Inject constructor(
             return null
         }
 
+        val api = clientProvider.getClient()
+        val userId = authSessionStore.getSession()?.userId
         return resolveForContext(
             track = track,
-            baseUrl = clientProvider.getClient().baseUrl,
+            baseUrl = api.baseUrl,
             isMetered = netState.isMetered,
             cellularBitrateCap = prefs.cellularBitrateCap,
             lowQualityBitrate = prefs.lowQualityBitrate,
             qualitySelection = qualitySelection,
             isOffline = false,
+            userId = userId,
+            deviceId = api.deviceInfo.id,
         )
     }
 
@@ -85,6 +91,8 @@ class StreamUrlResolver @Inject constructor(
             lowQualityBitrate: Mp3Bitrate = Mp3Bitrate.KBPS_128,
             qualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO,
             isOffline: Boolean = false,
+            userId: String? = null,
+            deviceId: String? = null,
         ): ResolvedAudioSource? {
             val hasTrackLocal = track.isDownloaded && !track.localUri.isNullOrBlank()
             if (hasTrackLocal &&
@@ -105,12 +113,17 @@ class StreamUrlResolver @Inject constructor(
 
             return if (targetTranscodeKbps != null) {
                 val maxBitrateBps = targetTranscodeKbps * 1000
-                val transcodeUrl = "$cleanBase/Audio/${track.id}/universal" +
-                    "?container=mp3,aac,opus" +
-                    "&audioCodec=mp3" +
-                    "&maxStreamingBitrate=$maxBitrateBps" +
-                    "&transcodingContainer=mp3" +
-                    "&transcodingProtocol=http"
+                val params = buildList {
+                    if (!userId.isNullOrBlank()) add("userId=$userId")
+                    if (!deviceId.isNullOrBlank()) add("deviceId=$deviceId")
+                    add("container=mp3")
+                    add("audioCodec=mp3")
+                    add("audioBitRate=$maxBitrateBps")
+                    add("maxStreamingBitrate=$maxBitrateBps")
+                    add("transcodingContainer=mp3")
+                    add("transcodingProtocol=http")
+                }.joinToString("&")
+                val transcodeUrl = "$cleanBase/Audio/${track.id}/universal?$params"
                 ResolvedAudioSource(
                     uri = transcodeUrl,
                     isLocal = false,

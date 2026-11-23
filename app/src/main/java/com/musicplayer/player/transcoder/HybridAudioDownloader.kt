@@ -198,6 +198,8 @@ object AudioFormatSniffer {
 data class HybridDownloadRequest(
     val trackId: String,
     val baseUrl: String,
+    val userId: String? = null,
+    val deviceId: String? = null,
     val title: String,
     val artist: String,
     val album: String,
@@ -256,7 +258,13 @@ class HybridAudioDownloader @Inject constructor(
                 val targetKbps = request.quality.mp3Bitrate.kbps
                 onStatusChange(DownloadStatus.DOWNLOADING)
                 val serverFile = File(workDir, "${request.trackId}_server.mp3")
-                val serverUrl = buildServerMp3Url(cleanBase, request.trackId, targetKbps)
+                val serverUrl = buildServerMp3Url(
+                    cleanBase = cleanBase,
+                    trackId = request.trackId,
+                    bitrateKbps = targetKbps,
+                    userId = request.userId,
+                    deviceId = request.deviceId,
+                )
 
                 val serverResult = runCatching {
                     httpFetcher.downloadToFile(serverUrl, serverFile, onProgress)
@@ -367,14 +375,20 @@ class HybridAudioDownloader @Inject constructor(
         cleanBase: String,
         trackId: String,
         bitrateKbps: Int,
+        userId: String?,
+        deviceId: String?,
     ): String {
         val maxBitrateBps = bitrateKbps * 1000
-        return "$cleanBase/Audio/$trackId/universal" +
-            "?container=mp3" +
-            "&audioCodec=mp3" +
-            "&maxStreamingBitrate=$maxBitrateBps" +
-            "&transcodingContainer=mp3" +
-            "&transcodingProtocol=http"
+        val params = buildList {
+            if (!userId.isNullOrBlank()) add("userId=$userId")
+            if (!deviceId.isNullOrBlank()) add("deviceId=$deviceId")
+            add("container=mp3")
+            add("audioCodec=mp3")
+            add("maxStreamingBitrate=$maxBitrateBps")
+            add("transcodingContainer=mp3")
+            add("transcodingProtocol=http")
+        }.joinToString("&")
+        return "$cleanBase/Audio/$trackId/universal?$params"
     }
 
     private data class PreparedAudio(

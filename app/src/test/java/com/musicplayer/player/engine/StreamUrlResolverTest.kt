@@ -100,11 +100,16 @@ class StreamUrlResolverTest {
             baseUrl = "https://music.example.com",
             isMetered = true,
             cellularBitrateCap = CellularBitrateCap.KBPS_192,
+            userId = "user-abc",
+            deviceId = "pixel-1",
         )
 
         assertEquals(192, resolved?.transcodedBitrateKbps)
         assertFalse(resolved!!.isLocal)
         assertTrue(resolved.uri.contains("/Audio/track-123/universal?"))
+        assertTrue(resolved.uri.contains("userId=user-abc"))
+        assertTrue(resolved.uri.contains("deviceId=pixel-1"))
+        assertTrue(resolved.uri.contains("audioBitRate=192000"))
         assertTrue(resolved.uri.contains("maxStreamingBitrate=192000"))
         assertFalse(resolved.uri.contains("api_key"))
     }
