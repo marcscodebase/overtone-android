@@ -18,13 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Equalizer
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -42,10 +42,12 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,6 +65,9 @@ import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 
+val LocalSavedTrackIds = compositionLocalOf<Set<String>> { emptySet() }
+val LocalOnSaveTrack = staticCompositionLocalOf<((Track) -> Unit)?> { null }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackRow(
@@ -74,8 +79,9 @@ fun TrackRow(
     enableSwipeToQueue: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
+    isTrackSaved: Boolean = track.isFavorite || track.id in LocalSavedTrackIds.current,
+    onSaveOrAddToPlaylist: (() -> Unit)? = LocalOnSaveTrack.current?.let { handler -> { handler(track) } },
     onAddToQueue: (() -> Unit)? = null,
-    onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onToggleDownload: (() -> Unit)? = null,
     onGoToAlbum: (() -> Unit)? = null,
@@ -130,8 +136,9 @@ fun TrackRow(
                 enabled = enabled,
                 showArtwork = showArtwork,
                 trackNumberOverride = trackNumberOverride,
+                isTrackSaved = isTrackSaved,
+                onSaveOrAddToPlaylist = onSaveOrAddToPlaylist,
                 onAddToQueue = onAddToQueue,
-                onToggleFavorite = onToggleFavorite,
                 onAddToPlaylist = onAddToPlaylist,
                 onToggleDownload = onToggleDownload,
                 onGoToAlbum = onGoToAlbum,
@@ -149,8 +156,9 @@ fun TrackRow(
             enabled = enabled,
             showArtwork = showArtwork,
             trackNumberOverride = trackNumberOverride,
+            isTrackSaved = isTrackSaved,
+            onSaveOrAddToPlaylist = onSaveOrAddToPlaylist,
             onAddToQueue = if (enabled) onAddToQueue else null,
-            onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
             onToggleDownload = onToggleDownload,
             onGoToAlbum = onGoToAlbum,
@@ -170,8 +178,9 @@ private fun TrackRowContent(
     enabled: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
+    isTrackSaved: Boolean = false,
+    onSaveOrAddToPlaylist: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
-    onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onToggleDownload: (() -> Unit)? = null,
     onGoToAlbum: (() -> Unit)? = null,
@@ -182,7 +191,7 @@ private fun TrackRowContent(
     var menuExpanded by remember { mutableStateOf(false) }
     val hasAlbumLink = onGoToAlbum != null && !track.albumId.isNullOrBlank()
     val hasArtistLink = onGoToArtist != null && track.resolvedArtists.isNotEmpty()
-    val hasMenu = onAddToQueue != null || onToggleFavorite != null ||
+    val hasMenu = onAddToQueue != null ||
         onAddToPlaylist != null || onToggleDownload != null ||
         hasAlbumLink || hasArtistLink ||
         (extraMenuActionLabel != null && onExtraMenuAction != null)
@@ -193,7 +202,12 @@ private fun TrackRowContent(
             .background(MaterialTheme.colorScheme.surface)
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.42f)
-            .padding(start = 16.dp, end = if (hasMenu) 4.dp else 16.dp, top = 8.dp, bottom = 8.dp),
+            .padding(
+                start = 16.dp,
+                end = if (hasMenu || onSaveOrAddToPlaylist != null) 4.dp else 16.dp,
+                top = 8.dp,
+                bottom = 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showArtwork) {
@@ -269,7 +283,7 @@ private fun TrackRowContent(
             }
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         Text(
             text = Formatters.formatDuration(track.durationMs),
@@ -277,9 +291,34 @@ private fun TrackRowContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        if (onSaveOrAddToPlaylist != null) {
+            IconButton(
+                onClick = onSaveOrAddToPlaylist,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Icon(
+                    imageVector = if (isTrackSaved) {
+                        Icons.Rounded.CheckCircle
+                    } else {
+                        Icons.Rounded.AddCircleOutline
+                    },
+                    contentDescription = stringResource(R.string.playlist_save_to),
+                    tint = if (isTrackSaved) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
         if (hasMenu) {
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(38.dp),
+                ) {
                     Icon(
                         imageVector = Icons.Rounded.MoreVert,
                         contentDescription = stringResource(R.string.track_more_options),
@@ -300,35 +339,6 @@ private fun TrackRowContent(
                             onClick = {
                                 menuExpanded = false
                                 onAddToQueue()
-                            },
-                        )
-                    }
-                    if (onToggleFavorite != null) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(
-                                        if (track.isFavorite) {
-                                            R.string.favorite_remove
-                                        } else {
-                                            R.string.favorite_add
-                                        },
-                                    ),
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (track.isFavorite) {
-                                        Icons.Rounded.Favorite
-                                    } else {
-                                        Icons.Rounded.FavoriteBorder
-                                    },
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleFavorite()
                             },
                         )
                     }

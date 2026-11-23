@@ -70,7 +70,6 @@ fun SearchRoute(
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onPlayTrack,
         onAddToQueue = viewModel::onAddToQueue,
-        onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
     )
@@ -89,7 +88,6 @@ fun SearchScreen(
     onPlaylistClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
     onAddToQueue: (Track) -> Unit,
-    onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
@@ -205,7 +203,6 @@ fun SearchScreen(
                                     enabled = !state.isOffline || track.isDownloaded,
                                     onClick = { onTrackClick(state.results.tracks, index) },
                                     onAddToQueue = { onAddToQueue(track) },
-                                    onToggleFavorite = { onToggleFavorite(track) },
                                     onAddToPlaylist = { onAddToPlaylist(track) },
                                     onToggleDownload = { onToggleTrackDownload(track) },
                                     onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },

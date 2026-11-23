@@ -12,6 +12,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +30,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.musicplayer.core.designsystem.component.LocalOnSaveTrack
+import com.musicplayer.core.designsystem.component.LocalSavedTrackIds
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.auth.AuthRoute
 import com.musicplayer.feature.download.DownloadActionsViewModel
@@ -168,25 +171,30 @@ private fun AuthenticatedShell(
     val isActiveTrackSaved = activeTrack != null &&
         (activeTrack.isFavorite || activeTrack.id in trackIdsInPlaylists)
 
-    val onSaveCurrentTrack: () -> Unit = {
-        val current = playbackState.currentTrack
-        if (current != null) {
-            if (!current.isFavorite) {
-                playlistPickerViewModel.autoFavoriteTrack(current)
-                playlistPickerInitialFavorite = true
-                trackForPlaylistPicker = current.copy(isFavorite = true)
-            } else {
-                playlistPickerInitialFavorite = true
-                trackForPlaylistPicker = current
-            }
+    val onSaveTrack: (Track) -> Unit = { track ->
+        if (!track.isFavorite) {
+            playlistPickerViewModel.autoFavoriteTrack(track)
+            playlistPickerInitialFavorite = true
+            trackForPlaylistPicker = track.copy(isFavorite = true)
+        } else {
+            playlistPickerInitialFavorite = true
+            trackForPlaylistPicker = track
         }
+    }
+
+    val onSaveCurrentTrack: () -> Unit = {
+        playbackState.currentTrack?.let(onSaveTrack)
     }
 
     val showMiniPlayer = activeTrack != null &&
         currentDestination?.hasRoute(SettingsDestination::class) != true &&
         currentDestination?.hasRoute(StorageManagerDestination::class) != true
 
-    Scaffold(
+    CompositionLocalProvider(
+        LocalSavedTrackIds provides trackIdsInPlaylists,
+        LocalOnSaveTrack provides onSaveTrack,
+    ) {
+        Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -432,5 +440,6 @@ private fun AuthenticatedShell(
             onDismiss = downloadActionsViewModel::onDismissPendingDownload,
             onConfirm = downloadActionsViewModel::onConfirmPendingDownload,
         )
+    }
     }
 }
