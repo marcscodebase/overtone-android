@@ -99,9 +99,17 @@ fun QueueSheet(
     val coroutineScope = rememberCoroutineScope()
     val currentPage by remember { derivedStateOf { pagerState.currentPage } }
 
-    // Silently reset the inactive tab to the top so switching back always reveals the latest items
-    LaunchedEffect(pagerState.settledPage) {
+    // Reset the inactive tab off-screen (including after items are prepended to Next in Queue)
+    // so Compose's key-based scroll anchoring never hides newly added tracks above the fold.
+    LaunchedEffect(pagerState.settledPage, state.manualQueueCount, state.queue.size) {
         if (pagerState.settledPage == 1) {
+            queueListState.scrollToItem(0)
+        } else {
+            lastPlayedListState.scrollToItem(0)
+        }
+    }
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage == 0) {
             queueListState.scrollToItem(0)
         } else {
             lastPlayedListState.scrollToItem(0)
