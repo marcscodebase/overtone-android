@@ -15,3 +15,11 @@
 -keepclasseswithmembers class com.musicplayer.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+# Keep Jellyfin SDK models & serializers under R8
+-keep,includedescriptorclasses class org.jellyfin.sdk.model.** { *; }
+-dontwarn org.jellyfin.sdk.**
+
+# Keep jump3r (pure-Java LAME fallback encoder) clean under R8
+-dontwarn de.sciss.jump3r.**
+-dontwarn javax.sound.sampled.**
