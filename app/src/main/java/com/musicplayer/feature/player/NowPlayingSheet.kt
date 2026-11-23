@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DataSaverOn
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
@@ -34,9 +37,12 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -64,8 +70,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
+import com.musicplayer.core.database.entity.DownloadRecordEntity
 import com.musicplayer.core.designsystem.component.ArtworkCard
+import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
 
@@ -73,11 +82,14 @@ import com.musicplayer.player.RepeatMode
 @Composable
 fun NowPlayingSheet(
     state: PlaybackState,
-    downloadStatus: DownloadStatus?,
+    downloadRecord: DownloadRecordEntity?,
+    lowQualityBitrateKbps: Int,
+    isOffline: Boolean,
     onDismiss: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleDownload: () -> Unit,
+    onSelectStreamQuality: (StreamQualitySelection) -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -87,7 +99,11 @@ fun NowPlayingSheet(
     onOpenLyrics: () -> Unit,
 ) {
     val track = state.currentTrack ?: return
+    val downloadStatus = downloadRecord?.status
+    val isTrackDownloaded = downloadStatus == DownloadStatus.COMPLETED &&
+        !downloadRecord.mediaStoreUri.isNullOrBlank()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var qualityMenuExpanded by remember(track.id) { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -111,13 +127,27 @@ fun NowPlayingSheet(
             state.progressFraction
         }
 
+        val highFormatLabel = Formatters.formatAudioQualityBadge(
+            container = track.container,
+            codec = track.codec,
+            bitrate = track.bitrate,
+            sampleRate = track.sampleRate,
+            bitDepth = track.bitDepth,
+            isLocal = false,
+        )
+        val localFormatLabel = when {
+            downloadRecord?.qualityMode == DownloadQualityMode.MP3 ->
+                "MP3 • ${downloadRecord.bitrateKbps ?: 320} kbps • Local"
+            else -> "$highFormatLabel • Local"
+        }
+
         val qualityBadge = when {
             state.isLocalPlayback && state.transcodedBitrateKbps != null -> {
                 "MP3 • ${state.transcodedBitrateKbps} kbps • Local"
             }
 
             state.transcodedBitrateKbps != null && !state.isLocalPlayback -> {
-                "MP3 • ${state.transcodedBitrateKbps} kbps • Mobile Data"
+                "MP3 • ${state.transcodedBitrateKbps} kbps • Low Quality"
             }
 
             else -> {
@@ -130,6 +160,26 @@ fun NowPlayingSheet(
                     isLocal = state.isLocalPlayback,
                 )
             }
+        }
+
+        val qualityMenu = remember(
+            state.isLocalPlayback,
+            state.transcodedBitrateKbps,
+            isTrackDownloaded,
+            isOffline,
+            highFormatLabel,
+            lowQualityBitrateKbps,
+            localFormatLabel,
+        ) {
+            QualitySwitcherMenuBuilder.build(
+                isLocalPlayback = state.isLocalPlayback,
+                transcodedBitrateKbps = state.transcodedBitrateKbps,
+                isTrackDownloaded = isTrackDownloaded,
+                isOffline = isOffline,
+                highQualitySubtitle = highFormatLabel,
+                lowQualityBitrateKbps = lowQualityBitrateKbps,
+                localQualitySubtitle = localFormatLabel,
+            )
         }
 
         Column(
@@ -192,15 +242,86 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            AssistChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = qualityBadge,
-                        style = MaterialTheme.typography.labelSmall,
+            Box {
+                AssistChip(
+                    onClick = { qualityMenuExpanded = true },
+                    label = {
+                        Text(
+                            text = qualityBadge,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.player_switch_quality),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                )
+                DropdownMenu(
+                    expanded = qualityMenuExpanded,
+                    onDismissRequest = { qualityMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    text = qualityMenu.active.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = qualityMenu.active.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        onClick = { qualityMenuExpanded = false },
                     )
-                },
-            )
+                    if (qualityMenu.alternatives.isNotEmpty()) {
+                        HorizontalDivider()
+                        qualityMenu.alternatives.forEach { option ->
+                            val icon = when (option.selection) {
+                                StreamQualitySelection.HIGH -> Icons.Rounded.HighQuality
+                                StreamQualitySelection.LOW -> Icons.Rounded.DataSaverOn
+                                StreamQualitySelection.LOCAL -> Icons.Rounded.DownloadDone
+                                StreamQualitySelection.AUTO -> Icons.Rounded.HighQuality
+                            }
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            text = option.title,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                        Text(
+                                            text = option.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(imageVector = icon, contentDescription = null)
+                                },
+                                onClick = {
+                                    qualityMenuExpanded = false
+                                    onSelectStreamQuality(option.selection)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.weight(0.5f))
 

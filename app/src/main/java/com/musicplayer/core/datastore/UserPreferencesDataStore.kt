@@ -28,10 +28,12 @@ class UserPreferencesDataStore @Inject constructor(
             ?.let { raw -> runCatching { DownloadQualityMode.valueOf(raw) }.getOrNull() }
             ?: DownloadQualityMode.LOSSLESS
         val mp3Bitrate = Mp3Bitrate.fromKbps(prefs[KEY_DOWNLOAD_MP3_BITRATE])
+        val lowQualityBitrate = prefs[KEY_LOW_QUALITY_BITRATE]?.let(Mp3Bitrate::fromKbps) ?: Mp3Bitrate.KBPS_128
 
         UserPreferences(
             offlineModeEnabled = prefs[KEY_OFFLINE_MODE] ?: false,
             cellularBitrateCap = CellularBitrateCap.fromNameOrDefault(prefs[KEY_CELLULAR_BITRATE_CAP]),
+            lowQualityBitrate = lowQualityBitrate,
             defaultDownloadQuality = DownloadQuality(
                 mode = qualityMode,
                 mp3Bitrate = mp3Bitrate,
@@ -50,6 +52,10 @@ class UserPreferencesDataStore @Inject constructor(
 
     suspend fun setCellularBitrateCap(cap: CellularBitrateCap) {
         dataStore.edit { it[KEY_CELLULAR_BITRATE_CAP] = cap.name }
+    }
+
+    suspend fun setLowQualityBitrate(bitrate: Mp3Bitrate) {
+        dataStore.edit { it[KEY_LOW_QUALITY_BITRATE] = bitrate.kbps }
     }
 
     suspend fun setDefaultDownloadQuality(quality: DownloadQuality) {
@@ -82,6 +88,7 @@ class UserPreferencesDataStore @Inject constructor(
     companion object {
         private val KEY_OFFLINE_MODE = booleanPreferencesKey("offline_mode_enabled")
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
+        private val KEY_LOW_QUALITY_BITRATE = intPreferencesKey("low_quality_bitrate_kbps")
         private val KEY_DOWNLOAD_QUALITY_MODE = stringPreferencesKey("download_quality_mode")
         private val KEY_DOWNLOAD_MP3_BITRATE = intPreferencesKey("download_mp3_bitrate_kbps")
         private val KEY_WIFI_ONLY_DOWNLOADS = booleanPreferencesKey("wifi_only_downloads")

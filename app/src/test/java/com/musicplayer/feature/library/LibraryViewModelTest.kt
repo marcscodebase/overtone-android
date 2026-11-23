@@ -147,6 +147,7 @@ class LibraryViewModelTest {
         override fun seekTo(positionMs: Long) = Unit
         override fun toggleShuffle() = Unit
         override fun cycleRepeatMode() = Unit
+        override fun setStreamQuality(selection: com.musicplayer.core.model.StreamQualitySelection) = Unit
         override fun stopAndClear() = Unit
         override fun clearError() = Unit
     }

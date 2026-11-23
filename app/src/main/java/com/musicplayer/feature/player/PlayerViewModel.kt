@@ -2,7 +2,11 @@ package com.musicplayer.feature.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.Mp3Bitrate
+import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.data.repository.LyricsRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -10,11 +14,13 @@ import com.musicplayer.player.PlaybackState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -23,10 +29,30 @@ class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val syncRepository: SyncRepository,
     private val lyricsRepository: LyricsRepository,
+    preferencesDataStore: UserPreferencesDataStore,
+    offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val feedbackMessages: SharedFlow<String> = playbackController.feedbackMessages
+
+    val lowQualityBitrateKbps: StateFlow<Int> = preferencesDataStore.userPreferences
+        .map { it.lowQualityBitrate.kbps }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = Mp3Bitrate.KBPS_128.kbps,
+        )
+
+    val isOffline: StateFlow<Boolean> = offlineStateProvider.offlineStatus
+        .map { it.isOffline }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false,
+        )
 
     private val _lyricsState = MutableStateFlow(LyricsUiState())
     val lyricsState: StateFlow<LyricsUiState> = _lyricsState.asStateFlow()
@@ -59,6 +85,7 @@ class PlayerViewModel @Inject constructor(
     fun onSeekTo(positionMs: Long) = playbackController.seekTo(positionMs)
     fun onToggleShuffle() = playbackController.toggleShuffle()
     fun onCycleRepeatMode() = playbackController.cycleRepeatMode()
+    fun onSelectStreamQuality(selection: StreamQualitySelection) = playbackController.setStreamQuality(selection)
     fun onPlayNext(track: Track) = playbackController.playNext(track)
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
     fun onSelectQueueIndex(index: Int) = playbackController.skipToQueueIndex(index)

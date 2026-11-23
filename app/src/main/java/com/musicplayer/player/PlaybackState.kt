@@ -1,5 +1,6 @@
 package com.musicplayer.player
 
+import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 
 enum class RepeatMode {
@@ -29,6 +30,7 @@ data class PlaybackState(
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val isLocalPlayback: Boolean = false,
     val transcodedBitrateKbps: Int? = null,
+    val streamQualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO,
     val errorMessage: String? = null,
 ) {
     val progressFraction: Float

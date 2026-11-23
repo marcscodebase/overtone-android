@@ -162,4 +162,6 @@
     <string name="queue_next_from">Next from: %1$s</string>
     <string name="queue_clear_all">Clear all</string>
     <string name="queue_drag_reorder">Drag to reorder</string>
+    <string name="player_switch_quality">Switch audio quality</string>
+    <string name="settings_low_quality_bitrate">Low Quality Streaming Bitrate</string>
 </resources>

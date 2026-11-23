@@ -26,9 +26,17 @@ enum class ReplayGainMode {
     }
 }
 
+enum class StreamQualitySelection {
+    AUTO,
+    HIGH,
+    LOW,
+    LOCAL,
+}
+
 data class UserPreferences(
     val offlineModeEnabled: Boolean = false,
     val cellularBitrateCap: CellularBitrateCap = CellularBitrateCap.ORIGINAL,
+    val lowQualityBitrate: Mp3Bitrate = Mp3Bitrate.KBPS_128,
     val defaultDownloadQuality: DownloadQuality = DownloadQuality(),
     val wifiOnlyDownloads: Boolean = true,
     val askDownloadQualityEachTime: Boolean = false,

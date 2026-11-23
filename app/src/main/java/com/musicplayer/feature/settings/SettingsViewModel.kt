@@ -8,6 +8,7 @@ import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
+import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
@@ -107,6 +108,12 @@ class SettingsViewModel @Inject constructor(
     fun onSelectCellularBitrateCap(cap: CellularBitrateCap) {
         viewModelScope.launch {
             preferencesDataStore.setCellularBitrateCap(cap)
+        }
+    }
+
+    fun onSelectLowQualityBitrate(bitrate: Mp3Bitrate) {
+        viewModelScope.launch {
+            preferencesDataStore.setLowQualityBitrate(bitrate)
         }
     }
 

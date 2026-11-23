@@ -85,6 +85,8 @@ private fun AuthenticatedShell(
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
     val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
+    val lowQualityBitrateKbps by playerViewModel.lowQualityBitrateKbps.collectAsStateWithLifecycle()
+    val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     val downloadRecords by downloadActionsViewModel.downloadRecords.collectAsStateWithLifecycle()
     val downloadPrefs by downloadActionsViewModel.preferences.collectAsStateWithLifecycle()
@@ -222,11 +224,14 @@ private fun AuthenticatedShell(
     if (showNowPlaying && activeTrack != null) {
         NowPlayingSheet(
             state = playbackState,
-            downloadStatus = downloadRecords[activeTrack.id]?.status,
+            downloadRecord = downloadRecords[activeTrack.id],
+            lowQualityBitrateKbps = lowQualityBitrateKbps,
+            isOffline = isOffline,
             onDismiss = { showNowPlaying = false },
             onTogglePlayPause = playerViewModel::onTogglePlayPause,
             onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
             onToggleDownload = { downloadActionsViewModel.onToggleTrackDownload(activeTrack) },
+            onSelectStreamQuality = playerViewModel::onSelectStreamQuality,
             onSkipNext = playerViewModel::onSkipNext,
             onSkipPrevious = playerViewModel::onSkipPrevious,
             onSeekTo = playerViewModel::onSeekTo,

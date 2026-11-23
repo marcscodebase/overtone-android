@@ -13,6 +13,7 @@ import androidx.media3.session.SessionToken
 import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.ApplicationScope
 import com.musicplayer.core.common.Dispatcher
+import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.repository.SyncRepository
@@ -61,6 +62,7 @@ interface PlaybackController {
     fun seekTo(positionMs: Long)
     fun toggleShuffle()
     fun cycleRepeatMode()
+    fun setStreamQuality(selection: StreamQualitySelection)
     fun stopAndClear()
     fun clearError()
 }
@@ -92,6 +94,7 @@ class MediaControllerPlaybackController @Inject constructor(
     private var lastReportedTrackId: String? = null
     private var lastReportedPositionMs: Long = 0L
     private var lastProgressReportTimeMs: Long = 0L
+    private var sessionQualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO
 
     private val localIds = mutableSetOf<String>()
 
@@ -202,7 +205,7 @@ class MediaControllerPlaybackController @Inject constructor(
             localIds.clear()
 
             tracks.forEach { track ->
-                val resolved = streamUrlResolver.resolve(track) ?: return@forEach
+                val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
                 mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
@@ -252,7 +255,7 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
-            val resolved = streamUrlResolver.resolve(track) ?: return@launch
+            val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@launch
             if (resolved.isLocal) localIds += track.id
 
             val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
@@ -300,7 +303,7 @@ class MediaControllerPlaybackController @Inject constructor(
             val resolvedTracks = mutableListOf<Track>()
             val mediaItems = mutableListOf<MediaItem>()
             tracks.forEach { track ->
-                val resolved = streamUrlResolver.resolve(track) ?: return@forEach
+                val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
                 mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
@@ -580,6 +583,59 @@ class MediaControllerPlaybackController @Inject constructor(
         }
     }
 
+    override fun setStreamQuality(selection: StreamQualitySelection) {
+        sessionQualitySelection = selection
+        _playbackState.update { it.copy(streamQualitySelection = selection) }
+
+        appScope.launch(mainDispatcher) {
+            val state = _playbackState.value
+            val queue = state.queue
+            val currentIndex = state.currentIndex
+            if (queue.isEmpty() || currentIndex !in queue.indices) return@launch
+
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+                return@launch
+            }
+
+            val savedPositionMs = mediaController.currentPosition.coerceAtLeast(0L)
+            val wasPlaying = mediaController.playWhenReady
+
+            val newItems = mutableListOf<MediaItem>()
+            localIds.clear()
+            for (track in queue) {
+                val resolved = streamUrlResolver.resolve(track, selection)
+                    ?: streamUrlResolver.resolve(track, StreamQualitySelection.AUTO)
+                    ?: return@launch
+                if (resolved.isLocal) localIds += track.id
+                newItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
+            }
+
+            if (currentIndex !in newItems.indices) return@launch
+
+            // Seamlessly swap media items while preserving the exact playback position & play state
+            mediaController.setMediaItems(newItems, currentIndex, savedPositionMs)
+            mediaController.prepare()
+            if (wasPlaying) {
+                mediaController.play()
+            } else {
+                mediaController.pause()
+            }
+            syncFromPlayer()
+
+            val activeExtras = newItems[currentIndex].mediaMetadata.extras
+            val switchedLocal = activeExtras?.getBoolean(EXTRA_IS_LOCAL) == true
+            val switchedBitrate = activeExtras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
+            val feedback = when {
+                switchedLocal -> "Switched to Downloaded (Local)"
+                switchedBitrate != null -> "Switched to Low Quality ($switchedBitrate kbps MP3)"
+                else -> "Switched to High Quality (Lossless)"
+            }
+            _feedbackMessages.tryEmit(feedback)
+        }
+    }
+
     override fun stopAndClear() {
         appScope.launch(mainDispatcher) {
             reportStoppedForLastTrack()
@@ -605,7 +661,7 @@ class MediaControllerPlaybackController @Inject constructor(
         val items = mutableListOf<MediaItem>()
         localIds.clear()
         state.queue.forEach { track ->
-            val resolved = streamUrlResolver.resolve(track) ?: return@forEach
+            val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
             if (resolved.isLocal) localIds += track.id
             items += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
         }
