@@ -1,8 +1,10 @@
 package com.musicplayer.feature.player
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.AudioOutputState
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
@@ -11,6 +13,7 @@ import com.musicplayer.data.repository.LyricsRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
+import com.musicplayer.player.engine.AudioOutputMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,12 +32,14 @@ class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val syncRepository: SyncRepository,
     private val lyricsRepository: LyricsRepository,
-    preferencesDataStore: UserPreferencesDataStore,
+    private val audioOutputMonitor: AudioOutputMonitor,
+    private val preferencesDataStore: UserPreferencesDataStore,
     offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val feedbackMessages: SharedFlow<String> = playbackController.feedbackMessages
+    val audioOutputState: StateFlow<AudioOutputState> = audioOutputMonitor.outputState
 
     val lowQualityBitrateKbps: StateFlow<Int> = preferencesDataStore.userPreferences
         .map { it.lowQualityBitrate.kbps }
@@ -43,6 +48,24 @@ class PlayerViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = Mp3Bitrate.KBPS_128.kbps,
+        )
+
+    val autoMatchOutputQuality: StateFlow<Boolean> = preferencesDataStore.userPreferences
+        .map { it.autoMatchOutputQuality }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false,
+        )
+
+    val hiResBluetoothDevices: StateFlow<Set<String>> = preferencesDataStore.userPreferences
+        .map { it.hiResBluetoothDevices }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptySet(),
         )
 
     val isOffline: StateFlow<Boolean> = offlineStateProvider.offlineStatus
@@ -94,6 +117,18 @@ class PlayerViewModel @Inject constructor(
     fun onClearManualQueue() = playbackController.clearManualQueue()
     fun onClearUpNext() = playbackController.clearUpNext()
     fun onClearError() = playbackController.clearError()
+
+    fun onRefreshAudioOutputs() = audioOutputMonitor.refreshDevices()
+
+    fun onOpenSystemOutputSwitcher(context: Context) {
+        audioOutputMonitor.openSystemOutputSwitcher(context)
+    }
+
+    fun onSetBluetoothDeviceHiRes(deviceKey: String, isHiRes: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setBluetoothDeviceHiRes(deviceKey, isHiRes)
+        }
+    }
 
     fun onToggleCurrentTrackFavorite() {
         val current = playbackState.value.currentTrack ?: return

@@ -73,6 +73,7 @@ fun MainPagerRoute(
     onSearchClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
@@ -156,6 +157,7 @@ fun MainPagerRoute(
                 0 -> HomePagerPage(
                     viewModel = homeViewModel,
                     onAlbumClick = onAlbumClick,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
                     onToggleTrackDownload = onToggleTrackDownload,
@@ -165,6 +167,7 @@ fun MainPagerRoute(
                     viewModel = libraryViewModel,
                     onAlbumClick = onAlbumClick,
                     onArtistClick = onArtistClick,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
                     onToggleTrackDownload = onToggleTrackDownload,
@@ -190,6 +193,7 @@ fun MainPagerRoute(
 private fun HomePagerPage(
     viewModel: HomeViewModel,
     onAlbumClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
@@ -206,6 +210,7 @@ private fun HomePagerPage(
         onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
+        onGoToArtist = onGoToTrackArtist,
     )
 }
 
@@ -214,6 +219,7 @@ private fun LibraryPagerPage(
     viewModel: LibraryViewModel,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
@@ -238,6 +244,7 @@ private fun LibraryPagerPage(
         onToggleFavorite = viewModel::onToggleFavorite,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
+        onGoToTrackArtist = onGoToTrackArtist,
     )
 }
 

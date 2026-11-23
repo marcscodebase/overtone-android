@@ -40,6 +40,7 @@ import com.musicplayer.core.model.Track
 fun ArtistDetailRoute(
     onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
@@ -56,6 +57,7 @@ fun ArtistDetailRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleArtistFavorite = viewModel::onToggleArtistFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onGoToTrackArtist = onGoToTrackArtist,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
     )
@@ -74,6 +76,7 @@ fun ArtistDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleArtistFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
@@ -185,6 +188,12 @@ fun ArtistDetailScreen(
                             onToggleFavorite = { onToggleTrackFavorite(track) },
                             onAddToPlaylist = { onAddToPlaylist(track) },
                             onToggleDownload = { onToggleTrackDownload(track) },
+                            onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                            onGoToArtist = if (track.resolvedArtists.size > 1) {
+                                { onGoToTrackArtist(track) }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }

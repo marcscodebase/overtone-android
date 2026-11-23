@@ -52,6 +52,7 @@ fun SearchRoute(
     onBackClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
@@ -65,6 +66,7 @@ fun SearchRoute(
         onClearQuery = viewModel::onClearQuery,
         onAlbumClick = onAlbumClick,
         onArtistClick = onArtistClick,
+        onGoToTrackArtist = onGoToTrackArtist,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onPlayTrack,
         onPlayNext = viewModel::onPlayNext,
@@ -84,6 +86,7 @@ fun SearchScreen(
     onClearQuery: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
@@ -208,6 +211,8 @@ fun SearchScreen(
                                     onToggleFavorite = { onToggleFavorite(track) },
                                     onAddToPlaylist = { onAddToPlaylist(track) },
                                     onToggleDownload = { onToggleTrackDownload(track) },
+                                    onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                    onGoToArtist = { onGoToTrackArtist(track) },
                                 )
                             }
                         }

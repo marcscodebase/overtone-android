@@ -29,7 +29,10 @@ object DatabaseModule {
         MusicPlayerDatabase::class.java,
         MusicPlayerDatabase.DATABASE_NAME,
     )
-        .addMigrations(MusicPlayerDatabase.MIGRATION_1_2)
+        .addMigrations(
+            MusicPlayerDatabase.MIGRATION_1_2,
+            MusicPlayerDatabase.MIGRATION_2_3,
+        )
         .build()
 
     @Provides

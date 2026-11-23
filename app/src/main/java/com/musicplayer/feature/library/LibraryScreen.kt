@@ -81,6 +81,7 @@ fun LibraryContent(
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var playlistPendingFolderMove by remember { mutableStateOf<Playlist?>(null) }
@@ -155,6 +156,8 @@ fun LibraryContent(
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
                                 onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToTrackArtist(track) },
                             )
                         }
                     }
@@ -316,6 +319,8 @@ fun LibraryContent(
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
                                 onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToTrackArtist(track) },
                             )
                         }
                     }

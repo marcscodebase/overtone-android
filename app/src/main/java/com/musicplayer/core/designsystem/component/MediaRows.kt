@@ -78,6 +78,8 @@ fun TrackRow(
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onToggleDownload: (() -> Unit)? = null,
+    onGoToAlbum: (() -> Unit)? = null,
+    onGoToArtist: (() -> Unit)? = null,
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
@@ -133,6 +135,8 @@ fun TrackRow(
                 onToggleFavorite = onToggleFavorite,
                 onAddToPlaylist = onAddToPlaylist,
                 onToggleDownload = onToggleDownload,
+                onGoToAlbum = onGoToAlbum,
+                onGoToArtist = onGoToArtist,
                 extraMenuActionLabel = extraMenuActionLabel,
                 onExtraMenuAction = onExtraMenuAction,
             )
@@ -151,6 +155,8 @@ fun TrackRow(
             onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
             onToggleDownload = onToggleDownload,
+            onGoToAlbum = onGoToAlbum,
+            onGoToArtist = onGoToArtist,
             extraMenuActionLabel = extraMenuActionLabel,
             onExtraMenuAction = onExtraMenuAction,
         )
@@ -171,12 +177,17 @@ private fun TrackRowContent(
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onToggleDownload: (() -> Unit)? = null,
+    onGoToAlbum: (() -> Unit)? = null,
+    onGoToArtist: (() -> Unit)? = null,
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val hasAlbumLink = onGoToAlbum != null && !track.albumId.isNullOrBlank()
+    val hasArtistLink = onGoToArtist != null && track.resolvedArtists.isNotEmpty()
     val hasMenu = onPlayNext != null || onAddToQueue != null || onToggleFavorite != null ||
         onAddToPlaylist != null || onToggleDownload != null ||
+        hasAlbumLink || hasArtistLink ||
         (extraMenuActionLabel != null && onExtraMenuAction != null)
 
     Row(
@@ -374,6 +385,30 @@ private fun TrackRowContent(
                             onClick = {
                                 menuExpanded = false
                                 onToggleDownload()
+                            },
+                        )
+                    }
+                    if (hasAlbumLink) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.track_go_to_album)) },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.Album, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onGoToAlbum()
+                            },
+                        )
+                    }
+                    if (hasArtistLink) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.track_go_to_artist)) },
+                            leadingIcon = {
+                                Icon(Icons.Rounded.Person, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onGoToArtist()
                             },
                         )
                     }

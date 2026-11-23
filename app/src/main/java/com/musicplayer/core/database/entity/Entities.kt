@@ -23,6 +23,7 @@ data class TrackEntity(
     val title: String,
     val artistId: String?,
     val artistName: String,
+    val artistsJson: String? = null,
     val albumId: String?,
     val albumName: String,
     val trackNumber: Int?,

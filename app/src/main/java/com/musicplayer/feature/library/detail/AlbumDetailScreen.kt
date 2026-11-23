@@ -37,6 +37,7 @@ import com.musicplayer.core.model.Track
 @Composable
 fun AlbumDetailRoute(
     onBackClick: () -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     onDownloadAlbum: (albumId: String, title: String) -> Unit,
@@ -54,6 +55,7 @@ fun AlbumDetailRoute(
         onAddToQueue = viewModel::onAddToQueue,
         onToggleAlbumFavorite = viewModel::onToggleAlbumFavorite,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onGoToTrackArtist = onGoToTrackArtist,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
         onDownloadAlbum = onDownloadAlbum,
@@ -73,6 +75,7 @@ fun AlbumDetailScreen(
     onAddToQueue: (Track) -> Unit,
     onToggleAlbumFavorite: () -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     onDownloadAlbum: (albumId: String, title: String) -> Unit,
@@ -205,6 +208,7 @@ fun AlbumDetailScreen(
                         onToggleFavorite = { onToggleTrackFavorite(track) },
                         onAddToPlaylist = { onAddToPlaylist(track) },
                         onToggleDownload = { onToggleTrackDownload(track) },
+                        onGoToArtist = { onGoToTrackArtist(track) },
                     )
                 }
             }

@@ -34,6 +34,8 @@ class UserPreferencesDataStore @Inject constructor(
             offlineModeEnabled = prefs[KEY_OFFLINE_MODE] ?: false,
             cellularBitrateCap = CellularBitrateCap.fromNameOrDefault(prefs[KEY_CELLULAR_BITRATE_CAP]),
             lowQualityBitrate = lowQualityBitrate,
+            autoMatchOutputQuality = prefs[KEY_AUTO_MATCH_OUTPUT_QUALITY] ?: false,
+            hiResBluetoothDevices = prefs[KEY_HIRES_BT_DEVICES] ?: emptySet(),
             defaultDownloadQuality = DownloadQuality(
                 mode = qualityMode,
                 mp3Bitrate = mp3Bitrate,
@@ -56,6 +58,17 @@ class UserPreferencesDataStore @Inject constructor(
 
     suspend fun setLowQualityBitrate(bitrate: Mp3Bitrate) {
         dataStore.edit { it[KEY_LOW_QUALITY_BITRATE] = bitrate.kbps }
+    }
+
+    suspend fun setAutoMatchOutputQuality(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTO_MATCH_OUTPUT_QUALITY] = enabled }
+    }
+
+    suspend fun setBluetoothDeviceHiRes(deviceKey: String, isHiRes: Boolean) {
+        dataStore.edit { prefs ->
+            val current = prefs[KEY_HIRES_BT_DEVICES] ?: emptySet()
+            prefs[KEY_HIRES_BT_DEVICES] = if (isHiRes) current + deviceKey else current - deviceKey
+        }
     }
 
     suspend fun setDefaultDownloadQuality(quality: DownloadQuality) {
@@ -89,6 +102,8 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_OFFLINE_MODE = booleanPreferencesKey("offline_mode_enabled")
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
         private val KEY_LOW_QUALITY_BITRATE = intPreferencesKey("low_quality_bitrate_kbps")
+        private val KEY_AUTO_MATCH_OUTPUT_QUALITY = booleanPreferencesKey("auto_match_output_quality")
+        private val KEY_HIRES_BT_DEVICES = stringSetPreferencesKey("hires_bluetooth_devices")
         private val KEY_DOWNLOAD_QUALITY_MODE = stringPreferencesKey("download_quality_mode")
         private val KEY_DOWNLOAD_MP3_BITRATE = intPreferencesKey("download_mp3_bitrate_kbps")
         private val KEY_WIFI_ONLY_DOWNLOADS = booleanPreferencesKey("wifi_only_downloads")

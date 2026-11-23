@@ -177,4 +177,15 @@
     <string name="playlist_folder_new_name_label">Folder name</string>
     <string name="playlist_folder_options">Folder options</string>
     <string name="playlist_options">Playlist options</string>
+    <string name="track_go_to_album">Go to album</string>
+    <string name="track_go_to_artist">Go to artist</string>
+    <string name="track_choose_artist">Choose artist</string>
+    <string name="track_open_album_or_artist">Album &amp; Artists</string>
+    <string name="audio_output_title">Audio Output</string>
+    <string name="audio_output_switch_device">Switch output device</string>
+    <string name="audio_output_hires_bt_title">Hi-Res / LDAC Bluetooth</string>
+    <string name="audio_output_hires_bt_subtitle">Treat this Bluetooth device as lossless-capable</string>
+    <string name="audio_output_active">Active</string>
+    <string name="settings_auto_match_output_quality">Match quality to output device</string>
+    <string name="settings_auto_match_output_quality_subtitle">Stream Lossless on wired/USB/speaker; cap standard Bluetooth to 320 kbps MP3</string>
 </resources>

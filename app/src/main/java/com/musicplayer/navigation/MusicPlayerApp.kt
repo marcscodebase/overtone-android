@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,14 +38,21 @@ import com.musicplayer.feature.library.detail.ArtistDetailRoute
 import com.musicplayer.feature.library.detail.PlaylistDetailRoute
 import com.musicplayer.feature.library.playlist.AddToPlaylistSheet
 import com.musicplayer.feature.library.playlist.PlaylistPickerViewModel
+import com.musicplayer.feature.player.AudioOutputSheet
 import com.musicplayer.feature.player.LyricsSheet
 import com.musicplayer.feature.player.MiniPlayer
 import com.musicplayer.feature.player.NowPlayingSheet
 import com.musicplayer.feature.player.PlayerViewModel
 import com.musicplayer.feature.player.QueueSheet
+import com.musicplayer.feature.player.TrackNavigationSheet
 import com.musicplayer.feature.search.SearchRoute
 import com.musicplayer.feature.settings.SettingsRoute
 import com.musicplayer.feature.settings.StorageManagerRoute
+
+private data class PendingTrackNavigation(
+    val track: Track,
+    val showAlbumOption: Boolean,
+)
 
 @Composable
 fun MusicPlayerApp(
@@ -80,11 +88,14 @@ private fun AuthenticatedShell(
     playlistPickerViewModel: PlaylistPickerViewModel = hiltViewModel(),
     downloadActionsViewModel: DownloadActionsViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
     val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
+    val audioOutputState by playerViewModel.audioOutputState.collectAsStateWithLifecycle()
+    val hiResBluetoothDevices by playerViewModel.hiResBluetoothDevices.collectAsStateWithLifecycle()
     val lowQualityBitrateKbps by playerViewModel.lowQualityBitrateKbps.collectAsStateWithLifecycle()
     val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
@@ -96,6 +107,8 @@ private fun AuthenticatedShell(
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
+    var showAudioOutputSheet by rememberSaveable { mutableStateOf(false) }
+    var pendingTrackNav by remember { mutableStateOf<PendingTrackNavigation?>(null) }
     var trackForPlaylistPicker by remember { mutableStateOf<Track?>(null) }
     var playlistPickerInitialFavorite by remember { mutableStateOf(false) }
 
@@ -126,6 +139,27 @@ private fun AuthenticatedShell(
                 message = message,
                 duration = SnackbarDuration.Short,
             )
+        }
+    }
+
+    val navigateToAlbum: (String) -> Unit = { albumId ->
+        showNowPlaying = false
+        pendingTrackNav = null
+        navController.navigate(AlbumDetailDestination(albumId))
+    }
+
+    val navigateToArtist: (String) -> Unit = { artistId ->
+        showNowPlaying = false
+        pendingTrackNav = null
+        navController.navigate(ArtistDetailDestination(artistId))
+    }
+
+    val onGoToTrackArtist: (Track) -> Unit = { track ->
+        val artists = track.resolvedArtists
+        when (artists.size) {
+            0 -> Unit
+            1 -> navigateToArtist(artists.first().id)
+            else -> pendingTrackNav = PendingTrackNavigation(track = track, showAlbumOption = false)
         }
     }
 
@@ -187,8 +221,9 @@ private fun AuthenticatedShell(
             composable<MainDestination> {
                 MainPagerRoute(
                     onSearchClick = { navController.navigate(SearchDestination) },
-                    onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
-                    onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
+                    onAlbumClick = navigateToAlbum,
+                    onArtistClick = navigateToArtist,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
@@ -202,8 +237,9 @@ private fun AuthenticatedShell(
             composable<SearchDestination> {
                 SearchRoute(
                     onBackClick = { navController.popBackStack() },
-                    onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
-                    onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
+                    onAlbumClick = navigateToAlbum,
+                    onArtistClick = navigateToArtist,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
@@ -216,6 +252,7 @@ private fun AuthenticatedShell(
             composable<AlbumDetailDestination> {
                 AlbumDetailRoute(
                     onBackClick = { navController.popBackStack() },
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
                         trackForPlaylistPicker = track
@@ -229,7 +266,8 @@ private fun AuthenticatedShell(
             composable<ArtistDetailDestination> {
                 ArtistDetailRoute(
                     onBackClick = { navController.popBackStack() },
-                    onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
+                    onAlbumClick = navigateToAlbum,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
                         trackForPlaylistPicker = track
@@ -241,6 +279,8 @@ private fun AuthenticatedShell(
             composable<PlaylistDetailDestination> {
                 PlaylistDetailRoute(
                     onBackClick = { navController.popBackStack() },
+                    onAlbumClick = navigateToAlbum,
+                    onGoToTrackArtist = onGoToTrackArtist,
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
                         trackForPlaylistPicker = track
@@ -269,11 +309,21 @@ private fun AuthenticatedShell(
     if (showNowPlaying && activeTrack != null) {
         NowPlayingSheet(
             state = playbackState,
+            lyricsState = lyricsState,
+            audioOutputState = audioOutputState,
+            hiResBluetoothDevices = hiResBluetoothDevices,
             downloadRecord = downloadRecords[activeTrack.id],
             isTrackSaved = isActiveTrackSaved,
             lowQualityBitrateKbps = lowQualityBitrateKbps,
             isOffline = isOffline,
             onDismiss = { showNowPlaying = false },
+            onPlayingFromAlbumClick = navigateToAlbum,
+            onTrackTitleOrArtistClick = {
+                pendingTrackNav = PendingTrackNavigation(
+                    track = activeTrack,
+                    showAlbumOption = true,
+                )
+            },
             onTogglePlayPause = playerViewModel::onTogglePlayPause,
             onSaveOrAddToPlaylist = onSaveCurrentTrack,
             onToggleDownload = { downloadActionsViewModel.onToggleTrackDownload(activeTrack) },
@@ -283,8 +333,32 @@ private fun AuthenticatedShell(
             onSeekTo = playerViewModel::onSeekTo,
             onToggleShuffle = playerViewModel::onToggleShuffle,
             onCycleRepeatMode = playerViewModel::onCycleRepeatMode,
+            onOpenAudioOutput = {
+                playerViewModel.onRefreshAudioOutputs()
+                showAudioOutputSheet = true
+            },
             onOpenQueue = { showQueueSheet = true },
             onOpenLyrics = { showLyricsSheet = true },
+        )
+    }
+
+    if (showAudioOutputSheet) {
+        AudioOutputSheet(
+            outputState = audioOutputState,
+            hiResBluetoothDevices = hiResBluetoothDevices,
+            onToggleBluetoothHiRes = playerViewModel::onSetBluetoothDeviceHiRes,
+            onOpenSystemOutputSwitcher = { playerViewModel.onOpenSystemOutputSwitcher(context) },
+            onDismiss = { showAudioOutputSheet = false },
+        )
+    }
+
+    pendingTrackNav?.let { navRequest ->
+        TrackNavigationSheet(
+            track = navRequest.track,
+            showAlbumOption = navRequest.showAlbumOption,
+            onDismiss = { pendingTrackNav = null },
+            onGoToAlbum = navigateToAlbum,
+            onGoToArtist = navigateToArtist,
         )
     }
 

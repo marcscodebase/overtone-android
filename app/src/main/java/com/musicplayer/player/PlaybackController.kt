@@ -13,10 +13,13 @@ import androidx.media3.session.SessionToken
 import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.ApplicationScope
 import com.musicplayer.core.common.Dispatcher
+import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.AudioOutputQualityPolicy
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.repository.SyncRepository
+import com.musicplayer.player.engine.AudioOutputMonitor
 import com.musicplayer.player.engine.StreamUrlResolver
 import com.musicplayer.player.queue.QueueOrderHelper
 import com.musicplayer.player.queue.QueuePersistenceManager
@@ -32,6 +35,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
@@ -76,6 +82,8 @@ class MediaControllerPlaybackController @Inject constructor(
     private val queuePersistenceManager: QueuePersistenceManager,
     private val syncRepository: SyncRepository,
     private val networkMonitor: NetworkMonitor,
+    private val audioOutputMonitor: AudioOutputMonitor,
+    private val preferencesDataStore: UserPreferencesDataStore,
 ) : PlaybackController {
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -105,6 +113,30 @@ class MediaControllerPlaybackController @Inject constructor(
                     syncRepository.flushPendingSyncActions()
                 }
             }
+        }
+        appScope.launch {
+            combine(
+                audioOutputMonitor.outputState,
+                preferencesDataStore.userPreferences,
+            ) { output, prefs ->
+                AudioOutputQualityPolicy.resolveAutoBitrateCapKbps(
+                    autoMatchEnabled = prefs.autoMatchOutputQuality,
+                    activeDevice = output.activeDevice,
+                    hiResBluetoothDevices = prefs.hiResBluetoothDevices,
+                )
+            }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    val state = _playbackState.value
+                    if (sessionQualitySelection == StreamQualitySelection.AUTO &&
+                        state.queue.isNotEmpty() &&
+                        !state.isLocalPlayback &&
+                        !needsPrepareOnPlay
+                    ) {
+                        setStreamQuality(StreamQualitySelection.AUTO)
+                    }
+                }
         }
     }
 

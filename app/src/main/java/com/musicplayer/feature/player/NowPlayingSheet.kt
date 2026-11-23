@@ -1,6 +1,13 @@
 package com.musicplayer.feature.player
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -49,6 +57,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -65,6 +74,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,8 +82,11 @@ import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.database.entity.DownloadRecordEntity
 import com.musicplayer.core.designsystem.component.ArtworkCard
+import com.musicplayer.core.model.AudioOutputQualityPolicy
+import com.musicplayer.core.model.AudioOutputState
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
@@ -82,11 +95,16 @@ import com.musicplayer.player.RepeatMode
 @Composable
 fun NowPlayingSheet(
     state: PlaybackState,
+    lyricsState: LyricsUiState,
+    audioOutputState: AudioOutputState,
+    hiResBluetoothDevices: Set<String>,
     downloadRecord: DownloadRecordEntity?,
     isTrackSaved: Boolean,
     lowQualityBitrateKbps: Int,
     isOffline: Boolean,
     onDismiss: () -> Unit,
+    onPlayingFromAlbumClick: (String) -> Unit,
+    onTrackTitleOrArtistClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSaveOrAddToPlaylist: () -> Unit,
     onToggleDownload: () -> Unit,
@@ -96,6 +114,7 @@ fun NowPlayingSheet(
     onSeekTo: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
+    onOpenAudioOutput: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenLyrics: () -> Unit,
 ) {
@@ -105,6 +124,15 @@ fun NowPlayingSheet(
         !downloadRecord.mediaStoreUri.isNullOrBlank()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var qualityMenuExpanded by remember(track.id) { mutableStateOf(false) }
+
+    val loadedLyrics = lyricsState.lyrics?.takeIf { lyricsState.trackId == track.id && it.lines.isNotEmpty() }
+    val hasLyrics = loadedLyrics != null || track.hasLyrics
+    val syncedLyrics = loadedLyrics?.takeIf { it.isSynced }
+
+    val activeOutput = audioOutputState.activeDevice
+    val outputCaps = remember(activeOutput, hiResBluetoothDevices) {
+        AudioOutputQualityPolicy.evaluate(activeOutput, hiResBluetoothDevices)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -148,7 +176,7 @@ fun NowPlayingSheet(
             }
 
             state.transcodedBitrateKbps != null && !state.isLocalPlayback -> {
-                "MP3 • ${state.transcodedBitrateKbps} kbps • Low Quality"
+                "MP3 • ${state.transcodedBitrateKbps} kbps"
             }
 
             else -> {
@@ -188,7 +216,7 @@ fun NowPlayingSheet(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 24.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
@@ -202,8 +230,19 @@ fun NowPlayingSheet(
                         modifier = Modifier.size(30.dp),
                     )
                 }
+                val albumId = track.albumId
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(CircleShape)
+                        .let { mod ->
+                            if (!albumId.isNullOrBlank()) {
+                                mod.clickable { onPlayingFromAlbumClick(albumId) }
+                            } else {
+                                mod
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
@@ -215,21 +254,10 @@ fun NowPlayingSheet(
                         textAlign = TextAlign.Center,
                     )
                 }
-                IconButton(onClick = onOpenLyrics) {
-                    Icon(
-                        imageVector = Icons.Rounded.Lyrics,
-                        contentDescription = stringResource(R.string.lyrics_title),
-                    )
-                }
-                IconButton(onClick = onOpenQueue) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = stringResource(R.string.queue_title),
-                    )
-                }
+                Spacer(modifier = Modifier.size(48.dp))
             }
 
-            Spacer(modifier = Modifier.weight(0.6f))
+            Spacer(modifier = Modifier.weight(0.45f))
 
             ArtworkCard(
                 imageUrl = track.artworkUrl,
@@ -238,10 +266,10 @@ fun NowPlayingSheet(
                 fallbackIconSize = 72.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 12.dp),
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Box {
                 AssistChip(
@@ -324,13 +352,62 @@ fun NowPlayingSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(0.5f))
+            if (syncedLyrics != null) {
+                val activeIndex = LyricsParser.findActiveLineIndex(syncedLyrics.lines, displayedPositionMs)
+                val activeLineText = syncedLyrics.lines.getOrNull(activeIndex)?.text
+                    ?: syncedLyrics.lines.firstOrNull()?.text.orEmpty()
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    onClick = onOpenLyrics,
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AnimatedContent(
+                            targetState = activeLineText,
+                            transitionSpec = {
+                                (fadeIn() + slideInVertically { it / 3 }) togetherWith
+                                    (fadeOut() + slideOutVertically { -it / 3 })
+                            },
+                            label = "live_lyric_line",
+                        ) { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(0.45f))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                val hasTrackLinks = !track.albumId.isNullOrBlank() || track.resolvedArtists.isNotEmpty()
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(MaterialTheme.shapes.small)
+                        .let { mod ->
+                            if (hasTrackLinks) mod.clickable(onClick = onTrackTitleOrArtistClick) else mod
+                        }
+                        .padding(vertical = 2.dp),
+                ) {
                     Text(
                         text = track.title,
                         style = MaterialTheme.typography.headlineSmall,
@@ -402,7 +479,7 @@ fun NowPlayingSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Slider(
                 value = currentFraction,
@@ -434,7 +511,7 @@ fun NowPlayingSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -508,7 +585,7 @@ fun NowPlayingSheet(
             }
 
             state.errorMessage?.let { err ->
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -524,7 +601,70 @@ fun NowPlayingSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(0.5f))
+            Spacer(modifier = Modifier.weight(0.35f))
+
+            // Spotify-style bottom utility bar: Output device on far left, Lyrics (when available) + Queue on far right
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(onClick = onOpenAudioOutput)
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = audioOutputIcon(activeOutput.type),
+                        contentDescription = stringResource(R.string.audio_output_title),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = activeOutput.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${outputCaps.codecLabel} • ${outputCaps.maxQualityLabel}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                if (hasLyrics) {
+                    IconButton(onClick = onOpenLyrics) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lyrics,
+                            contentDescription = stringResource(R.string.lyrics_title),
+                            tint = if (syncedLyrics != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+
+                IconButton(onClick = onOpenQueue) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = stringResource(R.string.queue_title),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

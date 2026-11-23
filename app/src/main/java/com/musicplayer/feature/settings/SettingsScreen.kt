@@ -74,6 +74,7 @@ fun SettingsRoute(
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onSelectLowQualityBitrate = viewModel::onSelectLowQualityBitrate,
+        onToggleAutoMatchOutputQuality = viewModel::onToggleAutoMatchOutputQuality,
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
         onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
         onToggleAskDownloadQuality = viewModel::onToggleAskDownloadQuality,
@@ -94,6 +95,7 @@ fun SettingsScreen(
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onSelectLowQualityBitrate: (Mp3Bitrate) -> Unit,
+    onToggleAutoMatchOutputQuality: (Boolean) -> Unit,
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
     onToggleWifiOnlyDownloads: (Boolean) -> Unit,
     onToggleAskDownloadQuality: (Boolean) -> Unit,
@@ -227,6 +229,31 @@ fun SettingsScreen(
                             text = "${state.preferences.lowQualityBitrate.kbps} kbps (MP3)",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_auto_match_output_quality),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_auto_match_output_quality_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = state.preferences.autoMatchOutputQuality,
+                            onCheckedChange = onToggleAutoMatchOutputQuality,
                         )
                     }
                     HorizontalDivider()

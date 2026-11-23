@@ -39,6 +39,7 @@ fun HomeContent(
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
+    onGoToArtist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     PullToRefreshBox(
@@ -157,6 +158,8 @@ fun HomeContent(
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
                                 onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToArtist(track) },
                             )
                         }
                         item(key = "spacer_favorites") {
@@ -182,6 +185,8 @@ fun HomeContent(
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
                                 onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToArtist(track) },
                             )
                         }
                     }

@@ -117,6 +117,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun onToggleAutoMatchOutputQuality(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setAutoMatchOutputQuality(enabled)
+        }
+    }
+
     fun onSelectDefaultDownloadQuality(quality: DownloadQuality) {
         viewModelScope.launch {
             preferencesDataStore.setDefaultDownloadQuality(quality)

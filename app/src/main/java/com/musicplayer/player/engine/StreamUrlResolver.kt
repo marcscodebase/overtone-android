@@ -4,6 +4,7 @@ import androidx.media3.common.MimeTypes
 import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.AudioOutputQualityPolicy
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
@@ -28,6 +29,7 @@ class StreamUrlResolver @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
     private val authSessionStore: AuthSessionStore,
     private val networkMonitor: NetworkMonitor,
+    private val audioOutputMonitor: AudioOutputMonitor,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val downloadDao: DownloadDao,
 ) {
@@ -71,12 +73,18 @@ class StreamUrlResolver @Inject constructor(
 
         val api = clientProvider.getClient()
         val userId = authSessionStore.getSession()?.userId
+        val outputDeviceCapKbps = AudioOutputQualityPolicy.resolveAutoBitrateCapKbps(
+            autoMatchEnabled = prefs.autoMatchOutputQuality,
+            activeDevice = audioOutputMonitor.outputState.value.activeDevice,
+            hiResBluetoothDevices = prefs.hiResBluetoothDevices,
+        )
         return resolveForContext(
             track = track,
             baseUrl = api.baseUrl,
             isMetered = netState.isMetered,
             cellularBitrateCap = prefs.cellularBitrateCap,
             lowQualityBitrate = prefs.lowQualityBitrate,
+            outputDeviceMaxBitrateKbps = outputDeviceCapKbps,
             qualitySelection = qualitySelection,
             isOffline = false,
             userId = userId,
@@ -91,6 +99,7 @@ class StreamUrlResolver @Inject constructor(
             isMetered: Boolean = false,
             cellularBitrateCap: CellularBitrateCap = CellularBitrateCap.ORIGINAL,
             lowQualityBitrate: Mp3Bitrate = Mp3Bitrate.KBPS_128,
+            outputDeviceMaxBitrateKbps: Int? = null,
             qualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO,
             isOffline: Boolean = false,
             userId: String? = null,
@@ -110,7 +119,10 @@ class StreamUrlResolver @Inject constructor(
                 StreamQualitySelection.LOW -> lowQualityBitrate.kbps
                 StreamQualitySelection.AUTO,
                 StreamQualitySelection.LOCAL,
-                -> if (isMetered) cellularBitrateCap.kbps else null
+                -> {
+                    val cellularCap = if (isMetered) cellularBitrateCap.kbps else null
+                    listOfNotNull(cellularCap, outputDeviceMaxBitrateKbps).minOrNull()
+                }
             }
 
             return if (targetTranscodeKbps != null) {

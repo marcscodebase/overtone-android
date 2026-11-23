@@ -11,6 +11,8 @@ import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.Track
+import com.musicplayer.core.model.TrackArtist
+import com.musicplayer.core.model.TrackArtistsCodec
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -25,8 +27,25 @@ object JellyfinMappers {
         val audioStream = mediaSource?.mediaStreams?.firstOrNull {
             it.type == MediaStreamType.AUDIO
         }
-        val artistItem = dto.artistItems?.firstOrNull() ?: dto.albumArtists?.firstOrNull()
-        val artistName = dto.artists?.firstOrNull()
+        val rawArtistItems = dto.artistItems?.takeIf { it.isNotEmpty() }
+            ?: dto.albumArtists.orEmpty()
+        val parsedArtists = rawArtistItems
+            .mapNotNull { item ->
+                val name = item.name?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                TrackArtist(
+                    id = PlaylistFolderCodec.normalizeJellyfinId(item.id.toString()),
+                    name = name,
+                )
+            }
+            .distinctBy { it.id }
+
+        val artistItem = rawArtistItems.firstOrNull()
+        val artistName = dto.artists
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+            ?: parsedArtists.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name }
             ?: dto.albumArtist
             ?: artistItem?.name
             ?: "Unknown Artist"
@@ -37,8 +56,9 @@ object JellyfinMappers {
         return TrackEntity(
             id = dto.id.toString(),
             title = dto.name?.takeIf { it.isNotBlank() } ?: "Untitled Track",
-            artistId = artistItem?.id?.toString(),
+            artistId = parsedArtists.firstOrNull()?.id ?: artistItem?.id?.toString(),
             artistName = artistName,
+            artistsJson = TrackArtistsCodec.encode(parsedArtists),
             albumId = dto.albumId?.toString(),
             albumName = dto.album?.takeIf { it.isNotBlank() } ?: "Unknown Album",
             trackNumber = dto.indexNumber,
@@ -119,6 +139,7 @@ object JellyfinMappers {
             title = title,
             artistId = artistId,
             artistName = artistName,
+            artists = TrackArtistsCodec.decode(artistsJson),
             albumId = albumId,
             albumName = albumName,
             trackNumber = trackNumber,

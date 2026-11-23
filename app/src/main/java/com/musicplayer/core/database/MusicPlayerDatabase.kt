@@ -34,7 +34,7 @@ import com.musicplayer.core.database.entity.TrackEntity
         PlaybackQueueEntity::class,
         PendingSyncActionEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -56,6 +56,12 @@ abstract class MusicPlayerDatabase : RoomDatabase() {
                 // Remove legacy duplicate playlist rows stored with undashed 32-char Jellyfin IDs
                 db.execSQL("DELETE FROM playlist_tracks WHERE playlistId NOT LIKE '%-%'")
                 db.execSQL("DELETE FROM playlists WHERE id NOT LIKE '%-%'")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN artistsJson TEXT DEFAULT NULL")
             }
         }
     }

@@ -1,10 +1,35 @@
 package com.musicplayer.core.model
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+@Serializable
+data class TrackArtist(
+    val id: String,
+    val name: String,
+)
+
+object TrackArtistsCodec {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun encode(artists: List<TrackArtist>): String? {
+        if (artists.isEmpty()) return null
+        return runCatching { json.encodeToString(artists) }.getOrNull()
+    }
+
+    fun decode(raw: String?): List<TrackArtist> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching { json.decodeFromString<List<TrackArtist>>(raw) }.getOrDefault(emptyList())
+    }
+}
+
 data class Track(
     val id: String,
     val title: String,
     val artistId: String?,
     val artistName: String,
+    val artists: List<TrackArtist> = emptyList(),
     val albumId: String?,
     val albumName: String,
     val trackNumber: Int?,
@@ -22,7 +47,15 @@ data class Track(
     val artworkUrl: String?,
     val isDownloaded: Boolean = false,
     val localUri: String? = null,
-)
+) {
+    val resolvedArtists: List<TrackArtist>
+        get() = if (artists.isNotEmpty()) {
+            artists
+        } else {
+            val id = artistId?.takeIf { it.isNotBlank() }
+            if (id != null) listOf(TrackArtist(id = id, name = artistName)) else emptyList()
+        }
+}
 
 data class Album(
     val id: String,

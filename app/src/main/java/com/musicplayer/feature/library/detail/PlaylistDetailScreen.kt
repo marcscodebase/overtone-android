@@ -69,6 +69,8 @@ import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 @Composable
 fun PlaylistDetailRoute(
     onBackClick: () -> Unit,
+    onAlbumClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     onDownloadPlaylist: (playlistId: String, name: String) -> Unit,
@@ -92,6 +94,8 @@ fun PlaylistDetailRoute(
         onPlayNext = viewModel::onPlayNext,
         onAddToQueue = viewModel::onAddToQueue,
         onToggleTrackFavorite = viewModel::onToggleTrackFavorite,
+        onAlbumClick = onAlbumClick,
+        onGoToTrackArtist = onGoToTrackArtist,
         onAddToPlaylist = onAddToPlaylist,
         onToggleTrackDownload = onToggleTrackDownload,
         onDownloadPlaylist = onDownloadPlaylist,
@@ -118,6 +122,8 @@ fun PlaylistDetailScreen(
     onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onToggleTrackFavorite: (Track) -> Unit,
+    onAlbumClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
     onDownloadPlaylist: (playlistId: String, name: String) -> Unit,
@@ -375,6 +381,8 @@ fun PlaylistDetailScreen(
                             onToggleFavorite = { onToggleTrackFavorite(entry.track) },
                             onAddToPlaylist = { onAddToPlaylist(entry.track) },
                             onToggleDownload = { onToggleTrackDownload(entry.track) },
+                            onGoToAlbum = entry.track.albumId?.let { id -> { onAlbumClick(id) } },
+                            onGoToArtist = { onGoToTrackArtist(entry.track) },
                             extraMenuActionLabel = stringResource(R.string.playlist_remove_track),
                             onExtraMenuAction = { onRemoveTrack(entry.playlistItemId) },
                         )
