@@ -8,6 +8,7 @@ import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
+import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.core.model.UserPreferences
 import com.musicplayer.data.repository.AuthRepository
 import com.musicplayer.data.repository.DownloadRepository
@@ -127,6 +128,18 @@ class SettingsViewModel @Inject constructor(
     fun onToggleAskDownloadQuality(askEachTime: Boolean) {
         viewModelScope.launch {
             preferencesDataStore.setAskDownloadQualityEachTime(askEachTime)
+        }
+    }
+
+    fun onSelectReplayGainMode(mode: ReplayGainMode) {
+        viewModelScope.launch {
+            preferencesDataStore.setReplayGainMode(mode)
+        }
+    }
+
+    fun onSetReplayGainPreampDb(preampDb: Float) {
+        viewModelScope.launch {
+            preferencesDataStore.setReplayGainPreampDb(preampDb)
         }
     }
 

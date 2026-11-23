@@ -153,4 +153,9 @@
     <string name="lyrics_badge_plain">Plain</string>
     <string name="lyrics_empty_title">No lyrics available</string>
     <string name="lyrics_empty_subtitle">Add LRC or embedded lyrics in Jellyfin to follow along here.</string>
+    <string name="settings_replay_gain">Loudness Normalization (ReplayGain)</string>
+    <string name="settings_replay_gain_off">Off (Bit-exact)</string>
+    <string name="settings_replay_gain_track">Track gain</string>
+    <string name="settings_replay_gain_album">Album gain</string>
+    <string name="settings_replay_gain_preamp">Preamp</string>
 </resources>

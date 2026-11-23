@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,8 +53,11 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
+import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.feature.download.downloadQualityPresets
 import com.musicplayer.feature.download.formatDownloadQualityLabel
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsRoute(
@@ -71,6 +75,8 @@ fun SettingsRoute(
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
         onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
         onToggleAskDownloadQuality = viewModel::onToggleAskDownloadQuality,
+        onSelectReplayGainMode = viewModel::onSelectReplayGainMode,
+        onSetReplayGainPreampDb = viewModel::onSetReplayGainPreampDb,
         onFlushPendingSync = viewModel::onFlushPendingSync,
         onSyncLibrary = viewModel::onSyncLibrary,
         onSignOut = viewModel::onSignOut,
@@ -88,6 +94,8 @@ fun SettingsScreen(
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
     onToggleWifiOnlyDownloads: (Boolean) -> Unit,
     onToggleAskDownloadQuality: (Boolean) -> Unit,
+    onSelectReplayGainMode: (ReplayGainMode) -> Unit,
+    onSetReplayGainPreampDb: (Float) -> Unit,
     onFlushPendingSync: () -> Unit,
     onSyncLibrary: () -> Unit,
     onSignOut: () -> Unit,
@@ -95,6 +103,7 @@ fun SettingsScreen(
 ) {
     var showCellularDialog by rememberSaveable { mutableStateOf(false) }
     var showDownloadQualityDialog by rememberSaveable { mutableStateOf(false) }
+    var showReplayGainDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -197,6 +206,56 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
+                    }
+                    HorizontalDivider()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showReplayGainDialog = true }
+                            .padding(16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_replay_gain),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = formatReplayGainModeLabel(state.preferences.replayGainMode),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (state.preferences.replayGainMode != ReplayGainMode.OFF) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_replay_gain_preamp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = String.format(Locale.US, "%+.1f dB", state.preferences.replayGainPreampDb),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Slider(
+                                value = state.preferences.replayGainPreampDb.coerceIn(-6f, 6f),
+                                onValueChange = { raw ->
+                                    val snapped = (raw * 2f).roundToInt() / 2f
+                                    onSetReplayGainPreampDb(snapped)
+                                },
+                                valueRange = -6f..6f,
+                                steps = 23,
+                            )
+                        }
                     }
                 }
             }
@@ -491,10 +550,57 @@ fun SettingsScreen(
             },
         )
     }
+    if (showReplayGainDialog) {
+        AlertDialog(
+            onDismissRequest = { showReplayGainDialog = false },
+            title = { Text(stringResource(R.string.settings_replay_gain)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ReplayGainMode.entries.forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectReplayGainMode(mode)
+                                    showReplayGainDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = state.preferences.replayGainMode == mode,
+                                onClick = {
+                                    onSelectReplayGainMode(mode)
+                                    showReplayGainDialog = false
+                                },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = formatReplayGainModeLabel(mode),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReplayGainDialog = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun formatCellularCapLabel(cap: CellularBitrateCap): String = when (cap) {
     CellularBitrateCap.ORIGINAL -> stringResource(R.string.settings_quality_original)
     else -> "${cap.kbps} kbps (MP3)"
+}
+
+@Composable
+private fun formatReplayGainModeLabel(mode: ReplayGainMode): String = when (mode) {
+    ReplayGainMode.OFF -> stringResource(R.string.settings_replay_gain_off)
+    ReplayGainMode.TRACK -> stringResource(R.string.settings_replay_gain_track)
+    ReplayGainMode.ALBUM -> stringResource(R.string.settings_replay_gain_album)
 }
