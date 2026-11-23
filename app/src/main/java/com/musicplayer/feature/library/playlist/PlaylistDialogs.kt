@@ -15,19 +15,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.Track
 
 @Composable
@@ -57,6 +63,7 @@ fun PlaylistNameDialog(
     title: String,
     confirmLabel: String,
     initialName: String = "",
+    label: String = stringResource(R.string.playlist_name_label),
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -69,7 +76,7 @@ fun PlaylistNameDialog(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text(stringResource(R.string.playlist_name_label)) },
+                label = { Text(label) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -80,6 +87,184 @@ fun PlaylistNameDialog(
                 enabled = name.isNotBlank(),
             ) {
                 Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+fun CreatePlaylistDialog(
+    existingFolders: List<String>,
+    initialFolder: String? = null,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, folderName: String?) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var folder by rememberSaveable(initialFolder) { mutableStateOf(initialFolder.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.playlist_create_new)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.playlist_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = folder,
+                    onValueChange = { folder = it },
+                    label = { Text(stringResource(R.string.playlist_folder_label)) },
+                    placeholder = { Text(stringResource(R.string.playlist_folder_placeholder)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    trailingIcon = {
+                        if (folder.isNotEmpty()) {
+                            IconButton(onClick = { folder = "" }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (existingFolders.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        items(items = existingFolders, key = { it }) { existing ->
+                            val selected = folder.trim().equals(existing, ignoreCase = true)
+                            FilterChip(
+                                selected = selected,
+                                onClick = { folder = if (selected) "" else existing },
+                                label = { Text(existing) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(
+                        name.trim(),
+                        PlaylistFolderCodec.normalizeFolderName(folder),
+                    )
+                },
+                enabled = name.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.action_create))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+fun MovePlaylistToFolderDialog(
+    playlistName: String,
+    currentFolder: String?,
+    existingFolders: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (folderName: String?) -> Unit,
+) {
+    var folder by rememberSaveable(playlistName, currentFolder) {
+        mutableStateOf(currentFolder.orEmpty())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.playlist_move_to_folder_title, playlistName),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = folder,
+                    onValueChange = { folder = it },
+                    label = { Text(stringResource(R.string.playlist_folder_new_name_label)) },
+                    placeholder = { Text(stringResource(R.string.playlist_folder_placeholder)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    trailingIcon = {
+                        if (folder.isNotEmpty()) {
+                            IconButton(onClick = { folder = "" }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    item(key = "no_folder_chip") {
+                        FilterChip(
+                            selected = folder.isBlank(),
+                            onClick = { folder = "" },
+                            label = { Text(stringResource(R.string.playlist_no_folder)) },
+                        )
+                    }
+                    items(items = existingFolders, key = { it }) { existing ->
+                        val selected = folder.trim().equals(existing, ignoreCase = true)
+                        FilterChip(
+                            selected = selected,
+                            onClick = { folder = existing },
+                            label = { Text(existing) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(PlaylistFolderCodec.normalizeFolderName(folder)) },
+            ) {
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
@@ -126,13 +311,14 @@ fun AddToPlaylistSheet(
     showFavoriteRow: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (isFavorite: Boolean, selectedPlaylistIds: Set<String>) -> Unit,
-    onCreateNewWithTrack: (String) -> Unit,
+    onCreateNewWithTrack: (name: String, folderName: String?) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var favoriteSelected by remember(track.id, initialIsFavorite) { mutableStateOf(initialIsFavorite) }
     var selectedPlaylistIds by remember(track.id) { mutableStateOf(initialPlaylistIds) }
     var syncedInitialMembership by remember(track.id) { mutableStateOf(false) }
+    val existingFolders = remember(playlists) { PlaylistFolderCodec.distinctFolderNames(playlists) }
 
     LaunchedEffect(track.id, initialPlaylistIds) {
         if (!syncedInitialMembership && initialPlaylistIds.isNotEmpty()) {
@@ -244,6 +430,11 @@ fun AddToPlaylistSheet(
 
                 items(items = playlists, key = { it.id }) { playlist ->
                     val isChecked = playlist.id in selectedPlaylistIds
+                    val subtitle = listOfNotNull(
+                        playlist.folderName,
+                        "${playlist.trackCount} songs",
+                    ).joinToString(" • ")
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -275,9 +466,11 @@ fun AddToPlaylistSheet(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "${playlist.trackCount} songs",
+                                text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         Icon(
@@ -311,13 +504,12 @@ fun AddToPlaylistSheet(
     }
 
     if (showCreateDialog) {
-        PlaylistNameDialog(
-            title = stringResource(R.string.playlist_create_new),
-            confirmLabel = stringResource(R.string.action_create),
+        CreatePlaylistDialog(
+            existingFolders = existingFolders,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name ->
+            onConfirm = { name, folderName ->
                 showCreateDialog = false
-                onCreateNewWithTrack(name)
+                onCreateNewWithTrack(name, folderName)
             },
         )
     }

@@ -65,7 +65,7 @@ import com.musicplayer.feature.home.HomeContent
 import com.musicplayer.feature.home.HomeViewModel
 import com.musicplayer.feature.library.LibraryContent
 import com.musicplayer.feature.library.LibraryViewModel
-import com.musicplayer.feature.library.playlist.PlaylistNameDialog
+import com.musicplayer.feature.library.playlist.CreatePlaylistDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -84,6 +84,8 @@ fun MainPagerRoute(
     val coroutineScope = rememberCoroutineScope()
     val currentPage by remember { derivedStateOf { pagerState.currentPage } }
     val offlineStatus by libraryViewModel.offlineStatus.collectAsStateWithLifecycle()
+    val existingPlaylistFolders by libraryViewModel.existingPlaylistFolders.collectAsStateWithLifecycle()
+    val libraryUiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
@@ -172,13 +174,13 @@ fun MainPagerRoute(
     }
 
     if (showCreatePlaylistDialog) {
-        PlaylistNameDialog(
-            title = stringResource(R.string.playlist_create_new),
-            confirmLabel = stringResource(R.string.action_create),
+        CreatePlaylistDialog(
+            existingFolders = existingPlaylistFolders,
+            initialFolder = libraryUiState.selectedPlaylistFolder,
             onDismiss = { showCreatePlaylistDialog = false },
-            onConfirm = { name ->
+            onConfirm = { name, folderName ->
                 showCreatePlaylistDialog = false
-                libraryViewModel.onCreatePlaylist(name)
+                libraryViewModel.onCreatePlaylist(name = name, folderName = folderName)
             },
         )
     }
@@ -217,9 +219,16 @@ private fun LibraryPagerPage(
     onToggleTrackDownload: (Track) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val existingFolders by viewModel.existingPlaylistFolders.collectAsStateWithLifecycle()
     LibraryContent(
         state = state,
+        existingFolders = existingFolders,
         onFilterSelected = viewModel::onFilterSelected,
+        onOpenPlaylistFolder = viewModel::onOpenPlaylistFolder,
+        onClosePlaylistFolder = viewModel::onClosePlaylistFolder,
+        onMovePlaylistToFolder = viewModel::onMovePlaylistToFolder,
+        onRenameFolder = viewModel::onRenameFolder,
+        onUngroupFolder = viewModel::onUngroupFolder,
         onAlbumClick = onAlbumClick,
         onArtistClick = onArtistClick,
         onPlaylistClick = onPlaylistClick,

@@ -50,6 +50,7 @@ data class Playlist(
     val trackCount: Int,
     val isAutoSyncDownloaded: Boolean,
     val artworkUrl: String?,
+    val folderName: String? = null,
 )
 
 data class PlaylistTrackEntry(

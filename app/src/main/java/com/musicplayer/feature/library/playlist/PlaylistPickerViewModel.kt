@@ -123,9 +123,13 @@ class PlaylistPickerViewModel @Inject constructor(
         }
     }
 
-    fun createPlaylistWithTrack(name: String, track: Track) {
+    fun createPlaylistWithTrack(name: String, folderName: String?, track: Track) {
         viewModelScope.launch {
-            playlistRepository.createPlaylist(name = name, initialTrackIds = listOf(track.id))
+            playlistRepository.createPlaylist(
+                name = name,
+                folderName = folderName,
+                initialTrackIds = listOf(track.id),
+            )
             _feedbackMessages.tryEmit("Added \"${track.title}\" to \"$name\"")
         }
     }

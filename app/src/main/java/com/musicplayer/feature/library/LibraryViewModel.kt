@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistFolderCodec
+import com.musicplayer.core.model.PlaylistFolderGroup
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
@@ -44,8 +46,11 @@ enum class LibrarySort {
 data class LibraryUiState(
     val selectedFilter: LibraryFilter = LibraryFilter.ALBUMS,
     val selectedSort: LibrarySort = LibrarySort.ALPHABETICAL,
+    val selectedPlaylistFolder: String? = null,
     val downloadedTracks: List<Track> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
+    val playlistFolders: List<PlaylistFolderGroup> = emptyList(),
+    val rootPlaylists: List<Playlist> = emptyList(),
     val albums: List<Album> = emptyList(),
     val artists: List<Artist> = emptyList(),
     val tracks: List<Track> = emptyList(),
@@ -53,6 +58,11 @@ data class LibraryUiState(
     val offlineStatus: OfflineStatus = OfflineStatus(),
 ) {
     val isOffline: Boolean get() = offlineStatus.isOffline
+
+    val activeFolderGroup: PlaylistFolderGroup?
+        get() = selectedPlaylistFolder?.let { name ->
+            playlistFolders.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -67,8 +77,18 @@ class LibraryViewModel @Inject constructor(
 
     val offlineStatus: StateFlow<OfflineStatus> = offlineStateProvider.offlineStatus
 
+    val existingPlaylistFolders: StateFlow<List<String>> = libraryRepository.observeAllPlaylists()
+        .map(PlaylistFolderCodec::distinctFolderNames)
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+
     private val selectedFilter = MutableStateFlow(LibraryFilter.ALBUMS)
     private val selectedSort = MutableStateFlow(LibrarySort.ALPHABETICAL)
+    private val selectedPlaylistFolder = MutableStateFlow<String?>(null)
 
     private val activeTrackId = playbackController.playbackState
         .map { it.currentTrack?.id }
@@ -87,10 +107,13 @@ class LibraryViewModel @Inject constructor(
                     }
 
                     LibraryFilter.PLAYLISTS -> libraryRepository.observeAllPlaylists().map { playlists ->
+                        val (folders, root) = PlaylistFolderCodec.groupPlaylists(playlists)
                         LibraryUiState(
                             selectedFilter = filter,
                             selectedSort = sort,
                             playlists = playlists,
+                            playlistFolders = folders,
+                            rootPlaylists = root,
                         )
                     }
 
@@ -127,10 +150,16 @@ class LibraryViewModel @Inject constructor(
 
     val uiState: StateFlow<LibraryUiState> = combine(
         activeCollectionState,
+        selectedPlaylistFolder,
         activeTrackId,
         offlineStateProvider.offlineStatus,
-    ) { state, activeId, offline ->
+    ) { state, folder, activeId, offline ->
+        val resolvedFolder = folder?.takeIf { target ->
+            state.selectedFilter == LibraryFilter.PLAYLISTS &&
+                state.playlistFolders.any { it.name.equals(target, ignoreCase = true) }
+        }
         state.copy(
+            selectedPlaylistFolder = resolvedFolder,
             activeTrackId = activeId,
             offlineStatus = offline,
         )
@@ -146,6 +175,7 @@ class LibraryViewModel @Inject constructor(
         val target = !offlineStateProvider.offlineStatus.value.manualOfflineMode
         if (target) {
             selectedFilter.value = LibraryFilter.DOWNLOADED
+            selectedPlaylistFolder.value = null
         }
         viewModelScope.launch {
             offlineStateProvider.setManualOfflineMode(target)
@@ -159,7 +189,18 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onFilterSelected(filter: LibraryFilter) {
+        if (filter != LibraryFilter.PLAYLISTS) {
+            selectedPlaylistFolder.value = null
+        }
         selectedFilter.value = filter
+    }
+
+    fun onOpenPlaylistFolder(folderName: String) {
+        selectedPlaylistFolder.value = folderName
+    }
+
+    fun onClosePlaylistFolder() {
+        selectedPlaylistFolder.value = null
     }
 
     fun onToggleSort() {
@@ -192,9 +233,34 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    fun onCreatePlaylist(name: String) {
+    fun onCreatePlaylist(name: String, folderName: String? = null) {
         viewModelScope.launch {
-            playlistRepository.createPlaylist(name = name)
+            playlistRepository.createPlaylist(name = name, folderName = folderName)
+        }
+    }
+
+    fun onMovePlaylistToFolder(playlistId: String, folderName: String?) {
+        viewModelScope.launch {
+            playlistRepository.movePlaylistToFolder(playlistId, folderName)
+        }
+    }
+
+    fun onRenameFolder(oldFolderName: String, newFolderName: String) {
+        val normalizedNew = PlaylistFolderCodec.normalizeFolderName(newFolderName) ?: return
+        if (selectedPlaylistFolder.value?.equals(oldFolderName, ignoreCase = true) == true) {
+            selectedPlaylistFolder.value = normalizedNew
+        }
+        viewModelScope.launch {
+            playlistRepository.renameFolder(oldFolderName, normalizedNew)
+        }
+    }
+
+    fun onUngroupFolder(folderName: String) {
+        if (selectedPlaylistFolder.value?.equals(folderName, ignoreCase = true) == true) {
+            selectedPlaylistFolder.value = null
+        }
+        viewModelScope.launch {
+            playlistRepository.renameFolder(folderName, null)
         }
     }
 

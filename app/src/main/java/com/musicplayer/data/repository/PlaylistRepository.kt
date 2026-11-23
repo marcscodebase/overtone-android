@@ -11,6 +11,7 @@ import com.musicplayer.core.database.entity.PlaylistTrackCrossRef
 import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.NetworkMonitor
@@ -24,11 +25,15 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemUpdateApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.playlistsApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.CreatePlaylistDto
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.UpdatePlaylistDto
+import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
@@ -59,8 +64,14 @@ object PlaylistOrderHelper {
 
 interface PlaylistRepository {
     fun observePlaylistTrackEntries(playlistId: String): Flow<List<PlaylistTrackEntry>>
-    suspend fun createPlaylist(name: String, initialTrackIds: List<String> = emptyList()): AppResult<Playlist>
+    suspend fun createPlaylist(
+        name: String,
+        folderName: String? = null,
+        initialTrackIds: List<String> = emptyList(),
+    ): AppResult<Playlist>
     suspend fun renamePlaylist(playlistId: String, newName: String): AppResult<Unit>
+    suspend fun movePlaylistToFolder(playlistId: String, folderName: String?): AppResult<Unit>
+    suspend fun renameFolder(oldFolderName: String, newFolderName: String?): AppResult<Unit>
     suspend fun deletePlaylist(playlistId: String): AppResult<Unit>
     suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>): AppResult<Unit>
     suspend fun removeTrackFromPlaylist(playlistId: String, playlistItemId: String): AppResult<Unit>
@@ -115,12 +126,17 @@ class JellyfinPlaylistRepository @Inject constructor(
 
     override suspend fun createPlaylist(
         name: String,
+        folderName: String?,
         initialTrackIds: List<String>,
     ): AppResult<Playlist> = withContext(ioDispatcher) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
+        val parsedInput = PlaylistFolderCodec.parse(rawName = name)
+        val cleanName = parsedInput.displayName.takeIf { name.trim().isNotEmpty() }.orEmpty()
+        if (cleanName.isEmpty()) {
             return@withContext AppResult.Error(AppError.Validation("Playlist name cannot be empty"))
         }
+        val cleanFolder = PlaylistFolderCodec.normalizeFolderName(folderName) ?: parsedInput.folderName
+        val remoteName = PlaylistFolderCodec.formatRemoteName(cleanName, cleanFolder)
+
         val session = authSessionStore.getSession()
             ?: return@withContext AppResult.Error(AppError.Unauthorized("Not signed in"))
         val userUuid = parseUuid(session.userId)
@@ -131,7 +147,7 @@ class JellyfinPlaylistRepository @Inject constructor(
             val trackUuids = initialTrackIds.mapNotNull(::parseUuid)
             val result = api.playlistsApi.createPlaylist(
                 data = CreatePlaylistDto(
-                    name = trimmed,
+                    name = remoteName,
                     ids = trackUuids,
                     userId = userUuid,
                     mediaType = MediaType.AUDIO,
@@ -140,16 +156,23 @@ class JellyfinPlaylistRepository @Inject constructor(
                 ),
             ).content
 
+            val normalizedId = PlaylistFolderCodec.normalizeJellyfinId(result.id)
+            val playlistUuid = parseUuid(normalizedId)
+            if (cleanFolder != null && playlistUuid != null) {
+                syncPlaylistFolderTagBestEffort(api, userUuid, playlistUuid, cleanFolder)
+            }
+
             val entity = PlaylistEntity(
-                id = result.id,
-                name = trimmed,
+                id = normalizedId,
+                name = cleanName,
                 trackCount = trackUuids.size,
                 isAutoSyncDownloaded = false,
                 primaryImageTag = null,
+                folderName = cleanFolder,
             )
             playlistDao.upsert(entity)
             if (trackUuids.isNotEmpty()) {
-                libraryRepository.syncPlaylistTracks(result.id)
+                libraryRepository.syncPlaylistTracks(normalizedId)
             }
             entity.toDomain(artworkUrlBuilder.buildItemImageUrl(entity.id, entity.primaryImageTag))
         }
@@ -164,11 +187,23 @@ class JellyfinPlaylistRepository @Inject constructor(
             val playlistUuid = parseUuid(playlistId)
                 ?: return@withContext AppResult.Error(AppError.Validation("Invalid playlist ID"))
 
-            playlistDao.updateName(playlistId, trimmed)
+            val existing = playlistDao.getByIdSnapshot(playlistId)
+            val currentFolder = PlaylistFolderCodec.normalizeFolderName(existing?.folderName)
+            val parsedInput = PlaylistFolderCodec.parse(rawName = trimmed)
+            val targetName = parsedInput.displayName
+            val targetFolder = parsedInput.folderName ?: currentFolder
+            val remoteName = PlaylistFolderCodec.formatRemoteName(targetName, targetFolder)
+
+            playlistDao.updateNameAndFolder(playlistId, targetName, targetFolder)
             val payload = PlaylistMutationPayload(
-                operation = PlaylistMutationPayload.OP_RENAME,
+                operation = if (targetFolder != currentFolder) {
+                    PlaylistMutationPayload.OP_SET_FOLDER
+                } else {
+                    PlaylistMutationPayload.OP_RENAME
+                },
                 playlistId = playlistId,
-                newName = trimmed,
+                newName = remoteName,
+                folderName = targetFolder,
             )
             if (isOffline()) {
                 syncRepository.enqueuePlaylistMutation(payload)
@@ -176,10 +211,17 @@ class JellyfinPlaylistRepository @Inject constructor(
             }
 
             try {
-                clientProvider.getClient().playlistsApi.updatePlaylist(
+                val api = clientProvider.getClient()
+                api.playlistsApi.updatePlaylist(
                     playlistId = playlistUuid,
-                    data = UpdatePlaylistDto(name = trimmed),
+                    data = UpdatePlaylistDto(name = remoteName),
                 )
+                if (targetFolder != currentFolder) {
+                    val userUuid = authSessionStore.getSession()?.userId?.let(::parseUuid)
+                    if (userUuid != null) {
+                        syncPlaylistFolderTagBestEffort(api, userUuid, playlistUuid, targetFolder)
+                    }
+                }
                 AppResult.Success(Unit)
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -188,6 +230,70 @@ class JellyfinPlaylistRepository @Inject constructor(
                 AppResult.Success(Unit)
             }
         }
+
+    override suspend fun movePlaylistToFolder(
+        playlistId: String,
+        folderName: String?,
+    ): AppResult<Unit> = withContext(ioDispatcher) {
+        val playlistUuid = parseUuid(playlistId)
+            ?: return@withContext AppResult.Error(AppError.Validation("Invalid playlist ID"))
+        val existing = playlistDao.getByIdSnapshot(playlistId)
+            ?: return@withContext AppResult.Error(AppError.Validation("Playlist not found"))
+
+        val targetFolder = PlaylistFolderCodec.normalizeFolderName(folderName)
+        val remoteName = PlaylistFolderCodec.formatRemoteName(existing.name, targetFolder)
+
+        playlistDao.updateNameAndFolder(playlistId, existing.name, targetFolder)
+        val payload = PlaylistMutationPayload(
+            operation = PlaylistMutationPayload.OP_SET_FOLDER,
+            playlistId = playlistId,
+            newName = remoteName,
+            folderName = targetFolder,
+        )
+        if (isOffline()) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            return@withContext AppResult.Success(Unit)
+        }
+
+        try {
+            val api = clientProvider.getClient()
+            api.playlistsApi.updatePlaylist(
+                playlistId = playlistUuid,
+                data = UpdatePlaylistDto(name = remoteName),
+            )
+            val userUuid = authSessionStore.getSession()?.userId?.let(::parseUuid)
+            if (userUuid != null) {
+                syncPlaylistFolderTagBestEffort(api, userUuid, playlistUuid, targetFolder)
+            }
+            AppResult.Success(Unit)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            syncRepository.enqueuePlaylistMutation(payload)
+            AppResult.Success(Unit)
+        }
+    }
+
+    override suspend fun renameFolder(
+        oldFolderName: String,
+        newFolderName: String?,
+    ): AppResult<Unit> = withContext(ioDispatcher) {
+        val normalizedOld = PlaylistFolderCodec.normalizeFolderName(oldFolderName)
+            ?: return@withContext AppResult.Success(Unit)
+        val normalizedNew = PlaylistFolderCodec.normalizeFolderName(newFolderName)
+        if (normalizedOld.equals(normalizedNew, ignoreCase = false)) {
+            return@withContext AppResult.Success(Unit)
+        }
+
+        val matching = playlistDao.getAllSnapshot().filter {
+            PlaylistFolderCodec.normalizeFolderName(it.folderName)
+                ?.equals(normalizedOld, ignoreCase = true) == true
+        }
+        matching.forEach { playlist ->
+            movePlaylistToFolder(playlist.id, normalizedNew)
+        }
+        AppResult.Success(Unit)
+    }
 
     override suspend fun deletePlaylist(playlistId: String): AppResult<Unit> =
         withContext(ioDispatcher) {
@@ -354,5 +460,31 @@ class JellyfinPlaylistRepository @Inject constructor(
         }
     }
 
-    private fun parseUuid(raw: String): UUID? = runCatching { UUID.fromString(raw) }.getOrNull()
+    private suspend fun syncPlaylistFolderTagBestEffort(
+        api: ApiClient,
+        userUuid: UUID,
+        playlistUuid: UUID,
+        folderName: String?,
+    ) {
+        try {
+            val currentDto = api.userLibraryApi.getItem(
+                itemId = playlistUuid,
+                userId = userUuid,
+            ).content
+            val updatedTags = PlaylistFolderCodec.buildUpdatedTags(currentDto.tags, folderName)
+            if (updatedTags != currentDto.tags.orEmpty()) {
+                api.itemUpdateApi.updateItem(
+                    itemId = playlistUuid,
+                    data = currentDto.copy(tags = updatedTags),
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            // Non-admin Jellyfin accounts may receive 403 on ItemUpdateApi; the naming convention
+            // (`Folder / Name`) already persists the folder reliably across all clients.
+        }
+    }
+
+    private fun parseUuid(raw: String): UUID? = raw.toUUIDOrNull()
 }

@@ -332,8 +332,8 @@ private fun AuthenticatedShell(
                 )
                 trackForPlaylistPicker = null
             },
-            onCreateNewWithTrack = { newName ->
-                playlistPickerViewModel.createPlaylistWithTrack(newName, selectedTrack)
+            onCreateNewWithTrack = { newName, folderName ->
+                playlistPickerViewModel.createPlaylistWithTrack(newName, folderName, selectedTrack)
                 trackForPlaylistPicker = null
             },
         )

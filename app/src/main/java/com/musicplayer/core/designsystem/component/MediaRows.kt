@@ -452,8 +452,12 @@ fun PlaylistCarouselCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        val subtitle = listOfNotNull(
+            playlist.folderName,
+            "${playlist.trackCount} songs",
+        ).joinToString(" • ")
         Text(
-            text = "${playlist.trackCount} songs",
+            text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

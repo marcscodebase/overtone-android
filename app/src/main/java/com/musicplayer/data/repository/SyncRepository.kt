@@ -11,6 +11,7 @@ import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.database.entity.PendingSyncActionEntity
 import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.SyncActionType
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.NetworkMonitor
@@ -23,6 +24,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.jellyfin.sdk.api.client.extensions.itemUpdateApi
 import org.jellyfin.sdk.api.client.extensions.playStateApi
 import org.jellyfin.sdk.api.client.extensions.playlistsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
@@ -32,6 +34,7 @@ import org.jellyfin.sdk.model.api.PlaybackProgressInfo
 import org.jellyfin.sdk.model.api.PlaybackStartInfo
 import org.jellyfin.sdk.model.api.PlaybackStopInfo
 import org.jellyfin.sdk.model.api.UpdatePlaylistDto
+import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import org.jellyfin.sdk.model.api.RepeatMode as JellyfinRepeatMode
 import java.util.UUID
 import javax.inject.Inject
@@ -53,12 +56,14 @@ data class PlaylistMutationPayload(
     val operation: String,
     val playlistId: String,
     val newName: String? = null,
+    val folderName: String? = null,
     val trackIds: List<String> = emptyList(),
     val playlistItemId: String? = null,
     val toIndex: Int? = null,
 ) {
     companion object {
         const val OP_RENAME = "RENAME"
+        const val OP_SET_FOLDER = "SET_FOLDER"
         const val OP_ADD_TRACKS = "ADD_TRACKS"
         const val OP_REMOVE_TRACK = "REMOVE_TRACK"
         const val OP_MOVE_TRACK = "MOVE_TRACK"
@@ -339,6 +344,38 @@ class JellyfinSyncRepository @Inject constructor(
                 true
             }
 
+            PlaylistMutationPayload.OP_SET_FOLDER -> {
+                val playlistUuid = parseUuid(payload.playlistId) ?: return true
+                val newName = payload.newName?.takeIf { it.isNotBlank() } ?: return true
+                api.playlistsApi.updatePlaylist(
+                    playlistId = playlistUuid,
+                    data = UpdatePlaylistDto(name = newName),
+                )
+                if (userUuid != null) {
+                    try {
+                        val currentDto = api.userLibraryApi.getItem(
+                            itemId = playlistUuid,
+                            userId = userUuid,
+                        ).content
+                        val updatedTags = PlaylistFolderCodec.buildUpdatedTags(
+                            currentDto.tags,
+                            payload.folderName,
+                        )
+                        if (updatedTags != currentDto.tags.orEmpty()) {
+                            api.itemUpdateApi.updateItem(
+                                itemId = playlistUuid,
+                                data = currentDto.copy(tags = updatedTags),
+                            )
+                        }
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (_: Throwable) {
+                        // Best-effort tag sync; name already carries the folder convention.
+                    }
+                }
+                true
+            }
+
             PlaylistMutationPayload.OP_ADD_TRACKS -> {
                 val playlistUuid = parseUuid(payload.playlistId) ?: return true
                 val trackUuids = payload.trackIds.mapNotNull(::parseUuid)
@@ -425,7 +462,7 @@ class JellyfinSyncRepository @Inject constructor(
         return session.accessToken.isNotBlank() && !clientProvider.getClient().baseUrl.isNullOrBlank()
     }
 
-    private fun parseUuid(raw: String): UUID? = runCatching { UUID.fromString(raw) }.getOrNull()
+    private fun parseUuid(raw: String): UUID? = raw.toUUIDOrNull()
 
     companion object {
         private const val TICKS_PER_MS = 10_000L

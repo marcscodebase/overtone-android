@@ -28,7 +28,9 @@ object DatabaseModule {
         context,
         MusicPlayerDatabase::class.java,
         MusicPlayerDatabase.DATABASE_NAME,
-    ).build()
+    )
+        .addMigrations(MusicPlayerDatabase.MIGRATION_1_2)
+        .build()
 
     @Provides
     fun provideTrackDao(db: MusicPlayerDatabase): TrackDao = db.trackDao()

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
@@ -62,6 +63,7 @@ import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.library.playlist.DeletePlaylistDialog
+import com.musicplayer.feature.library.playlist.MovePlaylistToFolderDialog
 import com.musicplayer.feature.library.playlist.PlaylistNameDialog
 
 @Composable
@@ -100,6 +102,7 @@ fun PlaylistDetailRoute(
         onToggleAutoSyncDownloads = viewModel::onToggleAutoSyncDownloads,
         onSyncDownloadsNow = viewModel::onSyncDownloadsNow,
         onRenamePlaylist = viewModel::onRenamePlaylist,
+        onMoveToFolder = viewModel::onMoveToFolder,
         onDeletePlaylist = viewModel::onDeletePlaylist,
     )
 }
@@ -125,11 +128,13 @@ fun PlaylistDetailScreen(
     onToggleAutoSyncDownloads: (Boolean) -> Unit,
     onSyncDownloadsNow: () -> Unit,
     onRenamePlaylist: (String) -> Unit,
+    onMoveToFolder: (String?) -> Unit,
     onDeletePlaylist: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showMoveFolderDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
@@ -210,6 +215,19 @@ fun PlaylistDetailScreen(
                             onDismissRequest = { menuExpanded = false },
                         ) {
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.playlist_move_to_folder)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.DriveFileMove,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showMoveFolderDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.playlist_rename)) },
                                 leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
                                 onClick = {
@@ -252,9 +270,11 @@ fun PlaylistDetailScreen(
                 }
             }
             item(key = "playlist_header") {
+                val baseLabel = stringResource(R.string.playlist_label)
+                val subtitle = state.playlist?.folderName?.let { "$baseLabel • $it" } ?: baseLabel
                 CollectionDetailHeader(
                     title = state.playlist?.name ?: stringResource(R.string.library_filter_playlists),
-                    subtitle = stringResource(R.string.playlist_label),
+                    subtitle = subtitle,
                     metadata = metadata,
                     artworkUrl = state.playlist?.artworkUrl,
                     isCircularArtwork = false,
@@ -373,6 +393,19 @@ fun PlaylistDetailScreen(
             onConfirm = { newName ->
                 showRenameDialog = false
                 onRenamePlaylist(newName)
+            },
+        )
+    }
+
+    if (showMoveFolderDialog) {
+        MovePlaylistToFolderDialog(
+            playlistName = state.playlist?.name.orEmpty(),
+            currentFolder = state.playlist?.folderName,
+            existingFolders = state.existingFolders,
+            onDismiss = { showMoveFolderDialog = false },
+            onConfirm = { newFolder ->
+                showMoveFolderDialog = false
+                onMoveToFolder(newFolder)
             },
         )
     }

@@ -167,4 +167,14 @@
     <string name="playlist_save_to">Save to Favorites &amp; Playlists</string>
     <string name="playlist_liked_songs_subtitle">Saved to your Jellyfin Favorites</string>
     <string name="action_done">Done</string>
+    <string name="playlist_folder_label">Folder (optional)</string>
+    <string name="playlist_folder_placeholder">e.g. Workout, Genres</string>
+    <string name="playlist_move_to_folder">Move to folder</string>
+    <string name="playlist_move_to_folder_title">Move \"%1$s\" to folder</string>
+    <string name="playlist_no_folder">No folder</string>
+    <string name="playlist_folder_rename">Rename folder</string>
+    <string name="playlist_folder_ungroup">Ungroup folder</string>
+    <string name="playlist_folder_new_name_label">Folder name</string>
+    <string name="playlist_folder_options">Folder options</string>
+    <string name="playlist_options">Playlist options</string>
 </resources>

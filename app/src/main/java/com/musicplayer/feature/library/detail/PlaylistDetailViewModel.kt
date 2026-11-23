@@ -7,6 +7,7 @@ import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.model.DownloadOwnerType
 import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
@@ -29,6 +30,7 @@ import javax.inject.Inject
 
 data class PlaylistDetailUiState(
     val playlist: Playlist? = null,
+    val existingFolders: List<String> = emptyList(),
     val entries: List<PlaylistTrackEntry> = emptyList(),
     val activeTrackId: String? = null,
     val offlineStatus: OfflineStatus = OfflineStatus(),
@@ -80,19 +82,29 @@ class PlaylistDetailViewModel @Inject constructor(
         Triple(hasRefs, records, offline)
     }
 
-    val uiState: StateFlow<PlaylistDetailUiState> = combine(
+    private val playlistAndFolders = combine(
         libraryRepository.observePlaylist(playlistId),
+        libraryRepository.observeAllPlaylists()
+            .map(PlaylistFolderCodec::distinctFolderNames)
+            .distinctUntilChanged(),
+    ) { playlist, folders ->
+        playlist to folders
+    }
+
+    val uiState: StateFlow<PlaylistDetailUiState> = combine(
+        playlistAndFolders,
         playlistRepository.observePlaylistTrackEntries(playlistId),
         playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
         downloadMetaState,
         metaState,
-    ) { playlist, entries, activeId, (hasRefs, records, offline), meta ->
+    ) { (playlist, folders), entries, activeId, (hasRefs, records, offline), meta ->
         val downloadingAny = entries.any { entry ->
             val st = records[entry.track.id]?.status
             st == DownloadStatus.QUEUED || st == DownloadStatus.DOWNLOADING || st == DownloadStatus.TRANSCODING
         }
         PlaylistDetailUiState(
             playlist = playlist,
+            existingFolders = folders,
             entries = entries,
             activeTrackId = activeId,
             offlineStatus = offline,
@@ -179,6 +191,15 @@ class PlaylistDetailViewModel @Inject constructor(
     fun onRenamePlaylist(newName: String) {
         viewModelScope.launch {
             when (val result = playlistRepository.renamePlaylist(playlistId, newName)) {
+                is AppResult.Success -> errorMessage.value = null
+                is AppResult.Error -> errorMessage.value = result.error.message
+            }
+        }
+    }
+
+    fun onMoveToFolder(folderName: String?) {
+        viewModelScope.launch {
+            when (val result = playlistRepository.movePlaylistToFolder(playlistId, folderName)) {
                 is AppResult.Success -> errorMessage.value = null
                 is AppResult.Error -> errorMessage.value = result.error.message
             }

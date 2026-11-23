@@ -104,9 +104,15 @@ class LibraryViewModelTest {
 
     private class FakePlaylistRepository : PlaylistRepository {
         override fun observePlaylistTrackEntries(playlistId: String): Flow<List<PlaylistTrackEntry>> = flowOf(emptyList())
-        override suspend fun createPlaylist(name: String, initialTrackIds: List<String>): AppResult<Playlist> =
-            AppResult.Success(Playlist("p1", name, initialTrackIds.size, false, null))
+        override suspend fun createPlaylist(
+            name: String,
+            folderName: String?,
+            initialTrackIds: List<String>,
+        ): AppResult<Playlist> =
+            AppResult.Success(Playlist("p1", name, initialTrackIds.size, false, null, folderName))
         override suspend fun renamePlaylist(playlistId: String, newName: String): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun movePlaylistToFolder(playlistId: String, folderName: String?): AppResult<Unit> = AppResult.Success(Unit)
+        override suspend fun renameFolder(oldFolderName: String, newFolderName: String?): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun deletePlaylist(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun addTracksToPlaylist(playlistId: String, trackIds: List<String>): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun removeTrackFromPlaylist(playlistId: String, playlistItemId: String): AppResult<Unit> = AppResult.Success(Unit)

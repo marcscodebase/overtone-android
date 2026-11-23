@@ -3,6 +3,8 @@ package com.musicplayer.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.musicplayer.core.database.dao.AlbumDao
 import com.musicplayer.core.database.dao.ArtistDao
 import com.musicplayer.core.database.dao.DownloadDao
@@ -32,7 +34,7 @@ import com.musicplayer.core.database.entity.TrackEntity
         PlaybackQueueEntity::class,
         PendingSyncActionEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -47,5 +49,14 @@ abstract class MusicPlayerDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "music_player.db"
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE playlists ADD COLUMN folderName TEXT DEFAULT NULL")
+                // Remove legacy duplicate playlist rows stored with undashed 32-char Jellyfin IDs
+                db.execSQL("DELETE FROM playlist_tracks WHERE playlistId NOT LIKE '%-%'")
+                db.execSQL("DELETE FROM playlists WHERE id NOT LIKE '%-%'")
+            }
+        }
     }
 }

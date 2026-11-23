@@ -9,6 +9,7 @@ import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Playlist
+import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.Track
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.ImageType
@@ -88,13 +89,22 @@ object JellyfinMappers {
         )
     }
 
-    fun toPlaylistEntity(dto: BaseItemDto, existingAutoSync: Boolean = false): PlaylistEntity {
+    fun toPlaylistEntity(
+        dto: BaseItemDto,
+        existingAutoSync: Boolean = false,
+        existingDownloadQualityOverride: String? = null,
+        existingLastSyncedAt: Long? = null,
+    ): PlaylistEntity {
+        val parsed = PlaylistFolderCodec.parse(rawName = dto.name, tags = dto.tags)
         return PlaylistEntity(
-            id = dto.id.toString(),
-            name = dto.name?.takeIf { it.isNotBlank() } ?: "Untitled Playlist",
+            id = PlaylistFolderCodec.normalizeJellyfinId(dto.id.toString()),
+            name = parsed.displayName,
             trackCount = dto.childCount ?: dto.songCount ?: 0,
             isAutoSyncDownloaded = existingAutoSync,
+            downloadQualityOverride = existingDownloadQualityOverride,
+            lastSyncedAt = existingLastSyncedAt,
             primaryImageTag = dto.imageTags?.get(ImageType.PRIMARY),
+            folderName = parsed.folderName,
         )
     }
 
@@ -155,5 +165,6 @@ object JellyfinMappers {
         trackCount = trackCount,
         isAutoSyncDownloaded = isAutoSyncDownloaded,
         artworkUrl = artworkUrl,
+        folderName = folderName,
     )
 }

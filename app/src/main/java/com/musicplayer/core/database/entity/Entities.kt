@@ -79,6 +79,7 @@ data class PlaylistEntity(
     val downloadQualityOverride: String? = null,
     val lastSyncedAt: Long? = null,
     val primaryImageTag: String? = null,
+    val folderName: String? = null,
 )
 
 @Entity(

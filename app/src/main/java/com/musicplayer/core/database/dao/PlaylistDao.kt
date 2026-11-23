@@ -22,8 +22,14 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM playlists ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getAllSnapshot(): List<PlaylistEntity>
+
     @Query("SELECT * FROM playlists WHERE id = :playlistId")
     fun observeById(playlistId: String): Flow<PlaylistEntity?>
+
+    @Query("SELECT * FROM playlists WHERE id = :playlistId")
+    suspend fun getByIdSnapshot(playlistId: String): PlaylistEntity?
 
     @Query("SELECT * FROM playlists WHERE isAutoSyncDownloaded = 1")
     suspend fun getAutoSyncPlaylists(): List<PlaylistEntity>
@@ -65,6 +71,23 @@ interface PlaylistDao {
 
     @Query("UPDATE playlists SET name = :name WHERE id = :playlistId")
     suspend fun updateName(playlistId: String, name: String)
+
+    @Query("UPDATE playlists SET name = :name, folderName = :folderName WHERE id = :playlistId")
+    suspend fun updateNameAndFolder(playlistId: String, name: String, folderName: String?)
+
+    @Transaction
+    suspend fun syncPlaylistsAuthoritative(playlists: List<PlaylistEntity>) {
+        val remoteIds = playlists.map { it.id }.toSet()
+        val existingIds = getAllSnapshot().map { it.id }
+        for (staleId in existingIds) {
+            if (staleId !in remoteIds) {
+                deletePlaylistAndRefs(staleId)
+            }
+        }
+        if (playlists.isNotEmpty()) {
+            upsertAll(playlists)
+        }
+    }
 
     @Query("UPDATE playlists SET trackCount = :trackCount WHERE id = :playlistId")
     suspend fun updateTrackCount(playlistId: String, trackCount: Int)

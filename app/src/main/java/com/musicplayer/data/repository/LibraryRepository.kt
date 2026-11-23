@@ -352,7 +352,7 @@ class JellyfinLibraryRepository @Inject constructor(
                         BaseItemKind.MUSIC_ARTIST,
                         BaseItemKind.PLAYLIST,
                     ),
-                    fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.DATE_CREATED),
+                    fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.DATE_CREATED, ItemFields.TAGS),
                     limit = SEARCH_LIMIT,
                 ).content.items.orEmpty()
 
@@ -443,7 +443,10 @@ class JellyfinLibraryRepository @Inject constructor(
             .take(15)
             .map { it.toDomain(artworkUrlBuilder.buildItemImageUrl(it.id, it.primaryImageTag)) }
         val matchedPlaylists = playlistDao.observeAll().first()
-            .filter { it.name.contains(query, ignoreCase = true) }
+            .filter {
+                it.name.contains(query, ignoreCase = true) ||
+                    it.folderName?.contains(query, ignoreCase = true) == true
+            }
             .take(15)
             .map { it.toDomain(artworkUrlBuilder.buildItemImageUrl(it.id, it.primaryImageTag)) }
 
@@ -537,24 +540,26 @@ class JellyfinLibraryRepository @Inject constructor(
         api: org.jellyfin.sdk.api.client.ApiClient,
         userId: UUID,
     ) {
-        val existingAutoSyncIds = playlistDao.getAutoSyncPlaylists().map { it.id }.toSet()
+        val existingById = playlistDao.getAllSnapshot().associateBy { it.id }
         val result = api.itemsApi.getItems(
             userId = userId,
             recursive = true,
             includeItemTypes = listOf(BaseItemKind.PLAYLIST),
+            fields = listOf(ItemFields.TAGS),
             limit = PAGE_SIZE,
         ).content
         val items = result.items.orEmpty()
-        if (items.isNotEmpty()) {
-            playlistDao.upsertAll(
-                items.map { dto ->
-                    JellyfinMappers.toPlaylistEntity(
-                        dto = dto,
-                        existingAutoSync = dto.id.toString() in existingAutoSyncIds,
-                    )
-                },
+        val entities = items.map { dto ->
+            val normalizedId = dto.id.toString()
+            val existing = existingById[normalizedId]
+            JellyfinMappers.toPlaylistEntity(
+                dto = dto,
+                existingAutoSync = existing?.isAutoSyncDownloaded == true,
+                existingDownloadQualityOverride = existing?.downloadQualityOverride,
+                existingLastSyncedAt = existing?.lastSyncedAt,
             )
         }
+        playlistDao.syncPlaylistsAuthoritative(entities)
     }
 
     companion object {
