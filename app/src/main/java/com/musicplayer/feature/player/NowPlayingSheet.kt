@@ -269,7 +269,47 @@ fun NowPlayingSheet(
                     .padding(horizontal = 12.dp),
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            if (syncedLyrics != null) {
+                val activeIndex = LyricsParser.findActiveLineIndex(syncedLyrics.lines, displayedPositionMs)
+                val activeLineText = syncedLyrics.lines.getOrNull(activeIndex)?.text
+                    ?: syncedLyrics.lines.firstOrNull()?.text.orEmpty()
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    onClick = onOpenLyrics,
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AnimatedContent(
+                            targetState = activeLineText,
+                            transitionSpec = {
+                                (fadeIn() + slideInVertically { it / 3 }) togetherWith
+                                    (fadeOut() + slideOutVertically { -it / 3 })
+                            },
+                            label = "live_lyric_line",
+                        ) { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Box {
                 AssistChip(
@@ -346,46 +386,6 @@ fun NowPlayingSheet(
                                     qualityMenuExpanded = false
                                     onSelectStreamQuality(option.selection)
                                 },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (syncedLyrics != null) {
-                val activeIndex = LyricsParser.findActiveLineIndex(syncedLyrics.lines, displayedPositionMs)
-                val activeLineText = syncedLyrics.lines.getOrNull(activeIndex)?.text
-                    ?: syncedLyrics.lines.firstOrNull()?.text.orEmpty()
-
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    onClick = onOpenLyrics,
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        AnimatedContent(
-                            targetState = activeLineText,
-                            transitionSpec = {
-                                (fadeIn() + slideInVertically { it / 3 }) togetherWith
-                                    (fadeOut() + slideOutVertically { -it / 3 })
-                            },
-                            label = "live_lyric_line",
-                        ) { line ->
-                            Text(
-                                text = line,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

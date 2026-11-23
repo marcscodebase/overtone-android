@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -71,6 +72,7 @@ fun TrackRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    enableSwipeToQueue: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
     onPlayNext: (() -> Unit)? = null,
@@ -83,7 +85,7 @@ fun TrackRow(
     extraMenuActionLabel: String? = null,
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
-    if (enabled && onAddToQueue != null) {
+    if (enabled && enableSwipeToQueue && onAddToQueue != null) {
         val haptic = LocalHapticFeedback.current
         val dismissState = rememberSwipeToDismissBoxState(
             confirmValueChange = { value ->
@@ -151,7 +153,7 @@ fun TrackRow(
             showArtwork = showArtwork,
             trackNumberOverride = trackNumberOverride,
             onPlayNext = if (enabled) onPlayNext else null,
-            onAddToQueue = null,
+            onAddToQueue = if (enabled) onAddToQueue else null,
             onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
             onToggleDownload = onToggleDownload,
@@ -543,6 +545,7 @@ fun CollectionDetailHeader(
     onPlayClick: () -> Unit,
     onShuffleClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onSubtitleClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -571,10 +574,25 @@ fun CollectionDetailHeader(
         Text(
             text = subtitle,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (onSubtitleClick != null) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .clip(CircleShape)
+                .let { mod ->
+                    if (onSubtitleClick != null) {
+                        mod
+                            .clickable(onClick = onSubtitleClick)
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    } else {
+                        mod
+                    }
+                },
         )
         if (!metadata.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))

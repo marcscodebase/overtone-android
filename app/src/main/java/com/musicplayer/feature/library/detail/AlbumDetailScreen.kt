@@ -37,6 +37,7 @@ import com.musicplayer.core.model.Track
 @Composable
 fun AlbumDetailRoute(
     onBackClick: () -> Unit,
+    onArtistClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onToggleTrackDownload: (Track) -> Unit,
@@ -48,6 +49,7 @@ fun AlbumDetailRoute(
     AlbumDetailScreen(
         state = state,
         onBackClick = onBackClick,
+        onArtistClick = onArtistClick,
         onPlayAll = viewModel::onPlayAll,
         onShuffleAll = viewModel::onShuffleAll,
         onTrackClick = viewModel::onTrackClick,
@@ -68,6 +70,7 @@ fun AlbumDetailRoute(
 fun AlbumDetailScreen(
     state: AlbumDetailUiState,
     onBackClick: () -> Unit,
+    onArtistClick: (String) -> Unit,
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onTrackClick: (Int) -> Unit,
@@ -181,6 +184,7 @@ fun AlbumDetailScreen(
                     OfflineStatusBanner(status = state.offlineStatus)
                 }
                 item(key = "album_header") {
+                    val artistId = album?.artistId ?: state.tracks.firstOrNull()?.artistId
                     CollectionDetailHeader(
                         title = album?.title ?: state.tracks.firstOrNull()?.albumName.orEmpty(),
                         subtitle = album?.artistName ?: state.tracks.firstOrNull()?.artistName.orEmpty(),
@@ -190,6 +194,7 @@ fun AlbumDetailScreen(
                         canPlay = state.playableTracks.isNotEmpty(),
                         onPlayClick = onPlayAll,
                         onShuffleClick = onShuffleAll,
+                        onSubtitleClick = artistId?.let { id -> { onArtistClick(id) } },
                     )
                 }
                 itemsIndexed(

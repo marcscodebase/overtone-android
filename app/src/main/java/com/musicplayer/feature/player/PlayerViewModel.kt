@@ -9,6 +9,7 @@ import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
+import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.LyricsRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -30,6 +31,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController,
+    private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
     private val lyricsRepository: LyricsRepository,
     private val audioOutputMonitor: AudioOutputMonitor,
@@ -40,6 +42,14 @@ class PlayerViewModel @Inject constructor(
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val feedbackMessages: SharedFlow<String> = playbackController.feedbackMessages
     val audioOutputState: StateFlow<AudioOutputState> = audioOutputMonitor.outputState
+
+    val recentlyPlayedTracks: StateFlow<List<Track>> = libraryRepository
+        .observeRecentlyPlayedTracks(limit = 50)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
 
     val lowQualityBitrateKbps: StateFlow<Int> = preferencesDataStore.userPreferences
         .map { it.lowQualityBitrate.kbps }
@@ -111,6 +121,11 @@ class PlayerViewModel @Inject constructor(
     fun onSelectStreamQuality(selection: StreamQualitySelection) = playbackController.setStreamQuality(selection)
     fun onPlayNext(track: Track) = playbackController.playNext(track)
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
+    fun onPlayRecentTrack(tracks: List<Track>, index: Int) {
+        if (index in tracks.indices) {
+            playbackController.playTracks(tracks = tracks, startIndex = index, shuffle = false)
+        }
+    }
     fun onSelectQueueIndex(index: Int) = playbackController.skipToQueueIndex(index)
     fun onRemoveQueueIndex(index: Int) = playbackController.removeFromQueue(index)
     fun onMoveQueueItem(fromIndex: Int, toIndex: Int) = playbackController.moveQueueItem(fromIndex, toIndex)

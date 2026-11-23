@@ -188,4 +188,7 @@
     <string name="audio_output_active">Active</string>
     <string name="settings_auto_match_output_quality">Match quality to output device</string>
     <string name="settings_auto_match_output_quality_subtitle">Stream Lossless on wired/USB/speaker; cap standard Bluetooth to 320 kbps MP3</string>
+    <string name="queue_last_played">Last Played</string>
+    <string name="queue_last_played_empty_title">No recently played songs</string>
+    <string name="queue_last_played_empty_subtitle">Songs you listen to will show up here.</string>
 </resources>

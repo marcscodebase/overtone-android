@@ -93,6 +93,7 @@ private fun AuthenticatedShell(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val playbackState by playerViewModel.playbackState.collectAsStateWithLifecycle()
+    val recentlyPlayedTracks by playerViewModel.recentlyPlayedTracks.collectAsStateWithLifecycle()
     val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
     val audioOutputState by playerViewModel.audioOutputState.collectAsStateWithLifecycle()
     val hiResBluetoothDevices by playerViewModel.hiResBluetoothDevices.collectAsStateWithLifecycle()
@@ -252,6 +253,7 @@ private fun AuthenticatedShell(
             composable<AlbumDetailDestination> {
                 AlbumDetailRoute(
                     onBackClick = { navController.popBackStack() },
+                    onArtistClick = navigateToArtist,
                     onGoToTrackArtist = onGoToTrackArtist,
                     onAddToPlaylist = { track ->
                         playlistPickerInitialFavorite = track.isFavorite
@@ -372,15 +374,26 @@ private fun AuthenticatedShell(
         )
     }
 
-    if (showQueueSheet && playbackState.queue.isNotEmpty()) {
+    if (showQueueSheet) {
         QueueSheet(
             state = playbackState,
+            recentlyPlayedTracks = recentlyPlayedTracks,
+            isOffline = isOffline,
             onDismiss = { showQueueSheet = false },
             onSelectIndex = playerViewModel::onSelectQueueIndex,
             onRemoveIndex = playerViewModel::onRemoveQueueIndex,
             onMoveItem = playerViewModel::onMoveQueueItem,
             onClearManualQueue = playerViewModel::onClearManualQueue,
             onClearUpNext = playerViewModel::onClearUpNext,
+            onPlayRecentTrack = playerViewModel::onPlayRecentTrack,
+            onPlayNext = playerViewModel::onPlayNext,
+            onAddToQueue = playerViewModel::onAddToQueue,
+            onAddToPlaylist = { track ->
+                playlistPickerInitialFavorite = track.isFavorite
+                trackForPlaylistPicker = track
+            },
+            onGoToAlbum = navigateToAlbum,
+            onGoToArtist = onGoToTrackArtist,
         )
     }
 
