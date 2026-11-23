@@ -64,6 +64,7 @@ class PlayerViewModel @Inject constructor(
     fun onSelectQueueIndex(index: Int) = playbackController.skipToQueueIndex(index)
     fun onRemoveQueueIndex(index: Int) = playbackController.removeFromQueue(index)
     fun onMoveQueueItem(fromIndex: Int, toIndex: Int) = playbackController.moveQueueItem(fromIndex, toIndex)
+    fun onClearManualQueue() = playbackController.clearManualQueue()
     fun onClearUpNext() = playbackController.clearUpNext()
     fun onClearError() = playbackController.clearError()
 

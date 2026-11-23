@@ -138,6 +138,7 @@ class LibraryViewModelTest {
         override fun skipToQueueIndex(index: Int) = Unit
         override fun removeFromQueue(index: Int) = Unit
         override fun moveQueueItem(fromIndex: Int, toIndex: Int) = Unit
+        override fun clearManualQueue() = Unit
         override fun clearUpNext() = Unit
         override fun updateTrackFavorite(trackId: String, isFavorite: Boolean) = Unit
         override fun togglePlayPause() = Unit

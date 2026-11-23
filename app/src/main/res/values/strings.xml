@@ -158,4 +158,8 @@
     <string name="settings_replay_gain_track">Track gain</string>
     <string name="settings_replay_gain_album">Album gain</string>
     <string name="settings_replay_gain_preamp">Preamp</string>
+    <string name="queue_next_in_queue">Next in Queue</string>
+    <string name="queue_next_from">Next from: %1$s</string>
+    <string name="queue_clear_all">Clear all</string>
+    <string name="queue_drag_reorder">Drag to reorder</string>
 </resources>

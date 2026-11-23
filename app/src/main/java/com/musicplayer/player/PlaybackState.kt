@@ -19,6 +19,8 @@ data class PlaybackState(
     val currentTrack: Track? = null,
     val queue: List<Track> = emptyList(),
     val currentIndex: Int = -1,
+    val manualQueueCount: Int = 0,
+    val queueContextLabel: String? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMs: Long = 0L,
@@ -34,5 +36,20 @@ data class PlaybackState(
             (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
         } else {
             0f
+        }
+
+    val manualQueueTracks: List<Track>
+        get() {
+            if (currentIndex !in queue.indices || manualQueueCount <= 0) return emptyList()
+            val start = (currentIndex + 1).coerceAtMost(queue.size)
+            val end = (start + manualQueueCount).coerceAtMost(queue.size)
+            return if (start < end) queue.subList(start, end) else emptyList()
+        }
+
+    val contextUpNextTracks: List<Track>
+        get() {
+            if (currentIndex !in queue.indices) return emptyList()
+            val start = (currentIndex + 1 + manualQueueCount.coerceAtLeast(0)).coerceAtMost(queue.size)
+            return if (start < queue.size) queue.subList(start, queue.size) else emptyList()
         }
 }

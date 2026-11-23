@@ -254,6 +254,7 @@ private fun AuthenticatedShell(
             onSelectIndex = playerViewModel::onSelectQueueIndex,
             onRemoveIndex = playerViewModel::onRemoveQueueIndex,
             onMoveItem = playerViewModel::onMoveQueueItem,
+            onClearManualQueue = playerViewModel::onClearManualQueue,
             onClearUpNext = playerViewModel::onClearUpNext,
         )
     }

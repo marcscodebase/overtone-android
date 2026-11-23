@@ -52,6 +52,7 @@ interface PlaybackController {
     fun skipToQueueIndex(index: Int)
     fun removeFromQueue(index: Int)
     fun moveQueueItem(fromIndex: Int, toIndex: Int)
+    fun clearManualQueue()
     fun clearUpNext()
     fun updateTrackFavorite(trackId: String, isFavorite: Boolean)
     fun togglePlayPause()
@@ -225,6 +226,8 @@ class MediaControllerPlaybackController @Inject constructor(
                 it.copy(
                     queue = resolvedTracks,
                     currentIndex = safeIndex,
+                    manualQueueCount = 0,
+                    queueContextLabel = resolvedTracks[safeIndex].albumName.takeIf { name -> name.isNotBlank() },
                     currentTrack = resolvedTracks[safeIndex],
                     isLocalPlayback = resolvedTracks[safeIndex].id in localIds,
                     shuffleEnabled = shuffle,
@@ -253,7 +256,12 @@ class MediaControllerPlaybackController @Inject constructor(
             if (resolved.isLocal) localIds += track.id
 
             val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
-            val mutated = QueueOrderHelper.insertNext(current.queue, current.currentIndex, track)
+            val mutated = QueueOrderHelper.insertNext(
+                queue = current.queue,
+                currentIndex = current.currentIndex,
+                track = track,
+                manualQueueCount = current.manualQueueCount,
+            )
             mediaController.addMediaItem(
                 insertIndex,
                 track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps),
@@ -263,6 +271,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 it.copy(
                     queue = mutated.queue,
                     currentIndex = mutated.currentIndex,
+                    manualQueueCount = mutated.manualQueueCount,
                 )
             }
             _feedbackMessages.tryEmit("Playing \"${track.title}\" next")
@@ -298,12 +307,20 @@ class MediaControllerPlaybackController @Inject constructor(
             }
             if (mediaItems.isEmpty()) return@launch
 
-            val mutated = QueueOrderHelper.append(current.queue, current.currentIndex, resolvedTracks)
-            mediaController.addMediaItems(mediaItems)
+            val insertIndex = (current.currentIndex + 1 + current.manualQueueCount)
+                .coerceIn(0, current.queue.size)
+            val mutated = QueueOrderHelper.enqueueManual(
+                queue = current.queue,
+                currentIndex = current.currentIndex,
+                manualQueueCount = current.manualQueueCount,
+                tracks = resolvedTracks,
+            )
+            mediaController.addMediaItems(insertIndex, mediaItems)
             _playbackState.update {
                 it.copy(
                     queue = mutated.queue,
                     currentIndex = mutated.currentIndex,
+                    manualQueueCount = mutated.manualQueueCount,
                 )
             }
             val message = if (resolvedTracks.size == 1) {
@@ -324,6 +341,13 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            val updatedManual = QueueOrderHelper.adjustManualCountOnIndexChange(
+                oldIndex = current.currentIndex,
+                newIndex = index,
+                manualQueueCount = current.manualQueueCount,
+                queueSize = current.queue.size,
+            )
+            _playbackState.update { it.copy(manualQueueCount = updatedManual) }
             mediaController.seekTo(index, 0L)
             mediaController.play()
             syncFromPlayer()
@@ -340,7 +364,12 @@ class MediaControllerPlaybackController @Inject constructor(
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
 
-            val mutated = QueueOrderHelper.removeAt(current.queue, current.currentIndex, index)
+            val mutated = QueueOrderHelper.removeAt(
+                queue = current.queue,
+                currentIndex = current.currentIndex,
+                removeIndex = index,
+                manualQueueCount = current.manualQueueCount,
+            )
             if (index < mediaController.mediaItemCount) {
                 mediaController.removeMediaItem(index)
             }
@@ -348,6 +377,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 it.copy(
                     queue = mutated.queue,
                     currentIndex = mutated.currentIndex,
+                    manualQueueCount = mutated.manualQueueCount,
                     currentTrack = mutated.queue.getOrNull(mutated.currentIndex),
                 )
             }
@@ -369,7 +399,13 @@ class MediaControllerPlaybackController @Inject constructor(
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
 
-            val mutated = QueueOrderHelper.move(current.queue, current.currentIndex, fromIndex, toIndex)
+            val mutated = QueueOrderHelper.move(
+                queue = current.queue,
+                currentIndex = current.currentIndex,
+                fromIndex = fromIndex,
+                toIndex = toIndex,
+                manualQueueCount = current.manualQueueCount,
+            )
             if (fromIndex < mediaController.mediaItemCount && toIndex < mediaController.mediaItemCount) {
                 mediaController.moveMediaItem(fromIndex, toIndex)
             }
@@ -377,7 +413,39 @@ class MediaControllerPlaybackController @Inject constructor(
                 it.copy(
                     queue = mutated.queue,
                     currentIndex = mutated.currentIndex,
+                    manualQueueCount = mutated.manualQueueCount,
                     currentTrack = mutated.queue.getOrNull(mutated.currentIndex),
+                )
+            }
+            persistQueueAsync()
+        }
+    }
+
+    override fun clearManualQueue() {
+        appScope.launch(mainDispatcher) {
+            val current = _playbackState.value
+            val activeIndex = current.currentIndex
+            if (activeIndex !in current.queue.indices || current.manualQueueCount <= 0) return@launch
+            val mediaController = ensureConnected() ?: return@launch
+            if (needsPrepareOnPlay) {
+                hydrateControllerFromState(mediaController, autoPlay = false)
+            }
+
+            val start = activeIndex + 1
+            val end = (start + current.manualQueueCount).coerceAtMost(mediaController.mediaItemCount)
+            if (start < end) {
+                mediaController.removeMediaItems(start, end)
+            }
+            val mutated = QueueOrderHelper.clearManualQueue(
+                queue = current.queue,
+                currentIndex = activeIndex,
+                manualQueueCount = current.manualQueueCount,
+            )
+            _playbackState.update {
+                it.copy(
+                    queue = mutated.queue,
+                    currentIndex = mutated.currentIndex,
+                    manualQueueCount = 0,
                 )
             }
             persistQueueAsync()
@@ -399,7 +467,12 @@ class MediaControllerPlaybackController @Inject constructor(
                 mediaController.removeMediaItems(removeStart, mediaController.mediaItemCount)
             }
             val trimmed = current.queue.subList(0, removeStart).toList()
-            _playbackState.update { it.copy(queue = trimmed) }
+            _playbackState.update {
+                it.copy(
+                    queue = trimmed,
+                    manualQueueCount = 0,
+                )
+            }
             persistQueueAsync()
         }
     }
@@ -437,10 +510,20 @@ class MediaControllerPlaybackController @Inject constructor(
     override fun skipToNext() {
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
-            if (needsPrepareOnPlay && _playbackState.value.queue.isNotEmpty()) {
+            val current = _playbackState.value
+            if (needsPrepareOnPlay && current.queue.isNotEmpty()) {
                 hydrateControllerFromState(mediaController, autoPlay = true)
             }
-            if (mediaController.hasNextMediaItem()) {
+            // Always prioritize manually queued tracks first, even when Shuffle is active
+            if (current.manualQueueCount > 0 && current.currentIndex + 1 < mediaController.mediaItemCount) {
+                val nextIndex = current.currentIndex + 1
+                _playbackState.update {
+                    it.copy(manualQueueCount = (it.manualQueueCount - 1).coerceAtLeast(0))
+                }
+                mediaController.seekTo(nextIndex, 0L)
+                mediaController.play()
+                syncFromPlayer()
+            } else if (mediaController.hasNextMediaItem()) {
                 mediaController.seekToNextMediaItem()
             }
         }
@@ -575,10 +658,23 @@ class MediaControllerPlaybackController @Inject constructor(
         val isLocal = extras?.getBoolean(EXTRA_IS_LOCAL) ?: (activeTrack?.id in localIds)
         val transcodedBitrate = extras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
 
+        val clampedNewIndex = if (currentState.queue.isEmpty()) -1 else index.coerceIn(0, currentState.queue.lastIndex)
+        val adjustedManualCount = if (clampedNewIndex != currentState.currentIndex && currentState.currentIndex >= 0) {
+            QueueOrderHelper.adjustManualCountOnIndexChange(
+                oldIndex = currentState.currentIndex,
+                newIndex = clampedNewIndex,
+                manualQueueCount = currentState.manualQueueCount,
+                queueSize = currentState.queue.size,
+            )
+        } else {
+            currentState.manualQueueCount
+        }
+
         _playbackState.update { state ->
             state.copy(
                 currentTrack = activeTrack,
-                currentIndex = if (state.queue.isEmpty()) -1 else index.coerceIn(0, state.queue.lastIndex),
+                currentIndex = clampedNewIndex,
+                manualQueueCount = adjustedManualCount,
                 isPlaying = player.isPlaying,
                 isBuffering = player.playbackState == Player.STATE_BUFFERING,
                 positionMs = player.currentPosition.coerceAtLeast(0L),
