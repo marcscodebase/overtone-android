@@ -1,5 +1,6 @@
 package com.musicplayer.player.engine
 
+import androidx.media3.common.MimeTypes
 import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.datastore.UserPreferencesDataStore
@@ -19,6 +20,7 @@ data class ResolvedAudioSource(
     val uri: String,
     val isLocal: Boolean,
     val transcodedBitrateKbps: Int? = null,
+    val mimeType: String? = null,
 )
 
 @Singleton
@@ -113,21 +115,25 @@ class StreamUrlResolver @Inject constructor(
 
             return if (targetTranscodeKbps != null) {
                 val maxBitrateBps = targetTranscodeKbps * 1000
+                // Use HLS VOD transcoding so ExoPlayer knows full duration and can seek
+                // seamlessly to any millisecond (including mid-track quality switches).
                 val params = buildList {
                     if (!userId.isNullOrBlank()) add("userId=$userId")
                     if (!deviceId.isNullOrBlank()) add("deviceId=$deviceId")
-                    add("container=mp3")
+                    add("container=ts")
                     add("audioCodec=mp3")
                     add("audioBitRate=$maxBitrateBps")
                     add("maxStreamingBitrate=$maxBitrateBps")
-                    add("transcodingContainer=mp3")
-                    add("transcodingProtocol=http")
+                    add("transcodingContainer=ts")
+                    add("transcodingProtocol=hls")
+                    add("enableRedirection=true")
                 }.joinToString("&")
                 val transcodeUrl = "$cleanBase/Audio/${track.id}/universal?$params"
                 ResolvedAudioSource(
                     uri = transcodeUrl,
                     isLocal = false,
                     transcodedBitrateKbps = targetTranscodeKbps,
+                    mimeType = MimeTypes.APPLICATION_M3U8,
                 )
             } else {
                 val directPlayUrl = "$cleanBase/Audio/${track.id}/stream?static=true"

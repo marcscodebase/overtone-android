@@ -111,6 +111,8 @@ class StreamUrlResolverTest {
         assertTrue(resolved.uri.contains("deviceId=pixel-1"))
         assertTrue(resolved.uri.contains("audioBitRate=192000"))
         assertTrue(resolved.uri.contains("maxStreamingBitrate=192000"))
+        assertTrue(resolved.uri.contains("transcodingProtocol=hls"))
+        assertEquals("application/x-mpegURL", resolved.mimeType)
         assertFalse(resolved.uri.contains("api_key"))
     }
 

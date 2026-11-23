@@ -208,7 +208,12 @@ class MediaControllerPlaybackController @Inject constructor(
                 val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
-                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
+                mediaItems += track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                )
             }
 
             if (mediaItems.isEmpty()) {
@@ -267,7 +272,12 @@ class MediaControllerPlaybackController @Inject constructor(
             )
             mediaController.addMediaItem(
                 insertIndex,
-                track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps),
+                track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                ),
             )
 
             _playbackState.update {
@@ -306,7 +316,12 @@ class MediaControllerPlaybackController @Inject constructor(
                 val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
                 if (resolved.isLocal) localIds += track.id
-                mediaItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
+                mediaItems += track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                )
             }
             if (mediaItems.isEmpty()) return@launch
 
@@ -609,7 +624,12 @@ class MediaControllerPlaybackController @Inject constructor(
                     ?: streamUrlResolver.resolve(track, StreamQualitySelection.AUTO)
                     ?: return@launch
                 if (resolved.isLocal) localIds += track.id
-                newItems += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
+                newItems += track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                )
             }
 
             if (currentIndex !in newItems.indices) return@launch
@@ -663,7 +683,12 @@ class MediaControllerPlaybackController @Inject constructor(
         state.queue.forEach { track ->
             val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
             if (resolved.isLocal) localIds += track.id
-            items += track.toMediaItem(resolved.uri, resolved.isLocal, resolved.transcodedBitrateKbps)
+            items += track.toMediaItem(
+                uri = resolved.uri,
+                isLocal = resolved.isLocal,
+                transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                mimeType = resolved.mimeType,
+            )
         }
         needsPrepareOnPlay = false
         if (items.isEmpty()) return
@@ -845,6 +870,7 @@ class MediaControllerPlaybackController @Inject constructor(
         uri: String,
         isLocal: Boolean,
         transcodedBitrateKbps: Int?,
+        mimeType: String? = null,
     ): MediaItem {
         val extras = Bundle().apply {
             putBoolean(EXTRA_IS_LOCAL, isLocal)
@@ -863,6 +889,11 @@ class MediaControllerPlaybackController @Inject constructor(
         return MediaItem.Builder()
             .setMediaId(id)
             .setUri(uri)
+            .apply {
+                if (!mimeType.isNullOrBlank()) {
+                    setMimeType(mimeType)
+                }
+            }
             .setMediaMetadata(metadata)
             .build()
     }
