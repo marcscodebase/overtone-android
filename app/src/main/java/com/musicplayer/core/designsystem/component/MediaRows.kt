@@ -28,7 +28,6 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.QueuePlayNext
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -75,7 +74,6 @@ fun TrackRow(
     enableSwipeToQueue: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
-    onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
@@ -132,7 +130,6 @@ fun TrackRow(
                 enabled = enabled,
                 showArtwork = showArtwork,
                 trackNumberOverride = trackNumberOverride,
-                onPlayNext = onPlayNext,
                 onAddToQueue = onAddToQueue,
                 onToggleFavorite = onToggleFavorite,
                 onAddToPlaylist = onAddToPlaylist,
@@ -152,7 +149,6 @@ fun TrackRow(
             enabled = enabled,
             showArtwork = showArtwork,
             trackNumberOverride = trackNumberOverride,
-            onPlayNext = if (enabled) onPlayNext else null,
             onAddToQueue = if (enabled) onAddToQueue else null,
             onToggleFavorite = onToggleFavorite,
             onAddToPlaylist = onAddToPlaylist,
@@ -174,7 +170,6 @@ private fun TrackRowContent(
     enabled: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
-    onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
@@ -187,7 +182,7 @@ private fun TrackRowContent(
     var menuExpanded by remember { mutableStateOf(false) }
     val hasAlbumLink = onGoToAlbum != null && !track.albumId.isNullOrBlank()
     val hasArtistLink = onGoToArtist != null && track.resolvedArtists.isNotEmpty()
-    val hasMenu = onPlayNext != null || onAddToQueue != null || onToggleFavorite != null ||
+    val hasMenu = onAddToQueue != null || onToggleFavorite != null ||
         onAddToPlaylist != null || onToggleDownload != null ||
         hasAlbumLink || hasArtistLink ||
         (extraMenuActionLabel != null && onExtraMenuAction != null)
@@ -296,18 +291,6 @@ private fun TrackRowContent(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
-                    if (onPlayNext != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.queue_play_next)) },
-                            leadingIcon = {
-                                Icon(Icons.Rounded.QueuePlayNext, contentDescription = null)
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onPlayNext()
-                            },
-                        )
-                    }
                     if (onAddToQueue != null) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.queue_add_to_queue)) },

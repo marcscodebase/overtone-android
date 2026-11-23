@@ -86,7 +86,6 @@ fun QueueSheet(
     onClearManualQueue: () -> Unit,
     onClearUpNext: () -> Unit,
     onPlayRecentTrack: (List<Track>, Int) -> Unit,
-    onPlayNext: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
     onGoToAlbum: (String) -> Unit,
@@ -389,7 +388,6 @@ fun QueueSheet(
                                         enabled = !isOffline || track.isDownloaded,
                                         enableSwipeToQueue = false,
                                         onClick = { onPlayRecentTrack(recentlyPlayedTracks, index) },
-                                        onPlayNext = { onPlayNext(track) },
                                         onAddToQueue = { onAddToQueue(track) },
                                         onAddToPlaylist = { onAddToPlaylist(track) },
                                         onGoToAlbum = track.albumId?.let { id ->

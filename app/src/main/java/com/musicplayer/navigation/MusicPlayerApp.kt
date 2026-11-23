@@ -386,7 +386,6 @@ private fun AuthenticatedShell(
             onClearManualQueue = playerViewModel::onClearManualQueue,
             onClearUpNext = playerViewModel::onClearUpNext,
             onPlayRecentTrack = playerViewModel::onPlayRecentTrack,
-            onPlayNext = playerViewModel::onPlayNext,
             onAddToQueue = playerViewModel::onAddToQueue,
             onAddToPlaylist = { track ->
                 playlistPickerInitialFavorite = track.isFavorite
