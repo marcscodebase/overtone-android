@@ -16,13 +16,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DataSaverOn
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lyrics
@@ -83,11 +83,12 @@ import com.musicplayer.player.RepeatMode
 fun NowPlayingSheet(
     state: PlaybackState,
     downloadRecord: DownloadRecordEntity?,
+    isTrackSaved: Boolean,
     lowQualityBitrateKbps: Int,
     isOffline: Boolean,
     onDismiss: () -> Unit,
     onTogglePlayPause: () -> Unit,
-    onToggleFavorite: () -> Unit,
+    onSaveOrAddToPlaylist: () -> Unit,
     onToggleDownload: () -> Unit,
     onSelectStreamQuality: (StreamQualitySelection) -> Unit,
     onSkipNext: () -> Unit,
@@ -383,21 +384,20 @@ fun NowPlayingSheet(
                         }
                     }
                 }
-                IconButton(onClick = onToggleFavorite) {
+                IconButton(onClick = onSaveOrAddToPlaylist) {
                     Icon(
-                        imageVector = if (track.isFavorite) {
-                            Icons.Rounded.Favorite
+                        imageVector = if (isTrackSaved) {
+                            Icons.Rounded.CheckCircle
                         } else {
-                            Icons.Rounded.FavoriteBorder
+                            Icons.Rounded.AddCircleOutline
                         },
-                        contentDescription = stringResource(
-                            if (track.isFavorite) R.string.favorite_remove else R.string.favorite_add,
-                        ),
-                        tint = if (track.isFavorite) {
+                        contentDescription = stringResource(R.string.playlist_save_to),
+                        tint = if (isTrackSaved) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
+                        modifier = Modifier.size(26.dp),
                     )
                 }
             }

@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,9 +40,10 @@ import com.musicplayer.player.PlaybackState
 @Composable
 fun MiniPlayer(
     state: PlaybackState,
+    isTrackSaved: Boolean,
     onExpand: () -> Unit,
     onTogglePlayPause: () -> Unit,
-    onToggleFavorite: () -> Unit,
+    onSaveOrAddToPlaylist: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     modifier: Modifier = Modifier,
@@ -103,22 +104,20 @@ fun MiniPlayer(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = onToggleFavorite) {
+                IconButton(onClick = onSaveOrAddToPlaylist) {
                     Icon(
-                        imageVector = if (track.isFavorite) {
-                            Icons.Rounded.Favorite
+                        imageVector = if (isTrackSaved) {
+                            Icons.Rounded.CheckCircle
                         } else {
-                            Icons.Rounded.FavoriteBorder
+                            Icons.Rounded.AddCircleOutline
                         },
-                        contentDescription = stringResource(
-                            if (track.isFavorite) R.string.favorite_remove else R.string.favorite_add,
-                        ),
-                        tint = if (track.isFavorite) {
+                        contentDescription = stringResource(R.string.playlist_save_to),
+                        tint = if (isTrackSaved) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
                 IconButton(onClick = onTogglePlayPause) {

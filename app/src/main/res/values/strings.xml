@@ -164,4 +164,7 @@
     <string name="queue_drag_reorder">Drag to reorder</string>
     <string name="player_switch_quality">Switch audio quality</string>
     <string name="settings_low_quality_bitrate">Low Quality Streaming Bitrate</string>
+    <string name="playlist_save_to">Save to Favorites &amp; Playlists</string>
+    <string name="playlist_liked_songs_subtitle">Saved to your Jellyfin Favorites</string>
+    <string name="action_done">Done</string>
 </resources>

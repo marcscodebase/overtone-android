@@ -1,7 +1,9 @@
 package com.musicplayer.feature.library.playlist
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,10 +19,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,12 +35,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -104,17 +113,33 @@ fun DeletePlaylistDialog(
     )
 }
 
+/**
+ * Spotify-style multi-select sheet for saving a track to Favorites and one or more Playlists.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddToPlaylistSheet(
     track: Track,
+    initialIsFavorite: Boolean,
     playlists: List<Playlist>,
+    initialPlaylistIds: Set<String>,
+    showFavoriteRow: Boolean = true,
     onDismiss: () -> Unit,
-    onSelectPlaylist: (Playlist) -> Unit,
+    onConfirm: (isFavorite: Boolean, selectedPlaylistIds: Set<String>) -> Unit,
     onCreateNewWithTrack: (String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var favoriteSelected by remember(track.id, initialIsFavorite) { mutableStateOf(initialIsFavorite) }
+    var selectedPlaylistIds by remember(track.id) { mutableStateOf(initialPlaylistIds) }
+    var syncedInitialMembership by remember(track.id) { mutableStateOf(false) }
+
+    LaunchedEffect(track.id, initialPlaylistIds) {
+        if (!syncedInitialMembership && initialPlaylistIds.isNotEmpty()) {
+            selectedPlaylistIds = initialPlaylistIds
+            syncedInitialMembership = true
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -128,7 +153,9 @@ fun AddToPlaylistSheet(
                 .padding(horizontal = 20.dp),
         ) {
             Text(
-                text = stringResource(R.string.playlist_add_to),
+                text = stringResource(
+                    if (showFavoriteRow) R.string.playlist_save_to else R.string.playlist_add_to,
+                ),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -156,15 +183,78 @@ fun AddToPlaylistSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(280.dp),
-                contentPadding = PaddingValues(bottom = 16.dp),
+                    .height(290.dp),
+                contentPadding = PaddingValues(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (showFavoriteRow) {
+                    item(key = "favorites_row") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable { favoriteSelected = !favoriteSelected }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(MaterialTheme.shapes.extraSmall)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Favorite,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.home_favorites),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = stringResource(R.string.playlist_liked_songs_subtitle),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(
+                                imageVector = if (favoriteSelected) {
+                                    Icons.Rounded.CheckCircle
+                                } else {
+                                    Icons.Rounded.RadioButtonUnchecked
+                                },
+                                contentDescription = null,
+                                tint = if (favoriteSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    }
+                }
+
                 items(items = playlists, key = { it.id }) { playlist ->
+                    val isChecked = playlist.id in selectedPlaylistIds
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelectPlaylist(playlist) }
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable {
+                                selectedPlaylistIds = if (isChecked) {
+                                    selectedPlaylistIds - playlist.id
+                                } else {
+                                    selectedPlaylistIds + playlist.id
+                                }
+                            }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -190,9 +280,33 @@ fun AddToPlaylistSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        Icon(
+                            imageVector = if (isChecked) {
+                                Icons.Rounded.CheckCircle
+                            } else {
+                                Icons.Rounded.RadioButtonUnchecked
+                            },
+                            contentDescription = null,
+                            tint = if (isChecked) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { onConfirm(favoriteSelected, selectedPlaylistIds) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            ) {
+                Text(stringResource(R.string.action_done))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 

@@ -51,6 +51,12 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
     suspend fun getTrackRefsSnapshot(playlistId: String): List<PlaylistTrackCrossRef>
 
+    @Query("SELECT * FROM playlist_tracks WHERE trackId = :trackId")
+    fun observeRefsForTrack(trackId: String): Flow<List<PlaylistTrackCrossRef>>
+
+    @Query("SELECT DISTINCT trackId FROM playlist_tracks")
+    fun observeAllTrackIdsInPlaylists(): Flow<List<String>>
+
     @Upsert
     suspend fun upsertAll(playlists: List<PlaylistEntity>)
 

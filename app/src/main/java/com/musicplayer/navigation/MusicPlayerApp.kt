@@ -88,6 +88,7 @@ private fun AuthenticatedShell(
     val lowQualityBitrateKbps by playerViewModel.lowQualityBitrateKbps.collectAsStateWithLifecycle()
     val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
+    val trackIdsInPlaylists by playlistPickerViewModel.trackIdsInAnyPlaylist.collectAsStateWithLifecycle()
     val downloadRecords by downloadActionsViewModel.downloadRecords.collectAsStateWithLifecycle()
     val downloadPrefs by downloadActionsViewModel.preferences.collectAsStateWithLifecycle()
     val pendingDownload by downloadActionsViewModel.pendingRequest.collectAsStateWithLifecycle()
@@ -96,6 +97,7 @@ private fun AuthenticatedShell(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylistPicker by remember { mutableStateOf<Track?>(null) }
+    var playlistPickerInitialFavorite by remember { mutableStateOf(false) }
 
     LaunchedEffect(playerViewModel) {
         playerViewModel.feedbackMessages.collect { message ->
@@ -117,7 +119,35 @@ private fun AuthenticatedShell(
         }
     }
 
-    val showMiniPlayer = playbackState.currentTrack != null &&
+    LaunchedEffect(playlistPickerViewModel) {
+        playlistPickerViewModel.feedbackMessages.collect { message ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
+
+    val activeTrack = playbackState.currentTrack
+    val isActiveTrackSaved = activeTrack != null &&
+        (activeTrack.isFavorite || activeTrack.id in trackIdsInPlaylists)
+
+    val onSaveCurrentTrack: () -> Unit = {
+        val current = playbackState.currentTrack
+        if (current != null) {
+            if (!current.isFavorite) {
+                playlistPickerViewModel.autoFavoriteTrack(current)
+                playlistPickerInitialFavorite = true
+                trackForPlaylistPicker = current.copy(isFavorite = true)
+            } else {
+                playlistPickerInitialFavorite = true
+                trackForPlaylistPicker = current
+            }
+        }
+    }
+
+    val showMiniPlayer = activeTrack != null &&
         currentDestination?.hasRoute(SettingsDestination::class) != true &&
         currentDestination?.hasRoute(StorageManagerDestination::class) != true
 
@@ -134,9 +164,10 @@ private fun AuthenticatedShell(
                 ) {
                     MiniPlayer(
                         state = playbackState,
+                        isTrackSaved = isActiveTrackSaved,
                         onExpand = { showNowPlaying = true },
                         onTogglePlayPause = playerViewModel::onTogglePlayPause,
-                        onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
+                        onSaveOrAddToPlaylist = onSaveCurrentTrack,
                         onSkipNext = playerViewModel::onSkipNext,
                         onSkipPrevious = playerViewModel::onSkipPrevious,
                     )
@@ -159,7 +190,10 @@ private fun AuthenticatedShell(
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
-                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
                     onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                     onSettingsClick = { navController.navigate(SettingsDestination) },
                 )
@@ -171,7 +205,10 @@ private fun AuthenticatedShell(
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
                     onArtistClick = { artistId -> navController.navigate(ArtistDetailDestination(artistId)) },
                     onPlaylistClick = { playlistId -> navController.navigate(PlaylistDetailDestination(playlistId)) },
-                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
                     onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                 )
             }
@@ -179,7 +216,10 @@ private fun AuthenticatedShell(
             composable<AlbumDetailDestination> {
                 AlbumDetailRoute(
                     onBackClick = { navController.popBackStack() },
-                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
                     onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                     onDownloadAlbum = downloadActionsViewModel::onDownloadAlbum,
                     onRemoveAlbumDownload = downloadActionsViewModel::onRemoveAlbumDownload,
@@ -190,7 +230,10 @@ private fun AuthenticatedShell(
                 ArtistDetailRoute(
                     onBackClick = { navController.popBackStack() },
                     onAlbumClick = { albumId -> navController.navigate(AlbumDetailDestination(albumId)) },
-                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
                     onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                 )
             }
@@ -198,7 +241,10 @@ private fun AuthenticatedShell(
             composable<PlaylistDetailDestination> {
                 PlaylistDetailRoute(
                     onBackClick = { navController.popBackStack() },
-                    onAddToPlaylist = { track -> trackForPlaylistPicker = track },
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
                     onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
                     onDownloadPlaylist = downloadActionsViewModel::onDownloadPlaylist,
                     onRemovePlaylistDownload = downloadActionsViewModel::onRemovePlaylistDownload,
@@ -220,16 +266,16 @@ private fun AuthenticatedShell(
         }
     }
 
-    val activeTrack = playbackState.currentTrack
     if (showNowPlaying && activeTrack != null) {
         NowPlayingSheet(
             state = playbackState,
             downloadRecord = downloadRecords[activeTrack.id],
+            isTrackSaved = isActiveTrackSaved,
             lowQualityBitrateKbps = lowQualityBitrateKbps,
             isOffline = isOffline,
             onDismiss = { showNowPlaying = false },
             onTogglePlayPause = playerViewModel::onTogglePlayPause,
-            onToggleFavorite = playerViewModel::onToggleCurrentTrackFavorite,
+            onSaveOrAddToPlaylist = onSaveCurrentTrack,
             onToggleDownload = { downloadActionsViewModel.onToggleTrackDownload(activeTrack) },
             onSelectStreamQuality = playerViewModel::onSelectStreamQuality,
             onSkipNext = playerViewModel::onSkipNext,
@@ -265,12 +311,25 @@ private fun AuthenticatedShell(
     }
 
     trackForPlaylistPicker?.let { selectedTrack ->
+        val membershipFlow = remember(selectedTrack.id) {
+            playlistPickerViewModel.observeTrackPlaylistMembership(selectedTrack.id)
+        }
+        val membership by membershipFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+
         AddToPlaylistSheet(
             track = selectedTrack,
+            initialIsFavorite = playlistPickerInitialFavorite,
             playlists = allPlaylists,
+            initialPlaylistIds = membership.keys,
             onDismiss = { trackForPlaylistPicker = null },
-            onSelectPlaylist = { playlist ->
-                playlistPickerViewModel.addTrackToPlaylist(playlist.id, selectedTrack)
+            onConfirm = { targetFavorite, targetPlaylistIds ->
+                playlistPickerViewModel.applySaveSelection(
+                    track = selectedTrack,
+                    initialFavorite = playlistPickerInitialFavorite,
+                    targetFavorite = targetFavorite,
+                    initialMembership = membership,
+                    targetPlaylistIds = targetPlaylistIds,
+                )
                 trackForPlaylistPicker = null
             },
             onCreateNewWithTrack = { newName ->
