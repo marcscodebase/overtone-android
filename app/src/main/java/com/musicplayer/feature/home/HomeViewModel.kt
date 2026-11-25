@@ -8,6 +8,7 @@ import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
+import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
@@ -43,6 +44,7 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val downloadRepository: DownloadRepository,
     private val syncRepository: SyncRepository,
     private val playbackController: PlaybackController,
     private val offlineStateProvider: OfflineStateProvider,
@@ -110,7 +112,10 @@ class HomeViewModel @Inject constructor(
             isRefreshing.value = true
             errorMessage.value = null
             when (val result = libraryRepository.syncLibrary()) {
-                is AppResult.Success -> errorMessage.value = null
+                is AppResult.Success -> {
+                    errorMessage.value = null
+                    downloadRepository.reconcileDownloads()
+                }
                 is AppResult.Error -> errorMessage.value = result.error.message
             }
             isRefreshing.value = false

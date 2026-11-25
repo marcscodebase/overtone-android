@@ -19,6 +19,9 @@ data class AudioTagMetadata(
     val lyrics: String? = null,
     val coverArtBytes: ByteArray? = null,
     val coverArtMimeType: String = "image/jpeg",
+    val trackId: String? = null,
+    val qualityTag: String? = null,
+    val audioSha256: String? = null,
 )
 
 @Singleton
@@ -110,6 +113,15 @@ object Id3v24TagWriter {
                 description = "REPLAYGAIN_TRACK_GAIN",
                 value = String.format(Locale.US, "%.2f dB", gain),
             )
+        }
+        metadata.trackId?.takeIf { it.isNotBlank() }?.let { id ->
+            writeTxxxFrame(frames, AudioTagInspector.TAG_TRACK_ID, id)
+        }
+        metadata.qualityTag?.takeIf { it.isNotBlank() }?.let { quality ->
+            writeTxxxFrame(frames, AudioTagInspector.TAG_QUALITY, quality)
+        }
+        metadata.audioSha256?.takeIf { it.isNotBlank() }?.let { sha ->
+            writeTxxxFrame(frames, AudioTagInspector.TAG_AUDIO_SHA256, sha)
         }
         metadata.lyrics?.takeIf { it.isNotBlank() }?.let { lyrics ->
             writeUsltFrame(frames, lyrics)
@@ -307,6 +319,15 @@ object FlacTagWriter {
         metadata.year?.takeIf { it > 0 }?.let { comments += "DATE=$it" }
         metadata.replayGainTrackDb?.let { gain ->
             comments += String.format(Locale.US, "REPLAYGAIN_TRACK_GAIN=%.2f dB", gain)
+        }
+        metadata.trackId?.takeIf { it.isNotBlank() }?.let { id ->
+            comments += "${AudioTagInspector.TAG_TRACK_ID}=$id"
+        }
+        metadata.qualityTag?.takeIf { it.isNotBlank() }?.let { quality ->
+            comments += "${AudioTagInspector.TAG_QUALITY}=$quality"
+        }
+        metadata.audioSha256?.takeIf { it.isNotBlank() }?.let { sha ->
+            comments += "${AudioTagInspector.TAG_AUDIO_SHA256}=$sha"
         }
         metadata.lyrics?.takeIf { it.isNotBlank() }?.let { comments += "LYRICS=$it" }
 

@@ -12,6 +12,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks ORDER BY title COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<TrackEntity>>
 
+    @Query("SELECT * FROM tracks")
+    suspend fun getAllSnapshot(): List<TrackEntity>
+
     @Query("SELECT * FROM tracks WHERE albumId = :albumId ORDER BY COALESCE(discNumber, 1) ASC, COALESCE(trackNumber, 0) ASC, title COLLATE NOCASE ASC")
     fun observeByAlbum(albumId: String): Flow<List<TrackEntity>>
 

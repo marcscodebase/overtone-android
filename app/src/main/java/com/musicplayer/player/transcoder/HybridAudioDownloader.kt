@@ -6,6 +6,7 @@ import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.TranscodeSource
+import com.musicplayer.data.local.AudioTagInspector
 import com.musicplayer.data.local.AudioTagMetadata
 import com.musicplayer.data.local.AudioTagWriter
 import com.musicplayer.player.PlaybackOkHttpClient
@@ -319,6 +320,7 @@ class HybridAudioDownloader @Inject constructor(
         }
         val coverMime = coverArtBytes?.let { AudioFormatSniffer.detectImageMimeType(it) } ?: "image/jpeg"
 
+        val audioPayloadSha256 = AudioTagInspector.computeAudioPayloadSha256(preparedFile, extension)
         audioTagWriter.writeTags(
             file = preparedFile,
             extension = extension,
@@ -333,6 +335,9 @@ class HybridAudioDownloader @Inject constructor(
                 replayGainTrackDb = request.replayGainTrackDb,
                 coverArtBytes = coverArtBytes,
                 coverArtMimeType = coverMime,
+                trackId = request.trackId,
+                qualityTag = AudioTagInspector.formatQualityTag(request.quality),
+                audioSha256 = audioPayloadSha256,
             ),
         )
 

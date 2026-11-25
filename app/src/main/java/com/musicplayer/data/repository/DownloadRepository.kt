@@ -22,6 +22,7 @@ import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Track
 import com.musicplayer.data.local.MediaStoreAudioWriter
 import com.musicplayer.data.local.MediaStoreReconciler
+import com.musicplayer.data.local.ReconcileResult
 import com.musicplayer.data.remote.JellyfinArtworkUrlBuilder
 import com.musicplayer.data.remote.JellyfinMappers.toDomain
 import com.musicplayer.data.worker.DownloadWorker
@@ -138,7 +139,7 @@ interface DownloadRepository {
     suspend fun retryTrackDownload(trackId: String)
     suspend fun cancelTrackDownload(trackId: String)
     suspend fun clearAllDownloads(): Int
-    suspend fun reconcileDownloads(): Int
+    suspend fun reconcileDownloads(): ReconcileResult
 }
 
 @Singleton
@@ -437,7 +438,7 @@ class JellyfinDownloadRepository @Inject constructor(
         records.size
     }
 
-    override suspend fun reconcileDownloads(): Int = mediaStoreReconciler.reconcile()
+    override suspend fun reconcileDownloads(): ReconcileResult = mediaStoreReconciler.reconcile()
 
     private suspend fun removeOwnerDownloads(
         ownerType: DownloadOwnerType,

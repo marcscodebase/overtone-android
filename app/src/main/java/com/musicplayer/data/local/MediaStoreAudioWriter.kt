@@ -36,7 +36,20 @@ class MediaStoreAudioWriter @Inject constructor(
         album: String,
         durationMs: Long,
     ): PublishedMediaFile = withContext(ioDispatcher) {
-        deleteExistingIfPresent(target.relativePath, target.displayName)
+        // Check if an identical file already exists at the exact target path (e.g. from a previous install).
+        // If we cannot overwrite/delete it under Scoped Storage, verify its SHA-256 / audio payload
+        // checksum and reuse the existing file directly instead of creating a `(1)` duplicate!
+        val existingMatches = queryFilesAtTarget(target.relativePath, target.displayName)
+        for (existing in existingMatches) {
+            val deleted = deleteByUri(existing.contentUri)
+            if (!deleted && matchesFileChecksum(sourceFile, target.extension, existing)) {
+                return@withContext PublishedMediaFile(
+                    contentUri = existing.contentUri,
+                    relativePath = existing.relativePath + existing.displayName,
+                    fileSizeBytes = existing.sizeBytes.takeIf { it > 0L } ?: sourceFile.length(),
+                )
+            }
+        }
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, target.displayName)
@@ -81,6 +94,28 @@ class MediaStoreAudioWriter @Inject constructor(
         }
     }
 
+    suspend fun scanOfflineFolder(): List<ScannedMediaStoreAudio> = withContext(ioDispatcher) {
+        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val selection = "${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ? AND ${MediaStore.Audio.Media.IS_PENDING} = 0"
+        val args = arrayOf("${MediaStorePathBuilder.ROOT_RELATIVE_PATH}/%")
+        queryAudioFiles(collection, selection, args, inspectTags = true)
+    }
+
+    suspend fun findExistingAtTarget(
+        relativePath: String,
+        displayName: String,
+    ): List<ScannedMediaStoreAudio> = withContext(ioDispatcher) {
+        queryFilesAtTarget(relativePath, displayName, inspectTags = true)
+    }
+
+    suspend fun computeContentSha256(contentUri: String): String? = withContext(ioDispatcher) {
+        runCatching {
+            resolver.openInputStream(Uri.parse(contentUri))?.buffered(64 * 1024)?.use { stream ->
+                AudioTagInspector.computeSha256(stream)
+            }
+        }.getOrNull()
+    }
+
     suspend fun exists(contentUri: String?): Boolean = withContext(ioDispatcher) {
         if (contentUri.isNullOrBlank()) return@withContext false
         runCatching {
@@ -91,26 +126,116 @@ class MediaStoreAudioWriter @Inject constructor(
 
     suspend fun delete(contentUri: String?): Boolean = withContext(ioDispatcher) {
         if (contentUri.isNullOrBlank()) return@withContext false
-        runCatching {
-            resolver.delete(Uri.parse(contentUri), null, null) > 0
-        }.getOrDefault(false)
+        deleteByUri(contentUri)
     }
 
-    private fun deleteExistingIfPresent(relativePath: String, displayName: String) {
-        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val projection = arrayOf(MediaStore.Audio.Media._ID)
-        val selection = "${MediaStore.Audio.Media.RELATIVE_PATH} = ? AND ${MediaStore.Audio.Media.DISPLAY_NAME} = ?"
-        val args = arrayOf(relativePath, displayName)
+    private fun deleteByUri(contentUri: String): Boolean = runCatching {
+        resolver.delete(Uri.parse(contentUri), null, null) > 0
+    }.getOrDefault(false)
 
+    private fun queryFilesAtTarget(
+        relativePath: String,
+        displayName: String,
+        inspectTags: Boolean = false,
+    ): List<ScannedMediaStoreAudio> {
+        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val selection = "${MediaStore.Audio.Media.RELATIVE_PATH} = ? AND ${MediaStore.Audio.Media.DISPLAY_NAME} = ? AND ${MediaStore.Audio.Media.IS_PENDING} = 0"
+        val args = arrayOf(relativePath, displayName)
+        return queryAudioFiles(collection, selection, args, inspectTags = inspectTags)
+    }
+
+    private fun queryAudioFiles(
+        collection: Uri,
+        selection: String,
+        args: Array<String>,
+        inspectTags: Boolean,
+    ): List<ScannedMediaStoreAudio> {
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.RELATIVE_PATH,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DATE_MODIFIED,
+        )
+
+        val results = mutableListOf<ScannedMediaStoreAudio>()
         runCatching {
             resolver.query(collection, projection, selection, args, null)?.use { cursor ->
-                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val pathCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
+                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val modCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+
                 while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idColumn)
-                    val existingUri = ContentUris.withAppendedId(collection, id)
-                    resolver.delete(existingUri, null, null)
+                    val id = cursor.getLong(idCol)
+                    val uri = ContentUris.withAppendedId(collection, id)
+                    val relPath = cursor.getString(pathCol).orEmpty()
+                    val name = cursor.getString(nameCol).orEmpty()
+                    val size = cursor.getLong(sizeCol)
+                    val duration = cursor.getLong(durationCol)
+                    val ext = name.substringAfterLast('.', "")
+                    val tags = if (inspectTags && size > 0L) {
+                        runCatching {
+                            resolver.openInputStream(uri)?.use { stream ->
+                                AudioTagInspector.inspect(stream, ext)
+                            }
+                        }.getOrNull() ?: InspectedAudioTags()
+                    } else {
+                        InspectedAudioTags()
+                    }
+
+                    results += ScannedMediaStoreAudio(
+                        id = id,
+                        contentUri = uri.toString(),
+                        relativePath = relPath,
+                        displayName = name,
+                        sizeBytes = size,
+                        durationMs = duration,
+                        title = cursor.getString(titleCol),
+                        artist = cursor.getString(artistCol),
+                        album = cursor.getString(albumCol),
+                        dateModifiedSeconds = cursor.getLong(modCol),
+                        inspectedTags = tags,
+                    )
                 }
             }
         }
+        return results
+    }
+
+    private fun matchesFileChecksum(
+        sourceFile: File,
+        extension: String,
+        existing: ScannedMediaStoreAudio,
+    ): Boolean {
+        val existingUri = Uri.parse(existing.contentUri)
+        // 1. Exact full-file SHA-256 match
+        val sourceFullSha = AudioTagInspector.computeSha256(sourceFile)
+        val existingFullSha = runCatching {
+            resolver.openInputStream(existingUri)?.buffered(64 * 1024)?.use {
+                AudioTagInspector.computeSha256(it)
+            }
+        }.getOrNull()
+        if (sourceFullSha != null && sourceFullSha == existingFullSha) {
+            return true
+        }
+
+        // 2. Audio-payload SHA-256 match (matches identical audio even if cover art / tag header changed!)
+        val sourceAudioSha = AudioTagInspector.computeAudioPayloadSha256(sourceFile, extension)
+        val existingAudioSha = runCatching {
+            resolver.openInputStream(existingUri)?.use {
+                AudioTagInspector.computeAudioPayloadSha256(it, existing.extension)
+            }
+        }.getOrNull()
+        return sourceAudioSha != null && sourceAudioSha == existingAudioSha
     }
 }

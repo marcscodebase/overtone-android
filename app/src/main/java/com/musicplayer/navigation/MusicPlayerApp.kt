@@ -1,6 +1,12 @@
 package com.musicplayer.navigation
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -114,6 +120,35 @@ private fun AuthenticatedShell(
     var pendingTrackNav by remember { mutableStateOf<PendingTrackNavigation?>(null) }
     var trackForPlaylistPicker by remember { mutableStateOf<Track?>(null) }
     var playlistPickerInitialFavorite by remember { mutableStateOf(false) }
+
+    val audioReadPermission = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+    var hasRequestedAudioPermission by rememberSaveable { mutableStateOf(false) }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            downloadActionsViewModel.onReconcileDownloads()
+        }
+    }
+
+    LaunchedEffect(audioReadPermission) {
+        val alreadyGranted = ContextCompat.checkSelfPermission(
+            context,
+            audioReadPermission,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (alreadyGranted) {
+            downloadActionsViewModel.onReconcileDownloads()
+        } else if (!hasRequestedAudioPermission) {
+            hasRequestedAudioPermission = true
+            audioPermissionLauncher.launch(audioReadPermission)
+        }
+    }
 
     LaunchedEffect(playerViewModel) {
         playerViewModel.feedbackMessages.collect { message ->

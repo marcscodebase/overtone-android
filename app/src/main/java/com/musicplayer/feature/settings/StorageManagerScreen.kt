@@ -1,6 +1,13 @@
 package com.musicplayer.feature.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -63,11 +70,33 @@ fun StorageManagerRoute(
     onBackClick: () -> Unit,
     viewModel: StorageManagerViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val audioReadPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) {
+        viewModel.onReconcile()
+    }
+
     StorageManagerScreen(
         state = state,
         onBackClick = onBackClick,
-        onReconcile = viewModel::onReconcile,
+        onReconcile = {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                audioReadPermission,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                viewModel.onReconcile()
+            } else {
+                permissionLauncher.launch(audioReadPermission)
+            }
+        },
         onDeleteTrack = viewModel::onDeleteTrack,
         onRetryTrack = viewModel::onRetryTrack,
         onCancelTrack = viewModel::onCancelTrack,

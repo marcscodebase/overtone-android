@@ -46,9 +46,26 @@ class StorageManagerViewModel @Inject constructor(
     fun onReconcile() {
         viewModelScope.launch {
             isBusy.value = true
-            val removed = downloadRepository.reconcileDownloads()
-            statusMessage.value = if (removed > 0) {
-                "Cleaned up $removed externally deleted file${if (removed == 1) "" else "s"}."
+            val result = downloadRepository.reconcileDownloads()
+            val parts = buildList {
+                if (result.adoptedExistingCount > 0) {
+                    add(
+                        "Found ${result.adoptedExistingCount} existing file${if (result.adoptedExistingCount == 1) "" else "s"}",
+                    )
+                }
+                if (result.deduplicatedCount > 0) {
+                    add(
+                        "removed ${result.deduplicatedCount} duplicate${if (result.deduplicatedCount == 1) "" else "s"}",
+                    )
+                }
+                if (result.removedMissingCount > 0) {
+                    add(
+                        "cleaned up ${result.removedMissingCount} missing entry${if (result.removedMissingCount == 1) "" else " entries"}",
+                    )
+                }
+            }
+            statusMessage.value = if (parts.isNotEmpty()) {
+                parts.joinToString(", ") + "."
             } else {
                 "All downloaded files verified in Music/music-player/."
             }

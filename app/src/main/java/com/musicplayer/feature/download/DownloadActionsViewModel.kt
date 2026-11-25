@@ -69,6 +69,27 @@ class DownloadActionsViewModel @Inject constructor(
     private val _feedbackMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val feedbackMessages: SharedFlow<String> = _feedbackMessages.asSharedFlow()
 
+    fun onReconcileDownloads() {
+        viewModelScope.launch {
+            val result = downloadRepository.reconcileDownloads()
+            val parts = buildList {
+                if (result.adoptedExistingCount > 0) {
+                    add(
+                        "Found ${result.adoptedExistingCount} existing offline song${if (result.adoptedExistingCount == 1) "" else "s"}",
+                    )
+                }
+                if (result.deduplicatedCount > 0) {
+                    add(
+                        "cleaned up ${result.deduplicatedCount} duplicate${if (result.deduplicatedCount == 1) "" else "s"}",
+                    )
+                }
+            }
+            if (parts.isNotEmpty()) {
+                _feedbackMessages.tryEmit(parts.joinToString(" • "))
+            }
+        }
+    }
+
     fun onToggleTrackDownload(track: Track) {
         val existing = downloadRecords.value[track.id]
         when (existing?.status) {

@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -48,7 +50,7 @@ class LibraryViewModelTest {
     }
 
     @Test
-    fun togglesSortOrderAndFilterSelection() = runTest {
+    fun togglesSortOrderAndFilterSelection() = runTest(testDispatcher) {
         val albums = listOf(
             Album("a1", "Zebra", null, "Artist A", 2020, 10, false, dateAdded = 200L, artworkUrl = null),
             Album("a2", "Alpha", null, "Artist B", 2021, 8, false, dateAdded = 100L, artworkUrl = null),
@@ -77,6 +79,9 @@ class LibraryViewModelTest {
             assertEquals(LibraryFilter.DOWNLOADED, downloaded.selectedFilter)
             cancelAndIgnoreRemainingEvents()
         }
+        // Let WhileSubscribed(5_000) upstream collector shut down cleanly before resetMain()
+        advanceTimeBy(6_000)
+        advanceUntilIdle()
     }
 
     private class FakeLibraryRepository(

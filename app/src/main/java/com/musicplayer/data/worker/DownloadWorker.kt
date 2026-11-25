@@ -23,9 +23,12 @@ import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.network.JellyfinClientProvider
+import com.musicplayer.data.local.AudioTagInspector
 import com.musicplayer.data.local.MediaStoreAudioWriter
 import com.musicplayer.data.local.MediaStorePathBuilder
+import com.musicplayer.data.local.OfflineFileVerifier
 import com.musicplayer.data.repository.AuthRepository
+import com.musicplayer.player.transcoder.AudioFormatSniffer
 import com.musicplayer.player.transcoder.HybridAudioDownloader
 import com.musicplayer.player.transcoder.HybridDownloadRequest
 import dagger.assisted.Assisted
@@ -89,6 +92,50 @@ class DownloadWorker @AssistedInject constructor(
         var lastProgressUpdateMs = 0L
 
         return try {
+            // Check if a verified copy of this track in the requested quality already exists in
+            // Music/music-player/ (e.g. from a previous install) to avoid re-downloading and `(1)` duplicates.
+            val expectedExt = if (quality.mode == DownloadQualityMode.MP3) {
+                "mp3"
+            } else {
+                AudioFormatSniffer.resolveExtension(track.container, null)
+            }
+            val expectedTarget = MediaStorePathBuilder.build(
+                artistName = track.artistName,
+                albumName = track.albumName,
+                title = track.title,
+                trackNumber = track.trackNumber,
+                discNumber = track.discNumber,
+                extension = expectedExt,
+            )
+            val preExisting = mediaStoreAudioWriter
+                .findExistingAtTarget(expectedTarget.relativePath, expectedTarget.displayName)
+                .firstOrNull { candidate ->
+                    OfflineFileVerifier.verifyFileMatchesTrack(candidate, track) &&
+                        OfflineFileVerifier.matchesRequestedQuality(candidate, quality)
+                }
+            if (preExisting != null) {
+                val detectedQuality = AudioTagInspector.inferQuality(
+                    inspectedTags = preExisting.inspectedTags,
+                    extension = preExisting.extension,
+                    sizeBytes = preExisting.sizeBytes,
+                    durationMs = preExisting.durationMs,
+                )
+                downloadDao.upsertRecord(
+                    DownloadRecordEntity(
+                        trackId = trackId,
+                        mediaStoreUri = preExisting.contentUri,
+                        relativePath = preExisting.relativePath + preExisting.displayName,
+                        status = DownloadStatus.COMPLETED,
+                        qualityMode = detectedQuality.mode,
+                        bitrateKbps = detectedQuality.bitrateKbps,
+                        fileSizeBytes = preExisting.sizeBytes,
+                        downloadedAt = System.currentTimeMillis(),
+                        errorMessage = null,
+                    ),
+                )
+                return Result.success()
+            }
+
             val existing = downloadDao.getByTrackId(trackId)
             downloadDao.upsertRecord(
                 (existing ?: DownloadRecordEntity(trackId = trackId)).copy(
