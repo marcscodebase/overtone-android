@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AudioOutputState
-import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
@@ -49,15 +48,6 @@ class PlayerViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
-        )
-
-    val lowQualityBitrateKbps: StateFlow<Int> = preferencesDataStore.userPreferences
-        .map { it.lowQualityBitrate.kbps }
-        .distinctUntilChanged()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = Mp3Bitrate.KBPS_128.kbps,
         )
 
     val autoMatchOutputQuality: StateFlow<Boolean> = preferencesDataStore.userPreferences

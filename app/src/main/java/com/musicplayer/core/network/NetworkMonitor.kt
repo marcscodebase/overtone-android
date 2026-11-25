@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import com.musicplayer.core.common.ApplicationScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +26,7 @@ data class NetworkState(
 
 interface NetworkMonitor {
     val networkState: StateFlow<NetworkState>
+    fun currentNetworkState(): NetworkState = networkState.value
 }
 
 @Singleton
@@ -38,43 +38,49 @@ class ConnectivityManagerNetworkMonitor @Inject constructor(
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    override val networkState: StateFlow<NetworkState> = callbackFlow {
-        fun currentState(): NetworkState {
-            val activeNetwork = connectivityManager.activeNetwork ?: return NetworkState(
-                isConnected = false,
-                isUnmetered = false,
-            )
-            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
-                ?: return NetworkState(isConnected = false, isUnmetered = false)
-            val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            val isUnmetered = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            return NetworkState(isConnected = hasInternet, isUnmetered = isUnmetered)
+    override fun currentNetworkState(): NetworkState {
+        val activeNetwork = connectivityManager.activeNetwork ?: return NetworkState(
+            isConnected = false,
+            isUnmetered = false,
+        )
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            ?: return NetworkState(isConnected = false, isUnmetered = false)
+        val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        if (!hasInternet) {
+            return NetworkState(isConnected = false, isUnmetered = false)
         }
+        // Check both ConnectivityManager.isActiveNetworkMetered (which inspects the underlying
+        // physical transport even behind a VPN such as Tailscale) and explicit TRANSPORT_CELLULAR
+        // (some 5G carriers mark cellular as NOT_METERED even though the user wants mobile-data caps).
+        val isCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+        val isMetered = connectivityManager.isActiveNetworkMetered || isCellular
+        return NetworkState(
+            isConnected = true,
+            isUnmetered = !isMetered,
+        )
+    }
 
-        trySend(currentState())
+    override val networkState: StateFlow<NetworkState> = callbackFlow {
+        trySend(currentNetworkState())
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                trySend(currentState())
+                trySend(currentNetworkState())
             }
 
             override fun onLost(network: Network) {
-                trySend(currentState())
+                trySend(currentNetworkState())
             }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities,
             ) {
-                trySend(currentState())
+                trySend(currentNetworkState())
             }
         }
 
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        connectivityManager.registerNetworkCallback(request, callback)
+        connectivityManager.registerDefaultNetworkCallback(callback)
 
         awaitClose {
             connectivityManager.unregisterNetworkCallback(callback)
@@ -83,7 +89,7 @@ class ConnectivityManagerNetworkMonitor @Inject constructor(
         .distinctUntilChanged()
         .stateIn(
             scope = appScope,
-            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
-            initialValue = NetworkState(isConnected = false, isUnmetered = false),
+            started = SharingStarted.Eagerly,
+            initialValue = currentNetworkState(),
         )
 }

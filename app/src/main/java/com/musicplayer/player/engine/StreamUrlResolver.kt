@@ -8,7 +8,6 @@ import com.musicplayer.core.model.AudioOutputQualityPolicy
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
-import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.JellyfinClientProvider
@@ -38,7 +37,7 @@ class StreamUrlResolver @Inject constructor(
         qualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO,
     ): ResolvedAudioSource? {
         val prefs = preferencesDataStore.userPreferences.first()
-        val netState = networkMonitor.networkState.value
+        val netState = networkMonitor.currentNetworkState()
         val isOffline = prefs.offlineModeEnabled || !netState.isConnected
 
         val localRecord = downloadDao.getByTrackId(track.id)
@@ -71,6 +70,8 @@ class StreamUrlResolver @Inject constructor(
             return null
         }
 
+        // Refresh audio routing right before resolving so the latest connected device is always used
+        audioOutputMonitor.refreshDevices()
         val api = clientProvider.getClient()
         val userId = authSessionStore.getSession()?.userId
         val outputDeviceCapKbps = AudioOutputQualityPolicy.resolveAutoBitrateCapKbps(
@@ -83,7 +84,6 @@ class StreamUrlResolver @Inject constructor(
             baseUrl = api.baseUrl,
             isMetered = netState.isMetered,
             cellularBitrateCap = prefs.cellularBitrateCap,
-            lowQualityBitrate = prefs.lowQualityBitrate,
             outputDeviceMaxBitrateKbps = outputDeviceCapKbps,
             qualitySelection = qualitySelection,
             isOffline = false,
@@ -98,7 +98,6 @@ class StreamUrlResolver @Inject constructor(
             baseUrl: String?,
             isMetered: Boolean = false,
             cellularBitrateCap: CellularBitrateCap = CellularBitrateCap.ORIGINAL,
-            lowQualityBitrate: Mp3Bitrate = Mp3Bitrate.KBPS_128,
             outputDeviceMaxBitrateKbps: Int? = null,
             qualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO,
             isOffline: Boolean = false,
@@ -116,7 +115,11 @@ class StreamUrlResolver @Inject constructor(
             val cleanBase = baseUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return null
             val targetTranscodeKbps: Int? = when (qualitySelection) {
                 StreamQualitySelection.HIGH -> null
-                StreamQualitySelection.LOW -> lowQualityBitrate.kbps
+                StreamQualitySelection.MP3_320,
+                StreamQualitySelection.MP3_256,
+                StreamQualitySelection.MP3_192,
+                StreamQualitySelection.MP3_128,
+                -> qualitySelection.explicitBitrateKbps
                 StreamQualitySelection.AUTO,
                 StreamQualitySelection.LOCAL,
                 -> {

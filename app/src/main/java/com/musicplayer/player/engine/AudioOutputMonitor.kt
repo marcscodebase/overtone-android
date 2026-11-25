@@ -2,6 +2,7 @@ package com.musicplayer.player.engine
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
@@ -91,6 +92,17 @@ class AudioOutputMonitor @Inject constructor(
             audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.toList().orEmpty()
         }.getOrDefault(emptyList())
 
+        // Android 13+ (API 33+) exposes the exact active output device for USAGE_MEDIA playback.
+        val activeMediaOutput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching {
+                audioManager
+                    ?.getAudioDevicesForAttributes(MUSIC_ATTRIBUTES)
+                    ?.firstNotNullOfOrNull(::mapAudioDeviceInfo)
+            }.getOrNull()
+        } else {
+            null
+        }
+
         val selectedRoute = runCatching {
             mediaRouter2?.systemController?.selectedRoutes?.firstOrNull()
         }.getOrNull()
@@ -101,7 +113,7 @@ class AudioOutputMonitor @Inject constructor(
 
         val candidates = mapped.ifEmpty {
             listOf(
-                AudioOutputDevice(
+                activeMediaOutput ?: AudioOutputDevice(
                     id = 0,
                     name = "Phone Speaker",
                     type = AudioOutputType.PHONE_SPEAKER,
@@ -110,7 +122,7 @@ class AudioOutputMonitor @Inject constructor(
             )
         }
 
-        val activeDevice = selectActiveDevice(candidates, selectedRoute)
+        val activeDevice = selectActiveDevice(candidates, activeMediaOutput, selectedRoute)
         val marked = candidates
             .map { it.copy(isActive = it.id == activeDevice.id && it.type == activeDevice.type) }
             .sortedByDescending { it.isActive }
@@ -152,8 +164,18 @@ class AudioOutputMonitor @Inject constructor(
 
     private fun selectActiveDevice(
         devices: List<AudioOutputDevice>,
+        activeMediaOutput: AudioOutputDevice?,
         selectedRoute: MediaRoute2Info?,
     ): AudioOutputDevice {
+        if (activeMediaOutput != null) {
+            devices.firstOrNull { it.id == activeMediaOutput.id }?.let { return it }
+            devices.firstOrNull {
+                it.type == activeMediaOutput.type && it.name.equals(activeMediaOutput.name, ignoreCase = true)
+            }?.let { return it }
+            devices.firstOrNull { it.type == activeMediaOutput.type }?.let { return it }
+            return activeMediaOutput
+        }
+
         if (selectedRoute != null) {
             val routeType = mapRouteType(selectedRoute.type)
             val routeName = selectedRoute.name.toString().trim()
@@ -252,5 +274,12 @@ class AudioOutputMonitor @Inject constructor(
             maxSampleRateHz = maxSampleRate,
             supportsHiResPcm = hiResPcm,
         )
+    }
+
+    companion object {
+        private val MUSIC_ATTRIBUTES: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
     }
 }

@@ -100,7 +100,6 @@ private fun AuthenticatedShell(
     val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
     val audioOutputState by playerViewModel.audioOutputState.collectAsStateWithLifecycle()
     val hiResBluetoothDevices by playerViewModel.hiResBluetoothDevices.collectAsStateWithLifecycle()
-    val lowQualityBitrateKbps by playerViewModel.lowQualityBitrateKbps.collectAsStateWithLifecycle()
     val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     val trackIdsInPlaylists by playlistPickerViewModel.trackIdsInAnyPlaylist.collectAsStateWithLifecycle()
@@ -324,7 +323,6 @@ private fun AuthenticatedShell(
             hiResBluetoothDevices = hiResBluetoothDevices,
             downloadRecord = downloadRecords[activeTrack.id],
             isTrackSaved = isActiveTrackSaved,
-            lowQualityBitrateKbps = lowQualityBitrateKbps,
             isOffline = isOffline,
             onDismiss = { showNowPlaying = false },
             onPlayingFromAlbumClick = navigateToAlbum,

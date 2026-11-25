@@ -26,11 +26,14 @@ enum class ReplayGainMode {
     }
 }
 
-enum class StreamQualitySelection {
+enum class StreamQualitySelection(val explicitBitrateKbps: Int? = null) {
     AUTO,
-    HIGH,
-    LOW,
     LOCAL,
+    HIGH,
+    MP3_320(320),
+    MP3_256(256),
+    MP3_192(192),
+    MP3_128(128),
 }
 
 data class UserPreferences(

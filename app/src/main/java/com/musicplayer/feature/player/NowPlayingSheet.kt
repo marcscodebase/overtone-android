@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.AutoMode
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DataSaverOn
@@ -100,7 +101,6 @@ fun NowPlayingSheet(
     hiResBluetoothDevices: Set<String>,
     downloadRecord: DownloadRecordEntity?,
     isTrackSaved: Boolean,
-    lowQualityBitrateKbps: Int,
     isOffline: Boolean,
     onDismiss: () -> Unit,
     onPlayingFromAlbumClick: (String) -> Unit,
@@ -192,21 +192,19 @@ fun NowPlayingSheet(
         }
 
         val qualityMenu = remember(
-            state.isLocalPlayback,
-            state.transcodedBitrateKbps,
+            state.streamQualitySelection,
+            qualityBadge,
             isTrackDownloaded,
             isOffline,
             highFormatLabel,
-            lowQualityBitrateKbps,
             localFormatLabel,
         ) {
             QualitySwitcherMenuBuilder.build(
-                isLocalPlayback = state.isLocalPlayback,
-                transcodedBitrateKbps = state.transcodedBitrateKbps,
+                currentSelection = state.streamQualitySelection,
+                currentActiveBadgeLabel = qualityBadge,
                 isTrackDownloaded = isTrackDownloaded,
                 isOffline = isOffline,
                 highQualitySubtitle = highFormatLabel,
-                lowQualityBitrateKbps = lowQualityBitrateKbps,
                 localQualitySubtitle = localFormatLabel,
             )
         }
@@ -332,62 +330,97 @@ fun NowPlayingSheet(
                     expanded = qualityMenuExpanded,
                     onDismissRequest = { qualityMenuExpanded = false },
                 ) {
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(
-                                    text = qualityMenu.active.title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
+                    qualityMenu.autoOption?.let { autoOpt ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = autoOpt.title,
+                                        style = if (autoOpt.isSelected) {
+                                            MaterialTheme.typography.labelLarge
+                                        } else {
+                                            MaterialTheme.typography.bodyLarge
+                                        },
+                                        color = if (autoOpt.isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                    Text(
+                                        text = autoOpt.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (autoOpt.isSelected) Icons.Rounded.Check else Icons.Rounded.AutoMode,
+                                    contentDescription = null,
+                                    tint = if (autoOpt.isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 )
-                                Text(
-                                    text = qualityMenu.active.subtitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        },
-                        onClick = { qualityMenuExpanded = false },
-                    )
-                    if (qualityMenu.alternatives.isNotEmpty()) {
-                        HorizontalDivider()
-                        qualityMenu.alternatives.forEach { option ->
-                            val icon = when (option.selection) {
-                                StreamQualitySelection.HIGH -> Icons.Rounded.HighQuality
-                                StreamQualitySelection.LOW -> Icons.Rounded.DataSaverOn
-                                StreamQualitySelection.LOCAL -> Icons.Rounded.DownloadDone
-                                StreamQualitySelection.AUTO -> Icons.Rounded.HighQuality
-                            }
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            text = option.title,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                        )
-                                        Text(
-                                            text = option.subtitle,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(imageVector = icon, contentDescription = null)
-                                },
-                                onClick = {
-                                    qualityMenuExpanded = false
-                                    onSelectStreamQuality(option.selection)
-                                },
-                            )
+                            },
+                            onClick = {
+                                qualityMenuExpanded = false
+                                onSelectStreamQuality(autoOpt.selection)
+                            },
+                        )
+                        if (qualityMenu.options.isNotEmpty()) {
+                            HorizontalDivider()
                         }
+                    }
+
+                    qualityMenu.options.forEach { option ->
+                        val icon = when {
+                            option.isSelected -> Icons.Rounded.Check
+                            option.selection == StreamQualitySelection.LOCAL -> Icons.Rounded.DownloadDone
+                            option.selection == StreamQualitySelection.HIGH -> Icons.Rounded.HighQuality
+                            else -> Icons.Rounded.DataSaverOn
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = option.title,
+                                        style = if (option.isSelected) {
+                                            MaterialTheme.typography.labelLarge
+                                        } else {
+                                            MaterialTheme.typography.bodyLarge
+                                        },
+                                        color = if (option.isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                    Text(
+                                        text = option.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (option.isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            },
+                            onClick = {
+                                qualityMenuExpanded = false
+                                onSelectStreamQuality(option.selection)
+                            },
+                        )
                     }
                 }
             }

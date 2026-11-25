@@ -53,7 +53,6 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
-import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.feature.download.downloadQualityPresets
 import com.musicplayer.feature.download.formatDownloadQualityLabel
@@ -73,7 +72,6 @@ fun SettingsRoute(
         onOpenStorageManager = onOpenStorageManager,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
-        onSelectLowQualityBitrate = viewModel::onSelectLowQualityBitrate,
         onToggleAutoMatchOutputQuality = viewModel::onToggleAutoMatchOutputQuality,
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
         onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
@@ -94,7 +92,6 @@ fun SettingsScreen(
     onOpenStorageManager: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
-    onSelectLowQualityBitrate: (Mp3Bitrate) -> Unit,
     onToggleAutoMatchOutputQuality: (Boolean) -> Unit,
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
     onToggleWifiOnlyDownloads: (Boolean) -> Unit,
@@ -107,7 +104,6 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var showCellularDialog by rememberSaveable { mutableStateOf(false) }
-    var showLowQualityDialog by rememberSaveable { mutableStateOf(false) }
     var showDownloadQualityDialog by rememberSaveable { mutableStateOf(false) }
     var showReplayGainDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
@@ -209,24 +205,6 @@ fun SettingsScreen(
                         )
                         Text(
                             text = formatCellularCapLabel(state.preferences.cellularBitrateCap),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    HorizontalDivider()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showLowQualityDialog = true }
-                            .padding(16.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_low_quality_bitrate),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "${state.preferences.lowQualityBitrate.kbps} kbps (MP3)",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -594,46 +572,6 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showDownloadQualityDialog = false }) {
-                    Text(stringResource(R.string.action_close))
-                }
-            },
-        )
-    }
-    if (showLowQualityDialog) {
-        AlertDialog(
-            onDismissRequest = { showLowQualityDialog = false },
-            title = { Text(stringResource(R.string.settings_low_quality_bitrate)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Mp3Bitrate.entries.forEach { bitrate ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectLowQualityBitrate(bitrate)
-                                    showLowQualityDialog = false
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = state.preferences.lowQualityBitrate == bitrate,
-                                onClick = {
-                                    onSelectLowQualityBitrate(bitrate)
-                                    showLowQualityDialog = false
-                                },
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "${bitrate.kbps} kbps (MP3)",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLowQualityDialog = false }) {
                     Text(stringResource(R.string.action_close))
                 }
             },

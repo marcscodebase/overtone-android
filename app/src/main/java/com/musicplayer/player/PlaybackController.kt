@@ -14,12 +14,12 @@ import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.ApplicationScope
 import com.musicplayer.core.common.Dispatcher
 import com.musicplayer.core.datastore.UserPreferencesDataStore
-import com.musicplayer.core.model.AudioOutputQualityPolicy
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.NetworkMonitor
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.engine.AudioOutputMonitor
+import com.musicplayer.player.engine.ResolvedAudioSource
 import com.musicplayer.player.engine.StreamUrlResolver
 import com.musicplayer.player.queue.QueueOrderHelper
 import com.musicplayer.player.queue.QueuePersistenceManager
@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
@@ -93,6 +94,7 @@ class MediaControllerPlaybackController @Inject constructor(
     override val feedbackMessages: SharedFlow<String> = _feedbackMessages.asSharedFlow()
 
     private val connectMutex = Mutex()
+    private val qualityUpdateMutex = Mutex()
     private var controller: MediaController? = null
     private var positionTickerJob: Job? = null
     private var hasRestoredQueue = false
@@ -104,7 +106,7 @@ class MediaControllerPlaybackController @Inject constructor(
     private var lastProgressReportTimeMs: Long = 0L
     private var sessionQualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO
 
-    private val localIds = mutableSetOf<String>()
+    private val resolvedSourcesByTrackId = mutableMapOf<String, ResolvedAudioSource>()
 
     init {
         appScope.launch {
@@ -114,27 +116,44 @@ class MediaControllerPlaybackController @Inject constructor(
                 }
             }
         }
+        // Whenever the user changes any quality-affecting setting (Mobile Data cap, Match Output
+        // Device, or Bluetooth Hi-Res override), immediately sync playback back to Auto so the
+        // player stream and displayed quality badge always reflect the new setting.
+        appScope.launch {
+            preferencesDataStore.userPreferences
+                .map { prefs ->
+                    Triple(
+                        prefs.cellularBitrateCap,
+                        prefs.autoMatchOutputQuality,
+                        prefs.hiResBluetoothDevices,
+                    )
+                }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    applyStreamQuality(
+                        selection = StreamQualitySelection.AUTO,
+                        showFeedback = false,
+                    )
+                }
+        }
+        // Whenever the active network (Wi-Fi <-> Mobile Data) or audio output device changes,
+        // automatically re-sync the stream when in Auto quality mode.
         appScope.launch {
             combine(
+                networkMonitor.networkState,
                 audioOutputMonitor.outputState,
-                preferencesDataStore.userPreferences,
-            ) { output, prefs ->
-                AudioOutputQualityPolicy.resolveAutoBitrateCapKbps(
-                    autoMatchEnabled = prefs.autoMatchOutputQuality,
-                    activeDevice = output.activeDevice,
-                    hiResBluetoothDevices = prefs.hiResBluetoothDevices,
-                )
+            ) { net, output ->
+                Triple(net.isConnected, net.isMetered, output.activeDevice.preferenceKey)
             }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
-                    val state = _playbackState.value
-                    if (sessionQualitySelection == StreamQualitySelection.AUTO &&
-                        state.queue.isNotEmpty() &&
-                        !state.isLocalPlayback &&
-                        !needsPrepareOnPlay
-                    ) {
-                        setStreamQuality(StreamQualitySelection.AUTO)
+                    if (sessionQualitySelection == StreamQualitySelection.AUTO) {
+                        applyStreamQuality(
+                            selection = StreamQualitySelection.AUTO,
+                            showFeedback = false,
+                        )
                     }
                 }
         }
@@ -213,6 +232,10 @@ class MediaControllerPlaybackController @Inject constructor(
             needsPrepareOnPlay = true
 
             val activeTrack = snapshot.tracks.getOrNull(snapshot.currentIndex)
+            val activeResolved = activeTrack?.let { streamUrlResolver.resolve(it, sessionQualitySelection) }
+            if (activeTrack != null && activeResolved != null) {
+                resolvedSourcesByTrackId[activeTrack.id] = activeResolved
+            }
             _playbackState.update {
                 it.copy(
                     queue = snapshot.tracks,
@@ -220,7 +243,9 @@ class MediaControllerPlaybackController @Inject constructor(
                     currentTrack = activeTrack,
                     positionMs = snapshot.positionMs,
                     durationMs = activeTrack?.durationMs ?: 0L,
-                    isLocalPlayback = activeTrack?.isDownloaded == true,
+                    isLocalPlayback = activeResolved?.isLocal ?: (activeTrack?.isDownloaded == true),
+                    transcodedBitrateKbps = activeResolved?.transcodedBitrateKbps,
+                    streamQualitySelection = sessionQualitySelection,
                 )
             }
         }
@@ -234,12 +259,12 @@ class MediaControllerPlaybackController @Inject constructor(
 
             val mediaItems = mutableListOf<MediaItem>()
             val resolvedTracks = mutableListOf<Track>()
-            localIds.clear()
+            val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
 
             tracks.forEach { track ->
                 val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
-                if (resolved.isLocal) localIds += track.id
+                newResolvedSources[track.id] = resolved
                 mediaItems += track.toMediaItem(
                     uri = resolved.uri,
                     isLocal = resolved.isLocal,
@@ -255,7 +280,12 @@ class MediaControllerPlaybackController @Inject constructor(
                 return@launch
             }
 
+            resolvedSourcesByTrackId.clear()
+            resolvedSourcesByTrackId.putAll(newResolvedSources)
+
             val safeIndex = startIndex.coerceIn(0, mediaItems.lastIndex)
+            val activeTrack = resolvedTracks[safeIndex]
+            val activeResolved = newResolvedSources[activeTrack.id]
 
             mediaController.shuffleModeEnabled = shuffle
             mediaController.setMediaItems(mediaItems, safeIndex, 0L)
@@ -267,12 +297,14 @@ class MediaControllerPlaybackController @Inject constructor(
                     queue = resolvedTracks,
                     currentIndex = safeIndex,
                     manualQueueCount = 0,
-                    queueContextLabel = resolvedTracks[safeIndex].albumName.takeIf { name -> name.isNotBlank() },
-                    currentTrack = resolvedTracks[safeIndex],
-                    isLocalPlayback = resolvedTracks[safeIndex].id in localIds,
+                    queueContextLabel = activeTrack.albumName.takeIf { name -> name.isNotBlank() },
+                    currentTrack = activeTrack,
+                    isLocalPlayback = activeResolved?.isLocal == true,
+                    transcodedBitrateKbps = activeResolved?.transcodedBitrateKbps,
+                    streamQualitySelection = sessionQualitySelection,
                     shuffleEnabled = shuffle,
                     positionMs = 0L,
-                    durationMs = resolvedTracks[safeIndex].durationMs,
+                    durationMs = activeTrack.durationMs,
                     errorMessage = null,
                 )
             }
@@ -293,7 +325,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
             val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@launch
-            if (resolved.isLocal) localIds += track.id
+            resolvedSourcesByTrackId[track.id] = resolved
 
             val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
             val mutated = QueueOrderHelper.insertNext(
@@ -347,7 +379,7 @@ class MediaControllerPlaybackController @Inject constructor(
             tracks.forEach { track ->
                 val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
                 resolvedTracks += track
-                if (resolved.isLocal) localIds += track.id
+                resolvedSourcesByTrackId[track.id] = resolved
                 mediaItems += track.toMediaItem(
                     uri = resolved.uri,
                     isLocal = resolved.isLocal,
@@ -631,31 +663,52 @@ class MediaControllerPlaybackController @Inject constructor(
     }
 
     override fun setStreamQuality(selection: StreamQualitySelection) {
-        sessionQualitySelection = selection
-        _playbackState.update { it.copy(streamQualitySelection = selection) }
-
         appScope.launch(mainDispatcher) {
+            applyStreamQuality(selection = selection, showFeedback = true)
+        }
+    }
+
+    private suspend fun applyStreamQuality(
+        selection: StreamQualitySelection,
+        showFeedback: Boolean,
+    ) = withContext(mainDispatcher) {
+        qualityUpdateMutex.withLock {
+            sessionQualitySelection = selection
+            _playbackState.update { it.copy(streamQualitySelection = selection) }
+
             val state = _playbackState.value
             val queue = state.queue
             val currentIndex = state.currentIndex
-            if (queue.isEmpty() || currentIndex !in queue.indices) return@launch
+            if (queue.isEmpty() || currentIndex !in queue.indices) return@withLock
 
-            val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
-                hydrateControllerFromState(mediaController, autoPlay = false)
-                return@launch
+                val activeTrack = queue[currentIndex]
+                val activeResolved = streamUrlResolver.resolve(activeTrack, selection)
+                    ?: streamUrlResolver.resolve(activeTrack, StreamQualitySelection.AUTO)
+                if (activeResolved != null) {
+                    resolvedSourcesByTrackId[activeTrack.id] = activeResolved
+                    _playbackState.update {
+                        it.copy(
+                            isLocalPlayback = activeResolved.isLocal,
+                            transcodedBitrateKbps = activeResolved.transcodedBitrateKbps,
+                            streamQualitySelection = selection,
+                        )
+                    }
+                }
+                return@withLock
             }
 
-            val savedPositionMs = mediaController.currentPosition.coerceAtLeast(0L)
-            val wasPlaying = mediaController.playWhenReady
+            val mediaController = ensureConnected() ?: return@withLock
+            val activeTrack = queue[currentIndex]
+            val previousActiveResolved = resolvedSourcesByTrackId[activeTrack.id]
 
             val newItems = mutableListOf<MediaItem>()
-            localIds.clear()
+            val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
             for (track in queue) {
                 val resolved = streamUrlResolver.resolve(track, selection)
                     ?: streamUrlResolver.resolve(track, StreamQualitySelection.AUTO)
-                    ?: return@launch
-                if (resolved.isLocal) localIds += track.id
+                    ?: return@withLock
+                newResolvedSources[track.id] = resolved
                 newItems += track.toMediaItem(
                     uri = resolved.uri,
                     isLocal = resolved.isLocal,
@@ -664,9 +717,28 @@ class MediaControllerPlaybackController @Inject constructor(
                 )
             }
 
-            if (currentIndex !in newItems.indices) return@launch
+            if (currentIndex !in newItems.indices) return@withLock
+            val activeResolved = newResolvedSources[activeTrack.id] ?: return@withLock
 
-            // Seamlessly swap media items while preserving the exact playback position & play state
+            resolvedSourcesByTrackId.clear()
+            resolvedSourcesByTrackId.putAll(newResolvedSources)
+
+            // Skip reloading ExoPlayer during automatic background syncs if the active stream didn't change
+            if (!showFeedback && previousActiveResolved == activeResolved) {
+                _playbackState.update {
+                    it.copy(
+                        isLocalPlayback = activeResolved.isLocal,
+                        transcodedBitrateKbps = activeResolved.transcodedBitrateKbps,
+                        streamQualitySelection = selection,
+                    )
+                }
+                return@withLock
+            }
+
+            val savedPositionMs = mediaController.currentPosition.coerceAtLeast(0L)
+            val wasPlaying = mediaController.playWhenReady
+
+            // Seamlessly swap media items while preserving exact playback position & play state
             mediaController.setMediaItems(newItems, currentIndex, savedPositionMs)
             mediaController.prepare()
             if (wasPlaying) {
@@ -674,17 +746,33 @@ class MediaControllerPlaybackController @Inject constructor(
             } else {
                 mediaController.pause()
             }
+
+            _playbackState.update {
+                it.copy(
+                    isLocalPlayback = activeResolved.isLocal,
+                    transcodedBitrateKbps = activeResolved.transcodedBitrateKbps,
+                    streamQualitySelection = selection,
+                    errorMessage = null,
+                )
+            }
             syncFromPlayer()
 
-            val activeExtras = newItems[currentIndex].mediaMetadata.extras
-            val switchedLocal = activeExtras?.getBoolean(EXTRA_IS_LOCAL) == true
-            val switchedBitrate = activeExtras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
-            val feedback = when {
-                switchedLocal -> "Switched to Downloaded (Local)"
-                switchedBitrate != null -> "Switched to Low Quality ($switchedBitrate kbps MP3)"
-                else -> "Switched to High Quality (Lossless)"
+            if (showFeedback) {
+                val resolvedLabel = when {
+                    activeResolved.isLocal && activeResolved.transcodedBitrateKbps != null ->
+                        "MP3 • ${activeResolved.transcodedBitrateKbps} kbps (Local)"
+                    activeResolved.isLocal -> "Downloaded (Local)"
+                    activeResolved.transcodedBitrateKbps != null ->
+                        "MP3 • ${activeResolved.transcodedBitrateKbps} kbps"
+                    else -> "Original (Lossless)"
+                }
+                val feedback = if (selection == StreamQualitySelection.AUTO) {
+                    "Auto quality ($resolvedLabel)"
+                } else {
+                    "Switched to $resolvedLabel"
+                }
+                _feedbackMessages.tryEmit(feedback)
             }
-            _feedbackMessages.tryEmit(feedback)
         }
     }
 
@@ -695,7 +783,7 @@ class MediaControllerPlaybackController @Inject constructor(
             needsPrepareOnPlay = false
             controller?.stop()
             controller?.clearMediaItems()
-            localIds.clear()
+            resolvedSourcesByTrackId.clear()
             _playbackState.value = PlaybackState()
             queuePersistenceManager.clear()
         }
@@ -711,10 +799,10 @@ class MediaControllerPlaybackController @Inject constructor(
     ) {
         val state = _playbackState.value
         val items = mutableListOf<MediaItem>()
-        localIds.clear()
+        val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
         state.queue.forEach { track ->
             val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
-            if (resolved.isLocal) localIds += track.id
+            newResolvedSources[track.id] = resolved
             items += track.toMediaItem(
                 uri = resolved.uri,
                 isLocal = resolved.isLocal,
@@ -725,11 +813,22 @@ class MediaControllerPlaybackController @Inject constructor(
         needsPrepareOnPlay = false
         if (items.isEmpty()) return
 
+        resolvedSourcesByTrackId.clear()
+        resolvedSourcesByTrackId.putAll(newResolvedSources)
+
         val safeIndex = pendingRestoreIndex.coerceIn(0, items.lastIndex)
+        val activeResolved = state.queue.getOrNull(safeIndex)?.id?.let { newResolvedSources[it] }
         mediaController.setMediaItems(items, safeIndex, pendingRestorePositionMs)
         mediaController.prepare()
         if (autoPlay) {
             mediaController.play()
+        }
+        _playbackState.update {
+            it.copy(
+                isLocalPlayback = activeResolved?.isLocal ?: it.isLocalPlayback,
+                transcodedBitrateKbps = activeResolved?.transcodedBitrateKbps,
+                streamQualitySelection = sessionQualitySelection,
+            )
         }
         syncFromPlayer()
     }
@@ -767,9 +866,14 @@ class MediaControllerPlaybackController @Inject constructor(
             Player.REPEAT_MODE_ONE -> RepeatMode.ONE
             else -> RepeatMode.OFF
         }
+        val resolved = activeTrack?.id?.let { resolvedSourcesByTrackId[it] }
         val extras = player.currentMediaItem?.mediaMetadata?.extras
-        val isLocal = extras?.getBoolean(EXTRA_IS_LOCAL) ?: (activeTrack?.id in localIds)
-        val transcodedBitrate = extras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
+        val isLocal = resolved?.isLocal ?: extras?.getBoolean(EXTRA_IS_LOCAL) ?: currentState.isLocalPlayback
+        val transcodedBitrate = if (resolved != null) {
+            resolved.transcodedBitrateKbps
+        } else {
+            extras?.getInt(EXTRA_TRANSCODED_BITRATE_KBPS, 0)?.takeIf { it > 0 }
+        }
 
         val clampedNewIndex = if (currentState.queue.isEmpty()) -1 else index.coerceIn(0, currentState.queue.lastIndex)
         val adjustedManualCount = if (clampedNewIndex != currentState.currentIndex && currentState.currentIndex >= 0) {
