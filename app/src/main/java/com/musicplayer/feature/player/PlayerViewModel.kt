@@ -121,6 +121,7 @@ class PlayerViewModel @Inject constructor(
     fun onMoveQueueItem(fromIndex: Int, toIndex: Int) = playbackController.moveQueueItem(fromIndex, toIndex)
     fun onClearManualQueue() = playbackController.clearManualQueue()
     fun onClearUpNext() = playbackController.clearUpNext()
+    fun onReshuffleQueue() = playbackController.reshuffleQueue()
     fun onClearError() = playbackController.clearError()
 
     fun onRefreshAudioOutputs() = audioOutputMonitor.refreshDevices()

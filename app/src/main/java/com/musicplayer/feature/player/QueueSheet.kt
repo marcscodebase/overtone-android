@@ -30,10 +30,13 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -85,6 +88,7 @@ fun QueueSheet(
     onMoveItem: (fromIndex: Int, toIndex: Int) -> Unit,
     onClearManualQueue: () -> Unit,
     onClearUpNext: () -> Unit,
+    onReshuffleQueue: () -> Unit,
     onPlayRecentTrack: (List<Track>, Int) -> Unit,
     onAddToQueue: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
@@ -171,6 +175,25 @@ fun QueueSheet(
                     },
                 )
                 Spacer(modifier = Modifier.weight(1f))
+                if (currentPage == 0 && state.shuffleEnabled && (manualTracks.size + contextTracks.size) >= 2) {
+                    FilledTonalIconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onReshuffleQueue()
+                        },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                        modifier = Modifier.size(38.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shuffle,
+                            contentDescription = stringResource(R.string.queue_reshuffle),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
                 if (currentPage == 0 && hasAnyUpNext) {
                     TextButton(onClick = onClearUpNext) {
                         Text(stringResource(R.string.queue_clear_all))

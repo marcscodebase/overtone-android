@@ -2,7 +2,9 @@ package com.musicplayer.player.queue
 
 import com.musicplayer.core.model.Track
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
+import kotlin.random.Random
 
 class QueueOrderHelperTest {
 
@@ -103,5 +105,64 @@ class QueueOrderHelperTest {
         val demoted = QueueOrderHelper.move(promoted.queue, currentIndex = 0, fromIndex = 3, toIndex = 4, manualQueueCount = 3)
         assertEquals(listOf("now", "c1", "m1", "c2", "m2"), demoted.queue.map { it.id })
         assertEquals(2, demoted.manualQueueCount)
+    }
+
+    @Test
+    fun shuffleForPlaybackAvoidsRepeatingFirstTrackOnReshuffle() {
+        val tracks = (1..10).map { track("t$it") }
+        val firstShuffle = QueueOrderHelper.shuffleForPlayback(
+            tracks = tracks,
+            avoidFirstTrackId = "t1",
+            random = Random(42),
+        )
+        assertEquals(tracks.map { it.id }.toSet(), firstShuffle.map { it.id }.toSet())
+        assertNotEquals("t1", firstShuffle.first().id)
+
+        val secondShuffle = QueueOrderHelper.shuffleForPlayback(
+            tracks = tracks,
+            avoidFirstTrackId = firstShuffle.first().id,
+            random = Random(42),
+        )
+        assertNotEquals(firstShuffle.first().id, secondShuffle.first().id)
+    }
+
+    @Test
+    fun reshuffleUpcomingPreservesCurrentTrackAndManualQueueAndChangesOrder() {
+        val queue = listOf(
+            track("history"),
+            track("now"),
+            track("m1"),
+            track("c1"),
+            track("c2"),
+            track("c3"),
+            track("c4"),
+        )
+        val result = QueueOrderHelper.reshuffleUpcoming(
+            queue = queue,
+            currentIndex = 1,
+            manualQueueCount = 1,
+            random = Random(7),
+        )
+        assertEquals(1, result.currentIndex)
+        assertEquals(1, result.manualQueueCount)
+        assertEquals(listOf("history", "now", "m1"), result.queue.take(3).map { it.id })
+        val newContextIds = result.queue.drop(3).map { it.id }
+        assertEquals(setOf("c1", "c2", "c3", "c4"), newContextIds.toSet())
+        assertNotEquals(listOf("c1", "c2", "c3", "c4"), newContextIds)
+    }
+
+    @Test
+    fun restoreContextOrderReturnsUpcomingContextToOriginalOrder() {
+        val originalIds = listOf("now", "c1", "c2", "c3", "c4")
+        val shuffledQueue = listOf(track("now"), track("m1"), track("c3"), track("c1"), track("c4"), track("c2"))
+
+        val restored = QueueOrderHelper.restoreContextOrder(
+            queue = shuffledQueue,
+            currentIndex = 0,
+            manualQueueCount = 1,
+            originalContextTrackIds = originalIds,
+        )
+        assertEquals(listOf("now", "m1", "c1", "c2", "c3", "c4"), restored.queue.map { it.id })
+        assertEquals(1, restored.manualQueueCount)
     }
 }

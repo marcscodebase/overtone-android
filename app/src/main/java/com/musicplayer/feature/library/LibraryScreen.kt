@@ -138,7 +138,7 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp),
+                        contentPadding = PaddingValues(bottom = 210.dp),
                     ) {
                         itemsIndexed(
                             items = state.downloadedTracks,
@@ -172,7 +172,7 @@ fun LibraryContent(
                     val activeFolder = state.activeFolderGroup
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp),
+                        contentPadding = PaddingValues(bottom = 210.dp),
                     ) {
                         if (activeFolder != null) {
                             item(key = "folder_header_${activeFolder.name}") {
@@ -235,7 +235,7 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp),
+                        contentPadding = PaddingValues(bottom = 210.dp),
                     ) {
                         items(
                             items = state.albums,
@@ -269,7 +269,7 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp),
+                        contentPadding = PaddingValues(bottom = 210.dp),
                     ) {
                         items(
                             items = state.artists,
@@ -298,7 +298,7 @@ fun LibraryContent(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp),
+                        contentPadding = PaddingValues(bottom = 210.dp),
                     ) {
                         itemsIndexed(
                             items = state.tracks,

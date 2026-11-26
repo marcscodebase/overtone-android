@@ -205,4 +205,6 @@
     <string name="artist_unknown_year">Unknown year</string>
     <string name="artist_liked_songs_empty_title">No liked songs yet</string>
     <string name="artist_liked_songs_empty_subtitle">Favorite songs by this artist will appear here.</string>
+    <string name="queue_reshuffle">Reshuffle queue</string>
+    <string name="library_shuffle_all">Shuffle library</string>
 </resources>

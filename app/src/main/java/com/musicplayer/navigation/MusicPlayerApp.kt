@@ -448,6 +448,7 @@ private fun AuthenticatedShell(
             onMoveItem = playerViewModel::onMoveQueueItem,
             onClearManualQueue = playerViewModel::onClearManualQueue,
             onClearUpNext = playerViewModel::onClearUpNext,
+            onReshuffleQueue = playerViewModel::onReshuffleQueue,
             onPlayRecentTrack = playerViewModel::onPlayRecentTrack,
             onAddToQueue = playerViewModel::onAddToQueue,
             onAddToPlaylist = { track ->
