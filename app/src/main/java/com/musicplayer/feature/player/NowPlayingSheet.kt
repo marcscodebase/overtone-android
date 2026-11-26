@@ -1,6 +1,9 @@
 package com.musicplayer.feature.player
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -62,11 +65,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -91,6 +97,8 @@ import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
+
+private const val LIVE_LYRIC_TRANSITION_MS = 220
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,6 +162,39 @@ fun NowPlayingSheet(
             sliderPosition
         } else {
             state.progressFraction
+        }
+
+        // Frame-accurate position interpolation anchored to ExoPlayer's position updates so
+        // the live lyric transition starts exactly LIVE_LYRIC_TRANSITION_MS early and finishes
+        // right on the lyric timestamp.
+        var anchorPlaybackMs by remember(track.id) { mutableLongStateOf(state.positionMs) }
+        var anchorElapsedMs by remember(track.id) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+        LaunchedEffect(track.id, state.positionMs, state.isPlaying, state.isBuffering) {
+            anchorPlaybackMs = state.positionMs
+            anchorElapsedMs = SystemClock.elapsedRealtime()
+        }
+        var livePositionMs by remember(track.id) { mutableLongStateOf(state.positionMs) }
+        LaunchedEffect(track.id, state.isPlaying, state.isBuffering, isDraggingSlider, syncedLyrics != null) {
+            if (syncedLyrics == null || isDraggingSlider || !state.isPlaying || state.isBuffering) {
+                livePositionMs = state.positionMs
+                return@LaunchedEffect
+            }
+            while (true) {
+                withFrameMillis {
+                    val elapsed = (SystemClock.elapsedRealtime() - anchorElapsedMs).coerceAtLeast(0L)
+                    livePositionMs = (anchorPlaybackMs + elapsed).coerceIn(0L, durationMs)
+                }
+            }
+        }
+        val lyricPositionMs = when {
+            isDraggingSlider -> displayedPositionMs
+            state.isPlaying && !state.isBuffering && syncedLyrics != null -> livePositionMs
+            else -> state.positionMs
+        }
+        val lyricLeadTimeMs = if (state.isPlaying && !state.isBuffering && !isDraggingSlider) {
+            LIVE_LYRIC_TRANSITION_MS.toLong()
+        } else {
+            0L
         }
 
         val highFormatLabel = Formatters.formatAudioQualityBadge(
@@ -268,9 +309,12 @@ fun NowPlayingSheet(
             )
 
             if (syncedLyrics != null) {
-                val activeIndex = LyricsParser.findActiveLineIndex(syncedLyrics.lines, displayedPositionMs)
-                val activeLineText = syncedLyrics.lines.getOrNull(activeIndex)?.text
-                    ?: syncedLyrics.lines.firstOrNull()?.text.orEmpty()
+                val activeIndex = LyricsParser.findActiveLineIndex(
+                    lines = syncedLyrics.lines,
+                    positionMs = lyricPositionMs,
+                    leadTimeMs = lyricLeadTimeMs,
+                )
+                val targetLineIndex = activeIndex.coerceAtLeast(0)
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
@@ -286,13 +330,38 @@ fun NowPlayingSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         AnimatedContent(
-                            targetState = activeLineText,
+                            targetState = targetLineIndex,
                             transitionSpec = {
-                                (fadeIn() + slideInVertically { it / 3 }) togetherWith
-                                    (fadeOut() + slideOutVertically { -it / 3 })
+                                val movingForward = targetState >= initialState
+                                val fadeInSpec = fadeIn(
+                                    animationSpec = tween(
+                                        durationMillis = LIVE_LYRIC_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                )
+                                val fadeOutSpec = fadeOut(
+                                    animationSpec = tween(
+                                        durationMillis = LIVE_LYRIC_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                )
+                                val slideInSpec = slideInVertically(
+                                    animationSpec = tween(
+                                        durationMillis = LIVE_LYRIC_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                ) { height -> if (movingForward) height / 3 else -height / 3 }
+                                val slideOutSpec = slideOutVertically(
+                                    animationSpec = tween(
+                                        durationMillis = LIVE_LYRIC_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                ) { height -> if (movingForward) -height / 3 else height / 3 }
+                                (fadeInSpec + slideInSpec) togetherWith (fadeOutSpec + slideOutSpec)
                             },
                             label = "live_lyric_line",
-                        ) { line ->
+                        ) { lineIndex ->
+                            val line = syncedLyrics.lines.getOrNull(lineIndex)?.text.orEmpty()
                             Text(
                                 text = line,
                                 style = MaterialTheme.typography.titleSmall,

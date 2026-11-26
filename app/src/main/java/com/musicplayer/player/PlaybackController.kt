@@ -1037,7 +1037,7 @@ class MediaControllerPlaybackController @Inject constructor(
     companion object {
         private const val EXTRA_IS_LOCAL = "com.musicplayer.extra.IS_LOCAL"
         private const val EXTRA_TRANSCODED_BITRATE_KBPS = "com.musicplayer.extra.TRANSCODED_BITRATE_KBPS"
-        private const val POSITION_POLL_INTERVAL_MS = 500L
+        private const val POSITION_POLL_INTERVAL_MS = 250L
         private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
     }

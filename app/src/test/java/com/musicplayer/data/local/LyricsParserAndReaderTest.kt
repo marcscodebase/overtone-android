@@ -45,6 +45,27 @@ class LyricsParserAndReaderTest {
     }
 
     @Test
+    fun `leadTimeMs starts transition early so animation completes on lyric timestamp`() {
+        val raw = """
+            [00:10.00]First line
+            [00:15.00]Second line
+            [00:20.00]Third line
+        """.trimIndent()
+
+        val parsed = LyricsParser.parse(raw, LyricsSource.EMBEDDED)!!
+        val leadMs = 220L
+
+        // Just before lead window of line 2 (15_000 - 220 = 14_780) -> still line 0
+        assertEquals(0, LyricsParser.findActiveLineIndex(parsed.lines, 14_779L, leadTimeMs = leadMs))
+        // Exactly leadMs before line 2 -> switches to line 1 so 220ms animation ends at 15_000
+        assertEquals(1, LyricsParser.findActiveLineIndex(parsed.lines, 14_780L, leadTimeMs = leadMs))
+        // Exactly at timestamp -> still line 1
+        assertEquals(1, LyricsParser.findActiveLineIndex(parsed.lines, 15_000L, leadTimeMs = leadMs))
+        // Lead window of line 3 (20_000 - 220 = 19_780) -> switches to line 2
+        assertEquals(2, LyricsParser.findActiveLineIndex(parsed.lines, 19_780L, leadTimeMs = leadMs))
+    }
+
+    @Test
     fun `maps jellyfin lyrics dto ticks to milliseconds`() {
         val dto = JellyfinLyricsResponseDto(
             lyrics = listOf(

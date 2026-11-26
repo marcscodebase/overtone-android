@@ -72,12 +72,17 @@ object LyricsParser {
         }
     }
 
-    fun findActiveLineIndex(lines: List<LyricLine>, positionMs: Long): Int {
+    fun findActiveLineIndex(
+        lines: List<LyricLine>,
+        positionMs: Long,
+        leadTimeMs: Long = 0L,
+    ): Int {
         if (lines.isEmpty()) return -1
+        val effectivePositionMs = positionMs + leadTimeMs.coerceAtLeast(0L)
         var active = -1
         for (i in lines.indices) {
             val start = lines[i].startTimeMs ?: continue
-            if (start <= positionMs) {
+            if (start <= effectivePositionMs) {
                 active = i
             } else {
                 break
