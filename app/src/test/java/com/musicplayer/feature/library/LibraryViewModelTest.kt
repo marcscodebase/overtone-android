@@ -15,8 +15,11 @@ import com.musicplayer.data.repository.PlaylistRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,8 +82,8 @@ class LibraryViewModelTest {
             assertEquals(LibraryFilter.DOWNLOADED, downloaded.selectedFilter)
             cancelAndIgnoreRemainingEvents()
         }
-        // Let WhileSubscribed(5_000) upstream collector shut down cleanly before resetMain()
-        advanceTimeBy(6_000)
+        // Wait for viewModelScope (including flowOn(Dispatchers.Default) producers) to fully cancel before resetMain()
+        viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
         advanceUntilIdle()
     }
 

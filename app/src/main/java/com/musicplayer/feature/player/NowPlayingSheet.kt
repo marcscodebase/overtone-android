@@ -2,15 +2,21 @@ package com.musicplayer.feature.player
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,17 +74,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -97,8 +109,11 @@ import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.RepeatMode
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 private const val LIVE_LYRIC_TRANSITION_MS = 220
+private const val ARTWORK_SWIPE_TRANSITION_MS = 220
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,11 +265,65 @@ fun NowPlayingSheet(
             )
         }
 
+        val density = LocalDensity.current
+        val haptic = LocalHapticFeedback.current
+        val coroutineScope = rememberCoroutineScope()
+        val swipeThresholdPx = with(density) { 72.dp.toPx() }
+        val maxVisualDragPx = with(density) { 148.dp.toPx() }
+        val swipeOffsetX = remember { Animatable(0f) }
+        var lastSkipDirection by remember { mutableIntStateOf(1) }
+        val latestOnSkipNext by rememberUpdatedState(onSkipNext)
+        val latestOnSkipPrevious by rememberUpdatedState(onSkipPrevious)
+
+        LaunchedEffect(track.id) {
+            swipeOffsetX.snapTo(0f)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .pointerInput(swipeThresholdPx, maxVisualDragPx) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { _, dragAmount ->
+                            coroutineScope.launch {
+                                val next = (swipeOffsetX.value + dragAmount).coerceIn(-maxVisualDragPx, maxVisualDragPx)
+                                swipeOffsetX.snapTo(next)
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                swipeOffsetX.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                )
+                            }
+                        },
+                        onDragEnd = {
+                            val totalDrag = swipeOffsetX.value
+                            when {
+                                totalDrag <= -swipeThresholdPx -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    lastSkipDirection = 1
+                                    latestOnSkipNext()
+                                }
+
+                                totalDrag >= swipeThresholdPx -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    lastSkipDirection = -1
+                                    latestOnSkipPrevious()
+                                }
+                            }
+                            coroutineScope.launch {
+                                swipeOffsetX.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                )
+                            }
+                        },
+                    )
+                }
                 .padding(horizontal = 24.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -298,15 +367,42 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.weight(0.45f))
 
-            ArtworkCard(
-                imageUrl = track.artworkUrl,
-                contentDescription = track.albumName,
-                shape = MaterialTheme.shapes.large,
-                fallbackIconSize = 72.dp,
+            AnimatedContent(
+                targetState = track,
+                contentKey = { it.id },
+                transitionSpec = {
+                    val dir = lastSkipDirection
+                    val slideIn = slideInHorizontally(
+                        animationSpec = tween(ARTWORK_SWIPE_TRANSITION_MS, easing = FastOutSlowInEasing),
+                    ) { width -> dir * (width / 3) }
+                    val slideOut = slideOutHorizontally(
+                        animationSpec = tween(ARTWORK_SWIPE_TRANSITION_MS, easing = FastOutSlowInEasing),
+                    ) { width -> -dir * (width / 3) }
+                    (fadeIn(tween(ARTWORK_SWIPE_TRANSITION_MS)) + slideIn) togetherWith
+                        (fadeOut(tween(ARTWORK_SWIPE_TRANSITION_MS)) + slideOut)
+                },
+                label = "now_playing_artwork_swipe",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-            )
+                    .graphicsLayer {
+                        translationX = swipeOffsetX.value
+                        val progress = (abs(swipeOffsetX.value) / maxVisualDragPx).coerceIn(0f, 1f)
+                        alpha = 1f - progress * 0.25f
+                        val scale = 1f - progress * 0.04f
+                        scaleX = scale
+                        scaleY = scale
+                    },
+            ) { displayedTrack ->
+                ArtworkCard(
+                    imageUrl = displayedTrack.artworkUrl,
+                    contentDescription = displayedTrack.albumName,
+                    shape = MaterialTheme.shapes.large,
+                    fallbackIconSize = 72.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                )
+            }
 
             if (syncedLyrics != null) {
                 val activeIndex = LyricsParser.findActiveLineIndex(
@@ -628,7 +724,10 @@ fun NowPlayingSheet(
                 )
 
                 IconButton(
-                    onClick = onSkipPrevious,
+                    onClick = {
+                        lastSkipDirection = -1
+                        onSkipPrevious()
+                    },
                     modifier = Modifier.size(52.dp),
                 ) {
                     Icon(
@@ -663,7 +762,10 @@ fun NowPlayingSheet(
                 }
 
                 IconButton(
-                    onClick = onSkipNext,
+                    onClick = {
+                        lastSkipDirection = 1
+                        onSkipNext()
+                    },
                     modifier = Modifier.size(52.dp),
                 ) {
                     Icon(
