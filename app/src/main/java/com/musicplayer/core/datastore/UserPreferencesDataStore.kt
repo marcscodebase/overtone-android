@@ -14,6 +14,7 @@ import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.core.model.UserPreferences
+import com.musicplayer.core.model.WireGuardMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -45,6 +46,7 @@ class UserPreferencesDataStore @Inject constructor(
             replayGainMode = ReplayGainMode.fromNameOrDefault(prefs[KEY_REPLAY_GAIN_MODE]),
             replayGainPreampDb = prefs[KEY_REPLAY_GAIN_PREAMP_DB] ?: 0f,
             selectedMusicLibraryIds = prefs[KEY_SELECTED_LIBRARIES] ?: emptySet(),
+            wireGuardMode = WireGuardMode.fromNameOrDefault(prefs[KEY_WIREGUARD_MODE]),
         )
     }
 
@@ -98,6 +100,10 @@ class UserPreferencesDataStore @Inject constructor(
         dataStore.edit { it[KEY_SELECTED_LIBRARIES] = libraryIds }
     }
 
+    suspend fun setWireGuardMode(mode: WireGuardMode) {
+        dataStore.edit { it[KEY_WIREGUARD_MODE] = mode.name }
+    }
+
     companion object {
         private val KEY_OFFLINE_MODE = booleanPreferencesKey("offline_mode_enabled")
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
@@ -111,5 +117,6 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
         private val KEY_REPLAY_GAIN_PREAMP_DB = floatPreferencesKey("replay_gain_preamp_db")
         private val KEY_SELECTED_LIBRARIES = stringSetPreferencesKey("selected_music_library_ids")
+        private val KEY_WIREGUARD_MODE = stringPreferencesKey("wireguard_mode")
     }
 }

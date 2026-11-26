@@ -13,6 +13,7 @@ import com.musicplayer.core.model.QuickConnectSession
 import com.musicplayer.core.model.ServerPublicInfo
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.ServerUrlNormalizer
+import com.musicplayer.core.network.wireguard.WireGuardTunnelManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -56,6 +57,7 @@ class JellyfinAuthRepository @Inject constructor(
     private val clientProvider: JellyfinClientProvider,
     private val authSessionStore: AuthSessionStore,
     private val preferencesDataStore: UserPreferencesDataStore,
+    private val wireGuardTunnelManager: WireGuardTunnelManager,
     private val database: MusicPlayerDatabase,
     @param:Dispatcher(AppDispatcher.IO) private val ioDispatcher: CoroutineDispatcher,
 ) : AuthRepository {
@@ -80,6 +82,8 @@ class JellyfinAuthRepository @Inject constructor(
                 ?: return@withContext AppResult.Error(
                     AppError.Validation("Enter a valid HTTP or HTTPS Jellyfin server URL"),
                 )
+
+            wireGuardTunnelManager.prepareForServerUrl(normalizedUrl)
 
             runJellyfinCall {
                 val api = clientProvider.configure(baseUrl = normalizedUrl, accessToken = null)

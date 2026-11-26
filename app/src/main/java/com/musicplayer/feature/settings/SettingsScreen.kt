@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -54,6 +55,8 @@ import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.ReplayGainMode
+import com.musicplayer.core.model.WireGuardMode
+import com.musicplayer.core.model.WireGuardTunnelState
 import com.musicplayer.feature.download.downloadQualityPresets
 import com.musicplayer.feature.download.formatDownloadQualityLabel
 import java.util.Locale
@@ -63,6 +66,7 @@ import kotlin.math.roundToInt
 fun SettingsRoute(
     onBackClick: () -> Unit,
     onOpenStorageManager: () -> Unit,
+    onOpenWireGuard: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -70,6 +74,7 @@ fun SettingsRoute(
         state = state,
         onBackClick = onBackClick,
         onOpenStorageManager = onOpenStorageManager,
+        onOpenWireGuard = onOpenWireGuard,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onToggleAutoMatchOutputQuality = viewModel::onToggleAutoMatchOutputQuality,
@@ -90,6 +95,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     onBackClick: () -> Unit,
     onOpenStorageManager: () -> Unit,
+    onOpenWireGuard: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onToggleAutoMatchOutputQuality: (Boolean) -> Unit,
@@ -165,6 +171,75 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenWireGuard)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.VpnLock,
+                        contentDescription = null,
+                        tint = if (state.wireGuardStatus.state == WireGuardTunnelState.CONNECTED) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.wireguard_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        val wgSubtitle = when {
+                            state.wireGuardConfig == null ->
+                                stringResource(R.string.wireguard_settings_subtitle_unconfigured)
+
+                            state.wireGuardStatus.state == WireGuardTunnelState.CONNECTED ->
+                                "${stringResource(R.string.wireguard_state_connected)} • ${formatWireGuardModeLabel(state.preferences.wireGuardMode)}"
+
+                            state.wireGuardStatus.state == WireGuardTunnelState.DIRECT_LOCAL ->
+                                "${stringResource(R.string.wireguard_state_direct_local)} • ${formatWireGuardModeLabel(state.preferences.wireGuardMode)}"
+
+                            state.wireGuardStatus.state == WireGuardTunnelState.CONNECTING ->
+                                stringResource(R.string.wireguard_state_connecting)
+
+                            state.wireGuardStatus.state == WireGuardTunnelState.ERROR ->
+                                state.wireGuardStatus.errorMessage ?: stringResource(R.string.wireguard_state_error)
+
+                            else ->
+                                "${state.wireGuardConfig.profileName} • ${formatWireGuardModeLabel(state.preferences.wireGuardMode)}"
+                        }
+                        Text(
+                            text = wgSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (state.wireGuardStatus.state) {
+                                WireGuardTunnelState.CONNECTED,
+                                WireGuardTunnelState.DIRECT_LOCAL,
+                                -> MaterialTheme.colorScheme.primary
+
+                                WireGuardTunnelState.ERROR -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -630,4 +705,11 @@ private fun formatReplayGainModeLabel(mode: ReplayGainMode): String = when (mode
     ReplayGainMode.OFF -> stringResource(R.string.settings_replay_gain_off)
     ReplayGainMode.TRACK -> stringResource(R.string.settings_replay_gain_track)
     ReplayGainMode.ALBUM -> stringResource(R.string.settings_replay_gain_album)
+}
+
+@Composable
+private fun formatWireGuardModeLabel(mode: WireGuardMode): String = when (mode) {
+    WireGuardMode.OFF -> stringResource(R.string.wireguard_mode_off)
+    WireGuardMode.AUTO -> stringResource(R.string.wireguard_mode_auto)
+    WireGuardMode.ALWAYS -> stringResource(R.string.wireguard_mode_always)
 }

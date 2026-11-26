@@ -23,3 +23,9 @@
 # Keep jump3r (pure-Java LAME fallback encoder) clean under R8
 -dontwarn de.sciss.jump3r.**
 -dontwarn javax.sound.sampled.**
+
+# Keep embedded WireGuard userspace JNI bridge and native JSON DTOs under R8
+-keep class com.musicplayer.core.network.wireguard.WireGuardNativeBridge { *; }
+-keep class com.musicplayer.core.network.wireguard.NativeStartResult { *; }
+-keep class com.musicplayer.core.network.wireguard.NativeStatusResult { *; }
+-keep class com.musicplayer.core.network.wireguard.NativeDialTestResult { *; }

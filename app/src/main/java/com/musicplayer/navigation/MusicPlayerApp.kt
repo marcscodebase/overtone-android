@@ -59,6 +59,7 @@ import com.musicplayer.feature.player.TrackNavigationSheet
 import com.musicplayer.feature.search.SearchRoute
 import com.musicplayer.feature.settings.SettingsRoute
 import com.musicplayer.feature.settings.StorageManagerRoute
+import com.musicplayer.feature.settings.WireGuardRoute
 
 private data class PendingTrackNavigation(
     val track: Track,
@@ -83,7 +84,17 @@ fun MusicPlayerApp(
             }
 
             AppSessionState.Unauthenticated -> {
-                AuthRoute(onAuthComplete = {})
+                var showPreAuthWireGuard by rememberSaveable { mutableStateOf(false) }
+                if (showPreAuthWireGuard) {
+                    WireGuardRoute(
+                        onBackClick = { showPreAuthWireGuard = false },
+                    )
+                } else {
+                    AuthRoute(
+                        onAuthComplete = {},
+                        onOpenWireGuardSetup = { showPreAuthWireGuard = true },
+                    )
+                }
             }
 
             is AppSessionState.Authenticated -> {
@@ -224,7 +235,8 @@ private fun AuthenticatedShell(
 
     val showMiniPlayer = activeTrack != null &&
         currentDestination?.hasRoute(SettingsDestination::class) != true &&
-        currentDestination?.hasRoute(StorageManagerDestination::class) != true
+        currentDestination?.hasRoute(StorageManagerDestination::class) != true &&
+        currentDestination?.hasRoute(WireGuardDestination::class) != true
 
     CompositionLocalProvider(
         LocalSavedTrackIds provides trackIdsInPlaylists,
@@ -376,11 +388,18 @@ private fun AuthenticatedShell(
                 SettingsRoute(
                     onBackClick = { navController.popBackStack() },
                     onOpenStorageManager = { navController.navigate(StorageManagerDestination) },
+                    onOpenWireGuard = { navController.navigate(WireGuardDestination) },
                 )
             }
 
             composable<StorageManagerDestination> {
                 StorageManagerRoute(
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
+
+            composable<WireGuardDestination> {
+                WireGuardRoute(
                     onBackClick = { navController.popBackStack() },
                 )
             }

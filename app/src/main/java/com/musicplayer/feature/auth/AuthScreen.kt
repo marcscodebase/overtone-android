@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,6 +65,7 @@ import com.musicplayer.R
 @Composable
 fun AuthRoute(
     onAuthComplete: () -> Unit,
+    onOpenWireGuardSetup: () -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -78,6 +80,7 @@ fun AuthRoute(
         state = uiState,
         onServerUrlChanged = viewModel::onServerUrlChanged,
         onConnectToServer = viewModel::onConnectToServer,
+        onOpenWireGuardSetup = onOpenWireGuardSetup,
         onBackToServerStep = viewModel::onBackToServerStep,
         onLoginTabSelected = viewModel::onLoginTabSelected,
         onUsernameChanged = viewModel::onUsernameChanged,
@@ -94,6 +97,7 @@ fun AuthScreen(
     state: AuthUiState,
     onServerUrlChanged: (String) -> Unit,
     onConnectToServer: () -> Unit,
+    onOpenWireGuardSetup: () -> Unit = {},
     onBackToServerStep: () -> Unit,
     onLoginTabSelected: (LoginTab) -> Unit,
     onUsernameChanged: (String) -> Unit,
@@ -149,6 +153,7 @@ fun AuthScreen(
                     isLoading = state.isLoading,
                     onServerUrlChanged = onServerUrlChanged,
                     onConnect = onConnectToServer,
+                    onOpenWireGuardSetup = onOpenWireGuardSetup,
                 )
 
                 AuthStep.CREDENTIALS -> CredentialsStep(
@@ -194,6 +199,7 @@ private fun ServerUrlStep(
     isLoading: Boolean,
     onServerUrlChanged: (String) -> Unit,
     onConnect: () -> Unit,
+    onOpenWireGuardSetup: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -241,6 +247,17 @@ private fun ServerUrlStep(
             } else {
                 Text(stringResource(R.string.auth_connect))
             }
+        }
+        FilledTonalButton(
+            onClick = onOpenWireGuardSetup,
+            enabled = !isLoading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+        ) {
+            Icon(Icons.Rounded.VpnLock, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.wireguard_auth_button))
         }
     }
 }

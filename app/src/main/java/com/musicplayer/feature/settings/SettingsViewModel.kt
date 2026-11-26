@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.database.dao.PlaylistDao
 import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.datastore.WireGuardConfigStore
 import com.musicplayer.core.model.AuthSession
 import com.musicplayer.core.model.CellularBitrateCap
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.core.model.UserPreferences
+import com.musicplayer.core.model.WireGuardConfig
+import com.musicplayer.core.model.WireGuardRuntimeStatus
+import com.musicplayer.core.network.wireguard.WireGuardTunnelManager
 import com.musicplayer.data.repository.AuthRepository
 import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
@@ -30,6 +34,8 @@ import javax.inject.Inject
 data class SettingsUiState(
     val session: AuthSession? = null,
     val preferences: UserPreferences = UserPreferences(),
+    val wireGuardConfig: WireGuardConfig? = null,
+    val wireGuardStatus: WireGuardRuntimeStatus = WireGuardRuntimeStatus(),
     val downloadedCount: Int = 0,
     val downloadedBytes: Long = 0L,
     val pendingSyncCount: Int = 0,
@@ -47,6 +53,8 @@ class SettingsViewModel @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val playlistSyncScheduler: PlaylistSyncScheduler,
     private val preferencesDataStore: UserPreferencesDataStore,
+    wireGuardConfigStore: WireGuardConfigStore,
+    wireGuardTunnelManager: WireGuardTunnelManager,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
 
@@ -61,15 +69,23 @@ class SettingsViewModel @Inject constructor(
         Triple(pending, syncing, status)
     }
 
+    private val wireGuardMeta = combine(
+        wireGuardConfigStore.config,
+        wireGuardTunnelManager.status,
+    ) { cfg, runtime -> cfg to runtime }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         authRepository.session,
         preferencesDataStore.userPreferences,
         downloadRepository.observeStorageSummary(),
         syncMeta,
-    ) { session, prefs, storage, (pendingCount, syncing, status) ->
+        wireGuardMeta,
+    ) { session, prefs, storage, (pendingCount, syncing, status), (wgConfig, wgStatus) ->
         SettingsUiState(
             session = session,
             preferences = prefs,
+            wireGuardConfig = wgConfig,
+            wireGuardStatus = wgStatus,
             downloadedCount = storage.completedCount,
             downloadedBytes = storage.totalBytes,
             pendingSyncCount = pendingCount,

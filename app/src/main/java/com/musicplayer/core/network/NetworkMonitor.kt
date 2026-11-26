@@ -19,6 +19,7 @@ import javax.inject.Singleton
 data class NetworkState(
     val isConnected: Boolean,
     val isUnmetered: Boolean,
+    val networkHandle: Long = 0L,
 ) {
     val isMetered: Boolean
         get() = isConnected && !isUnmetered
@@ -57,6 +58,7 @@ class ConnectivityManagerNetworkMonitor @Inject constructor(
         return NetworkState(
             isConnected = true,
             isUnmetered = !isMetered,
+            networkHandle = activeNetwork.networkHandle,
         )
     }
 

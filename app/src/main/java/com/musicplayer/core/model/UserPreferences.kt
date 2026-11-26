@@ -48,4 +48,5 @@ data class UserPreferences(
     val replayGainMode: ReplayGainMode = ReplayGainMode.OFF,
     val replayGainPreampDb: Float = 0f,
     val selectedMusicLibraryIds: Set<String> = emptySet(),
+    val wireGuardMode: WireGuardMode = WireGuardMode.OFF,
 )

@@ -31,3 +31,6 @@ data object SettingsDestination
 
 @Serializable
 data object StorageManagerDestination
+
+@Serializable
+data object WireGuardDestination

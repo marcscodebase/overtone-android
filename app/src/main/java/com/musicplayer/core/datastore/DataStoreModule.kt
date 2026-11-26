@@ -22,6 +22,10 @@ annotation class UserPrefsDataStore
 @Retention(AnnotationRetention.BINARY)
 annotation class AuthDataStore
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class WireGuardDataStore
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DataStoreModule {
@@ -43,6 +47,15 @@ object DataStoreModule {
     ): DataStore<Preferences> = PreferenceDataStoreFactory.create(
         produceFile = { context.preferencesDataStoreFile("auth_session_secure") },
     )
+
+    @Provides
+    @Singleton
+    @WireGuardDataStore
+    fun provideWireGuardPreferencesDataStore(
+        @ApplicationContext context: Context,
+    ): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+        produceFile = { context.preferencesDataStoreFile("wireguard_config_secure") },
+    )
 }
 
 @Module
@@ -60,4 +73,10 @@ abstract class DataStoreBindingsModule {
     abstract fun bindAuthSessionStore(
         impl: EncryptedAuthSessionStore,
     ): AuthSessionStore
+
+    @Binds
+    @Singleton
+    abstract fun bindWireGuardConfigStore(
+        impl: EncryptedWireGuardConfigStore,
+    ): WireGuardConfigStore
 }
