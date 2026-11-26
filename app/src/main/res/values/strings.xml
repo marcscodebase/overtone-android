@@ -207,4 +207,8 @@
     <string name="artist_liked_songs_empty_subtitle">Favorite songs by this artist will appear here.</string>
     <string name="queue_reshuffle">Reshuffle queue</string>
     <string name="library_shuffle_all">Shuffle library</string>
+    <string name="daylist_title">Daylist</string>
+    <string name="daylist_period_morning">Morning Mix</string>
+    <string name="daylist_period_evening">Evening Mix</string>
+    <string name="daylist_updates_at">Updates at %1$s</string>
 </resources>

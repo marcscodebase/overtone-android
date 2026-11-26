@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
+    val daylist: Daylist? = null,
     val recentlyAddedAlbums: List<Album> = emptyList(),
     val recentlyPlayedTracks: List<Track> = emptyList(),
     val favoriteTracks: List<Track> = emptyList(),
@@ -37,7 +38,7 @@ data class HomeUiState(
 ) {
     val isOffline: Boolean get() = offlineStatus.isOffline
     val isEmpty: Boolean
-        get() = recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() &&
+        get() = daylist == null && recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() &&
             favoriteTracks.isEmpty() && playlists.isEmpty()
 }
 
@@ -52,10 +53,22 @@ class HomeViewModel @Inject constructor(
 
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val daylistSlot = MutableStateFlow(DaylistSlot.current())
 
     private val activeTrackId = playbackController.playbackState
         .map { it.currentTrack?.id }
         .distinctUntilChanged()
+
+    private val daylistFlow = combine(
+        libraryRepository.observeAllTracks(),
+        daylistSlot,
+    ) { allTracks, slot ->
+        if (allTracks.isNotEmpty()) {
+            DaylistGenerator.generate(allTracks = allTracks, slot = slot)
+        } else {
+            null
+        }
+    }
 
     private val trackFeeds = combine(
         libraryRepository.observeRecentlyPlayedTracks(limit = 10),
@@ -72,12 +85,14 @@ class HomeViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<HomeUiState> = combine(
+        daylistFlow,
         libraryRepository.observeRecentlyAddedAlbums(limit = 16),
         trackFeeds,
         libraryRepository.observeAllPlaylists(),
         statusBundle,
-    ) { albums, (recentTracks, favorites), playlists, status ->
+    ) { daylist, albums, (recentTracks, favorites), playlists, status ->
         HomeUiState(
+            daylist = daylist,
             recentlyAddedAlbums = albums,
             recentlyPlayedTracks = recentTracks,
             favoriteTracks = favorites,
@@ -106,7 +121,15 @@ class HomeViewModel @Inject constructor(
         refreshLibrary()
     }
 
+    fun checkDaylistSlot() {
+        val nowSlot = DaylistSlot.current()
+        if (daylistSlot.value != nowSlot) {
+            daylistSlot.value = nowSlot
+        }
+    }
+
     fun refreshLibrary() {
+        checkDaylistSlot()
         if (isRefreshing.value) return
         viewModelScope.launch {
             isRefreshing.value = true
@@ -119,6 +142,34 @@ class HomeViewModel @Inject constructor(
                 is AppResult.Error -> errorMessage.value = result.error.message
             }
             isRefreshing.value = false
+        }
+    }
+
+    fun onPlayDaylist() {
+        val state = uiState.value
+        val tracks = state.daylist?.tracks.orEmpty()
+        val playable = if (state.isOffline) tracks.filter { it.isDownloaded } else tracks
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(
+                tracks = playable,
+                startIndex = 0,
+                shuffle = false,
+                contextLabel = DaylistViewModel.DAYLIST_CONTEXT_LABEL,
+            )
+        }
+    }
+
+    fun onShuffleDaylist() {
+        val state = uiState.value
+        val tracks = state.daylist?.tracks.orEmpty()
+        val playable = if (state.isOffline) tracks.filter { it.isDownloaded } else tracks
+        if (playable.isNotEmpty()) {
+            playbackController.playTracks(
+                tracks = playable,
+                startIndex = 0,
+                shuffle = true,
+                contextLabel = DaylistViewModel.DAYLIST_CONTEXT_LABEL,
+            )
         }
     }
 

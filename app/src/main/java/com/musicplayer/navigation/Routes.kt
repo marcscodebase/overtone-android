@@ -9,6 +9,9 @@ data object MainDestination
 data object SearchDestination
 
 @Serializable
+data object DaylistDestination
+
+@Serializable
 data class AlbumDetailDestination(val albumId: String)
 
 @Serializable

@@ -43,6 +43,7 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
@@ -72,6 +76,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainPagerRoute(
     onSearchClick: () -> Unit,
+    onDaylistClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
@@ -168,6 +173,7 @@ fun MainPagerRoute(
             when (page) {
                 0 -> HomePagerPage(
                     viewModel = homeViewModel,
+                    onDaylistClick = onDaylistClick,
                     onAlbumClick = onAlbumClick,
                     onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = onPlaylistClick,
@@ -204,6 +210,7 @@ fun MainPagerRoute(
 @Composable
 private fun HomePagerPage(
     viewModel: HomeViewModel,
+    onDaylistClick: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
@@ -211,9 +218,23 @@ private fun HomePagerPage(
     onToggleTrackDownload: (Track) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.checkDaylistSlot()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     HomeContent(
         state = state,
         onRefresh = viewModel::refreshLibrary,
+        onDaylistClick = onDaylistClick,
+        onPlayDaylist = viewModel::onPlayDaylist,
+        onShuffleDaylist = viewModel::onShuffleDaylist,
         onAlbumClick = onAlbumClick,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onTrackClick,
