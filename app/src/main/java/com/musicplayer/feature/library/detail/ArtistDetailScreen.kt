@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -51,7 +52,9 @@ import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.SectionHeader
+import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.designsystem.component.isAtTopOfList
 import com.musicplayer.core.model.Track
 
 @Composable
@@ -110,8 +113,14 @@ fun ArtistDetailScreen(
     onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
+    val listState = rememberLazyListState()
+    SwipeDownToDismissContainer(
+        isAtTop = { listState.isAtTopOfList() },
+        onDismiss = onBackClick,
+        modifier = modifier,
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {},
@@ -158,6 +167,7 @@ fun ArtistDetailScreen(
             )
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
@@ -317,6 +327,7 @@ fun ArtistDetailScreen(
                 }
             }
         }
+    }
     }
 }
 

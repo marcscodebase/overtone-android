@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
@@ -59,7 +60,9 @@ import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
+import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.designsystem.component.isAtTopOfList
 import com.musicplayer.core.model.PlaylistTrackEntry
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.library.playlist.DeletePlaylistDialog
@@ -139,8 +142,14 @@ fun PlaylistDetailScreen(
     var showMoveFolderDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
+    val listState = rememberLazyListState()
+    SwipeDownToDismissContainer(
+        isAtTop = { listState.isAtTopOfList() && !state.isReordering },
+        onDismiss = onBackClick,
+        modifier = modifier,
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {},
@@ -258,6 +267,7 @@ fun PlaylistDetailScreen(
         ).joinToString(" • ")
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
@@ -384,6 +394,7 @@ fun PlaylistDetailScreen(
                 }
             }
         }
+    }
     }
 
     if (showRenameDialog) {

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -54,7 +55,9 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
+import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
+import com.musicplayer.core.designsystem.component.isAtTopOfList
 import com.musicplayer.core.model.Track
 
 @Composable
@@ -107,8 +110,14 @@ fun DaylistScreen(
     onToggleTrackDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
+    val listState = rememberLazyListState()
+    SwipeDownToDismissContainer(
+        isAtTop = { listState.isAtTopOfList() },
+        onDismiss = onBackClick,
+        modifier = modifier,
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {},
@@ -149,6 +158,7 @@ fun DaylistScreen(
             ).joinToString(" • ")
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
@@ -242,6 +252,7 @@ fun DaylistScreen(
                 }
             }
         }
+    }
     }
 }
 
