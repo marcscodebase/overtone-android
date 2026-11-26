@@ -32,6 +32,7 @@ object DatabaseModule {
         .addMigrations(
             MusicPlayerDatabase.MIGRATION_1_2,
             MusicPlayerDatabase.MIGRATION_2_3,
+            MusicPlayerDatabase.MIGRATION_3_4,
         )
         .build()
 

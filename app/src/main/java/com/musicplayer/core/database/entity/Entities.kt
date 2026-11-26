@@ -41,6 +41,8 @@ data class TrackEntity(
     val lastPlayedAt: Long? = null,
     val hasLyrics: Boolean = false,
     val primaryImageTag: String? = null,
+    val year: Int? = null,
+    val premiereDate: Long? = null,
 )
 
 @Entity(
@@ -60,6 +62,7 @@ data class AlbumEntity(
     val isFavorite: Boolean = false,
     val dateAdded: Long = 0L,
     val primaryImageTag: String? = null,
+    val premiereDate: Long? = null,
 )
 
 @Entity(tableName = "artists")

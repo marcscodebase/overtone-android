@@ -28,6 +28,8 @@ class JellyfinMappersTest {
               "ArtistItems": [{"Id": "$artistId", "Name": "Pink Floyd"}],
               "IndexNumber": 6,
               "ParentIndexNumber": 1,
+              "ProductionYear": 1971,
+              "PremiereDate": "1971-11-05T00:00:00.0000000Z",
               "RunTimeTicks": 14110000000,
               "NormalizationGain": -4.2,
               "HasLyrics": true,
@@ -105,6 +107,8 @@ class JellyfinMappersTest {
         assertEquals(12, entity.playCount)
         assertTrue(entity.hasLyrics)
         assertEquals("img-tag-1", entity.primaryImageTag)
+        assertEquals(1971, entity.year)
+        assertTrue((entity.premiereDate ?: 0L) != 0L)
     }
 
     @Test

@@ -277,9 +277,11 @@ class AudioOutputMonitor @Inject constructor(
     }
 
     companion object {
-        private val MUSIC_ATTRIBUTES: AudioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
+        private val MUSIC_ATTRIBUTES: AudioAttributes by lazy {
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+        }
     }
 }

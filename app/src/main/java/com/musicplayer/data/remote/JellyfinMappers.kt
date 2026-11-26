@@ -76,6 +76,8 @@ object JellyfinMappers {
             lastPlayedAt = dto.userData?.lastPlayedDate?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
             hasLyrics = dto.hasLyrics ?: false,
             primaryImageTag = primaryImageTag,
+            year = dto.productionYear,
+            premiereDate = dto.premiereDate?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
         )
     }
 
@@ -96,6 +98,7 @@ object JellyfinMappers {
             isFavorite = dto.userData?.isFavorite ?: false,
             dateAdded = dto.dateCreated?.toInstant(ZoneOffset.UTC)?.toEpochMilli() ?: 0L,
             primaryImageTag = dto.imageTags?.get(ImageType.PRIMARY),
+            premiereDate = dto.premiereDate?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
         )
     }
 
@@ -157,6 +160,8 @@ object JellyfinMappers {
             artworkUrl = artworkUrl,
             isDownloaded = isCompletedLocal,
             localUri = if (isCompletedLocal) downloadRecord.mediaStoreUri else null,
+            year = year,
+            premiereDate = premiereDate,
         )
     }
 
@@ -170,6 +175,7 @@ object JellyfinMappers {
         isFavorite = isFavorite,
         dateAdded = dateAdded,
         artworkUrl = artworkUrl,
+        premiereDate = premiereDate,
     )
 
     fun ArtistEntity.toDomain(artworkUrl: String?): Artist = Artist(

@@ -79,6 +79,8 @@ fun TrackRow(
     enableSwipeToQueue: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
+    leadingRank: Int? = null,
+    subtitleOverride: String? = null,
     isTrackSaved: Boolean = track.isFavorite || track.id in LocalSavedTrackIds.current,
     onSaveOrAddToPlaylist: (() -> Unit)? = LocalOnSaveTrack.current?.let { handler -> { handler(track) } },
     onAddToQueue: (() -> Unit)? = null,
@@ -136,6 +138,8 @@ fun TrackRow(
                 enabled = enabled,
                 showArtwork = showArtwork,
                 trackNumberOverride = trackNumberOverride,
+                leadingRank = leadingRank,
+                subtitleOverride = subtitleOverride,
                 isTrackSaved = isTrackSaved,
                 onSaveOrAddToPlaylist = onSaveOrAddToPlaylist,
                 onAddToQueue = onAddToQueue,
@@ -156,6 +160,8 @@ fun TrackRow(
             enabled = enabled,
             showArtwork = showArtwork,
             trackNumberOverride = trackNumberOverride,
+            leadingRank = leadingRank,
+            subtitleOverride = subtitleOverride,
             isTrackSaved = isTrackSaved,
             onSaveOrAddToPlaylist = onSaveOrAddToPlaylist,
             onAddToQueue = if (enabled) onAddToQueue else null,
@@ -178,6 +184,8 @@ private fun TrackRowContent(
     enabled: Boolean = true,
     showArtwork: Boolean = true,
     trackNumberOverride: Int? = null,
+    leadingRank: Int? = null,
+    subtitleOverride: String? = null,
     isTrackSaved: Boolean = false,
     onSaveOrAddToPlaylist: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
@@ -211,6 +219,20 @@ private fun TrackRowContent(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showArtwork) {
+            if (leadingRank != null) {
+                Text(
+                    text = leadingRank.toString(),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isPlaying) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(26.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             ArtworkCard(
                 imageUrl = track.artworkUrl,
                 contentDescription = track.albumName,
@@ -274,7 +296,7 @@ private fun TrackRowContent(
                     )
                 }
                 Text(
-                    text = track.artistName,
+                    text = subtitleOverride ?: track.artistName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -427,6 +449,7 @@ fun AlbumCarouselCard(
     album: Album,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitleOverride: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -448,7 +471,7 @@ fun AlbumCarouselCard(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = album.artistName,
+            text = subtitleOverride ?: album.artistName,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

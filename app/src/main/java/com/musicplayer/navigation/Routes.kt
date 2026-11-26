@@ -15,6 +15,12 @@ data class AlbumDetailDestination(val albumId: String)
 data class ArtistDetailDestination(val artistId: String)
 
 @Serializable
+data class ArtistCollectionDestination(
+    val artistId: String,
+    val section: String,
+)
+
+@Serializable
 data class PlaylistDetailDestination(val playlistId: String)
 
 @Serializable

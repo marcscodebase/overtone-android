@@ -43,6 +43,7 @@ import com.musicplayer.feature.auth.AuthRoute
 import com.musicplayer.feature.download.DownloadActionsViewModel
 import com.musicplayer.feature.download.DownloadQualitySheet
 import com.musicplayer.feature.library.detail.AlbumDetailRoute
+import com.musicplayer.feature.library.detail.ArtistCollectionRoute
 import com.musicplayer.feature.library.detail.ArtistDetailRoute
 import com.musicplayer.feature.library.detail.PlaylistDetailRoute
 import com.musicplayer.feature.library.playlist.AddToPlaylistSheet
@@ -309,6 +310,27 @@ private fun AuthenticatedShell(
 
             composable<ArtistDetailDestination> {
                 ArtistDetailRoute(
+                    onBackClick = { navController.popBackStack() },
+                    onAlbumClick = navigateToAlbum,
+                    onOpenArtistCollection = { artistId, section ->
+                        navController.navigate(
+                            ArtistCollectionDestination(
+                                artistId = artistId,
+                                section = section.routeKey,
+                            ),
+                        )
+                    },
+                    onGoToTrackArtist = onGoToTrackArtist,
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
+                )
+            }
+
+            composable<ArtistCollectionDestination> {
+                ArtistCollectionRoute(
                     onBackClick = { navController.popBackStack() },
                     onAlbumClick = navigateToAlbum,
                     onGoToTrackArtist = onGoToTrackArtist,

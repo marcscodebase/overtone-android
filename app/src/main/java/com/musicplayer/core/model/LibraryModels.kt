@@ -47,6 +47,8 @@ data class Track(
     val artworkUrl: String?,
     val isDownloaded: Boolean = false,
     val localUri: String? = null,
+    val year: Int? = null,
+    val premiereDate: Long? = null,
 ) {
     val resolvedArtists: List<TrackArtist>
         get() = if (artists.isNotEmpty()) {
@@ -67,6 +69,7 @@ data class Album(
     val isFavorite: Boolean,
     val dateAdded: Long,
     val artworkUrl: String?,
+    val premiereDate: Long? = null,
 )
 
 data class Artist(

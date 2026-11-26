@@ -15,7 +15,7 @@ interface AlbumDao {
     @Query("SELECT * FROM albums ORDER BY dateAdded DESC LIMIT :limit")
     fun observeRecentlyAdded(limit: Int = 20): Flow<List<AlbumEntity>>
 
-    @Query("SELECT * FROM albums WHERE artistId = :artistId ORDER BY COALESCE(year, 0) DESC, title COLLATE NOCASE ASC")
+    @Query("SELECT * FROM albums WHERE artistId = :artistId ORDER BY COALESCE(premiereDate, 0) DESC, COALESCE(year, 0) DESC, title COLLATE NOCASE ASC")
     fun observeByArtist(artistId: String): Flow<List<AlbumEntity>>
 
     @Query("SELECT * FROM albums WHERE id = :albumId")
