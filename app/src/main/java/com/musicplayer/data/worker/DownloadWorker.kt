@@ -21,6 +21,7 @@ import com.musicplayer.core.datastore.AuthSessionStore
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.data.local.AudioTagInspector
@@ -28,6 +29,7 @@ import com.musicplayer.data.local.MediaStoreAudioWriter
 import com.musicplayer.data.local.MediaStorePathBuilder
 import com.musicplayer.data.local.OfflineFileVerifier
 import com.musicplayer.data.repository.AuthRepository
+import com.musicplayer.data.repository.LyricsRepository
 import com.musicplayer.player.transcoder.AudioFormatSniffer
 import com.musicplayer.player.transcoder.HybridAudioDownloader
 import com.musicplayer.player.transcoder.HybridDownloadRequest
@@ -49,6 +51,7 @@ class DownloadWorker @AssistedInject constructor(
     private val clientProvider: JellyfinClientProvider,
     private val hybridAudioDownloader: HybridAudioDownloader,
     private val mediaStoreAudioWriter: MediaStoreAudioWriter,
+    private val lyricsRepository: LyricsRepository,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -148,6 +151,9 @@ class DownloadWorker @AssistedInject constructor(
 
             val api = clientProvider.getClient()
             val userId = authSessionStore.getSession()?.userId
+            val embeddedLyrics = runCatching {
+                lyricsRepository.getLyrics(track.id)
+            }.getOrNull()?.let(LyricsParser::formatForEmbedding)
             val prepared = hybridAudioDownloader.downloadAndPrepare(
                 request = HybridDownloadRequest(
                     trackId = track.id,
@@ -156,13 +162,15 @@ class DownloadWorker @AssistedInject constructor(
                     deviceId = api.deviceInfo.id,
                     title = track.title,
                     artist = track.artistName,
+                    albumArtist = album?.artistName?.takeIf { it.isNotBlank() },
                     album = track.albumName,
                     trackNumber = track.trackNumber,
                     discNumber = track.discNumber,
-                    year = album?.year,
+                    year = album?.year ?: track.year,
                     containerHint = track.container,
                     sourceBitrateKbps = track.bitrate?.div(1000)?.takeIf { it > 0 },
                     replayGainTrackDb = track.replayGainTrack,
+                    lyrics = embeddedLyrics,
                     artworkItemId = track.albumId ?: track.id,
                     quality = quality,
                 ),

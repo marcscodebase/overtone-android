@@ -6,9 +6,13 @@ import com.musicplayer.core.model.DownloadStatus
 import com.musicplayer.core.model.Mp3Bitrate
 import com.musicplayer.core.model.TranscodeSource
 import com.musicplayer.data.local.AudioTagWriter
+import com.musicplayer.data.local.EmbeddedLyricsReader
+import com.musicplayer.data.local.FlacTagWriter
+import com.musicplayer.data.local.AudioTagMetadata
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -160,6 +164,70 @@ class HybridAudioDownloaderTest {
         assertEquals(1, fakeEncoder.invocations)
         assertEquals(192, fakeEncoder.lastBitrateKbps)
         assertEquals(listOf(DownloadStatus.DOWNLOADING, DownloadStatus.TRANSCODING), statuses)
+    }
+
+    @Test
+    fun `embeds request lyrics into downloaded mp3 and flac files`() = runTest {
+        val syncedLrc = "[00:05.00]Yesterday I woke up sucking a lemon\n[00:10.00]Everything in its right place"
+        val fakeFetcher = FakeAudioHttpFetcher(
+            responses = mapOf(
+                "https://jellyfin.local/Audio/t1/universal?container=mp3&audioCodec=mp3&maxStreamingBitrate=320000&transcodingContainer=mp3&transcodingProtocol=http" to FakeResponse(
+                    bytes = fakeMp3Bytes(),
+                    contentType = "audio/mpeg",
+                ),
+            ),
+        )
+        val downloader = HybridAudioDownloader(fakeFetcher, FakeOnDeviceMp3Encoder(), AudioTagWriter())
+
+        val result = downloader.downloadAndPrepare(
+            request = sampleRequest(DownloadQuality(DownloadQualityMode.MP3, Mp3Bitrate.KBPS_320))
+                .copy(lyrics = syncedLrc),
+            workDir = tempFolder.newFolder("mp3_with_lyrics"),
+        )
+
+        val embedded = result.file.inputStream().use { EmbeddedLyricsReader.readFromStream(it) }
+        assertNotNull(embedded)
+        assertTrue(embedded!!.isSynced)
+        assertEquals(2, embedded.lines.size)
+        assertEquals("Yesterday I woke up sucking a lemon", embedded.lines[0].text)
+        assertEquals(5_000L, embedded.lines[0].startTimeMs)
+    }
+
+    @Test
+    fun `on-device mp3 fallback carries over embedded lyrics from original flac when api lyrics absent`() = runTest {
+        val sourceFlac = tempFolder.newFile("source_with_lyrics.flac").apply {
+            writeBytes(minimalFlacBytes())
+            FlacTagWriter.write(
+                file = this,
+                metadata = AudioTagMetadata(
+                    title = "Everything In Its Right Place",
+                    artist = "Radiohead",
+                    album = "Kid A",
+                    lyrics = "[00:04.50]Embedded in original FLAC",
+                ),
+            )
+        }
+        val fakeFetcher = FakeAudioHttpFetcher(
+            responses = mapOf(
+                "https://jellyfin.local/Items/t1/Download" to FakeResponse(
+                    bytes = sourceFlac.readBytes(),
+                    contentType = "audio/flac",
+                ),
+            ),
+        )
+        val downloader = HybridAudioDownloader(fakeFetcher, FakeOnDeviceMp3Encoder(), AudioTagWriter())
+
+        val result = downloader.downloadAndPrepare(
+            request = sampleRequest(DownloadQuality(DownloadQualityMode.MP3, Mp3Bitrate.KBPS_256)),
+            workDir = tempFolder.newFolder("fallback_lyrics_carryover"),
+        )
+
+        assertEquals(TranscodeSource.ON_DEVICE, result.transcodeSource)
+        val embedded = result.file.inputStream().use { EmbeddedLyricsReader.readFromStream(it) }
+        assertNotNull(embedded)
+        assertTrue(embedded!!.isSynced)
+        assertEquals("Embedded in original FLAC", embedded.lines.single().text)
+        assertEquals(4_500L, embedded.lines.single().startTimeMs)
     }
 
     private fun sampleRequest(quality: DownloadQuality) = HybridDownloadRequest(

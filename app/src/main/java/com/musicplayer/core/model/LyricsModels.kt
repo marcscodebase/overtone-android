@@ -1,5 +1,7 @@
 package com.musicplayer.core.model
 
+import java.util.Locale
+
 enum class LyricsSource {
     JELLYFIN,
     EMBEDDED,
@@ -18,7 +20,7 @@ data class TrackLyrics(
 
 object LyricsParser {
 
-    private val TIMESTAMP_REGEX = Regex("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?]")
+    private val TIMESTAMP_REGEX = Regex("\\[(\\d{1,3}):(\\d{2})(?:[.:](\\d{1,3}))?]")
     private val METADATA_TAG_REGEX = Regex("^\\[(ar|ti|al|by|offset|re|ve|length):.*]$", RegexOption.IGNORE_CASE)
 
     fun parse(rawText: String, source: LyricsSource): TrackLyrics? {
@@ -89,5 +91,32 @@ object LyricsParser {
             }
         }
         return active
+    }
+
+    /**
+     * Serializes [TrackLyrics] for embedding into MP3 (`USLT`) or FLAC (`LYRICS`) tags.
+     * Synced lyrics are formatted as standard LRC (`[mm:ss.xx]line`) so timestamps survive offline.
+     */
+    fun formatForEmbedding(lyrics: TrackLyrics): String? {
+        if (lyrics.lines.isEmpty()) return null
+        val formattedLines = if (lyrics.isSynced) {
+            lyrics.lines.mapNotNull { line ->
+                val text = line.text.trim()
+                if (text.isEmpty()) return@mapNotNull null
+                val startMs = line.startTimeMs
+                if (startMs != null && startMs >= 0L) {
+                    val totalSeconds = startMs / 1_000L
+                    val minutes = totalSeconds / 60L
+                    val seconds = totalSeconds % 60L
+                    val centis = (startMs % 1_000L) / 10L
+                    String.format(Locale.US, "[%02d:%02d.%02d]%s", minutes, seconds, centis, text)
+                } else {
+                    text
+                }
+            }
+        } else {
+            lyrics.lines.mapNotNull { it.text.trim().takeIf(String::isNotEmpty) }
+        }
+        return formattedLines.joinToString("\n").takeIf { it.isNotBlank() }
     }
 }

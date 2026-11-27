@@ -1,5 +1,7 @@
 package com.musicplayer.data.local
 
+import com.musicplayer.core.model.LyricsParser
+import com.musicplayer.core.model.LyricsSource
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
@@ -214,17 +216,23 @@ object Id3v24TagWriter {
 }
 
 /**
- * Lossless FLAC metadata writer preserving STREAMINFO and untouched audio frames while
- * embedding Vorbis Comments and METADATA_BLOCK_PICTURE album cover art.
+ * Lossless FLAC metadata writer preserving STREAMINFO, existing Vorbis Comments, and untouched
+ * audio frames while merging updated Vorbis Comments and METADATA_BLOCK_PICTURE album cover art.
  */
 object FlacTagWriter {
 
     private const val BLOCK_VORBIS_COMMENT = 4
     private const val BLOCK_PICTURE = 6
+    private const val MAX_EXISTING_COMMENTS = 10_000
 
     private data class FlacBlock(
         val type: Int,
         val data: ByteArray,
+    )
+
+    internal data class ParsedVorbisComments(
+        val vendor: String,
+        val comments: List<Pair<String, String>>,
     )
 
     fun write(file: File, metadata: AudioTagMetadata): Boolean {
@@ -238,6 +246,7 @@ object FlacTagWriter {
                 }
 
                 val preservedBlocks = mutableListOf<FlacBlock>()
+                var existingVorbisBlock: ByteArray? = null
                 var hasExistingPicture = false
                 var isLast = false
                 while (!isLast) {
@@ -252,7 +261,12 @@ object FlacTagWriter {
                     val data = ByteArray(length)
                     raf.readFully(data)
                     when (blockType) {
-                        BLOCK_VORBIS_COMMENT -> Unit // replace with updated comments
+                        BLOCK_VORBIS_COMMENT -> {
+                            if (existingVorbisBlock == null) {
+                                existingVorbisBlock = data
+                            }
+                        }
+
                         BLOCK_PICTURE -> {
                             if (metadata.coverArtBytes == null || metadata.coverArtBytes.isEmpty()) {
                                 preservedBlocks += FlacBlock(blockType, data)
@@ -265,7 +279,11 @@ object FlacTagWriter {
                 }
                 val audioFramesOffset = raf.filePointer
 
-                preservedBlocks += FlacBlock(BLOCK_VORBIS_COMMENT, buildVorbisCommentBlock(metadata))
+                val existingVorbis = existingVorbisBlock?.let(::parseVorbisCommentBlock)
+                preservedBlocks += FlacBlock(
+                    BLOCK_VORBIS_COMMENT,
+                    buildVorbisCommentBlock(metadata, existingVorbis),
+                )
                 val art = metadata.coverArtBytes
                 if (art != null && art.isNotEmpty()) {
                     preservedBlocks += FlacBlock(
@@ -308,31 +326,108 @@ object FlacTagWriter {
         }
     }
 
-    private fun buildVorbisCommentBlock(metadata: AudioTagMetadata): ByteArray {
-        val comments = mutableListOf<String>()
-        comments += "TITLE=${metadata.title}"
-        comments += "ARTIST=${metadata.artist}"
-        comments += "ALBUMARTIST=${metadata.albumArtist ?: metadata.artist}"
-        comments += "ALBUM=${metadata.album}"
-        metadata.trackNumber?.takeIf { it > 0 }?.let { comments += "TRACKNUMBER=$it" }
-        metadata.discNumber?.takeIf { it > 0 }?.let { comments += "DISCNUMBER=$it" }
-        metadata.year?.takeIf { it > 0 }?.let { comments += "DATE=$it" }
+    internal fun parseVorbisCommentBlock(block: ByteArray): ParsedVorbisComments? = runCatching {
+        if (block.size < 8) return@runCatching null
+        var offset = 0
+        val vendorLen = readLeInt(block, offset)
+        offset += 4
+        if (vendorLen < 0 || offset + vendorLen + 4 > block.size) return@runCatching null
+        val vendor = String(block, offset, vendorLen, Charsets.UTF_8)
+        offset += vendorLen
+
+        val count = readLeInt(block, offset)
+        offset += 4
+        if (count < 0 || count > MAX_EXISTING_COMMENTS) return@runCatching null
+
+        val comments = ArrayList<Pair<String, String>>(count)
+        for (i in 0 until count) {
+            if (offset + 4 > block.size) break
+            val commentLen = readLeInt(block, offset)
+            offset += 4
+            if (commentLen < 0 || offset + commentLen > block.size) break
+            val entry = String(block, offset, commentLen, Charsets.UTF_8)
+            offset += commentLen
+            val eqIdx = entry.indexOf('=')
+            if (eqIdx > 0) {
+                val key = entry.substring(0, eqIdx).trim()
+                val value = entry.substring(eqIdx + 1)
+                if (key.isNotEmpty()) {
+                    comments += key to value
+                }
+            }
+        }
+        ParsedVorbisComments(vendor = vendor, comments = comments)
+    }.getOrNull()
+
+    private fun buildVorbisCommentBlock(
+        metadata: AudioTagMetadata,
+        existing: ParsedVorbisComments? = null,
+    ): ByteArray {
+        val existingComments = existing?.comments.orEmpty()
+        val hasExistingAlbumArtist = existingComments.any { (k, v) ->
+            k.equals("ALBUMARTIST", ignoreCase = true) && v.isNotBlank()
+        }
+
+        val updates = linkedMapOf<String, String>()
+        updates["TITLE"] = metadata.title
+        updates["ARTIST"] = metadata.artist
+        val resolvedAlbumArtist = metadata.albumArtist?.takeIf { it.isNotBlank() }
+            ?: if (!hasExistingAlbumArtist) metadata.artist else null
+        if (resolvedAlbumArtist != null) {
+            updates["ALBUMARTIST"] = resolvedAlbumArtist
+        }
+        updates["ALBUM"] = metadata.album
+        metadata.trackNumber?.takeIf { it > 0 }?.let { updates["TRACKNUMBER"] = it.toString() }
+        metadata.discNumber?.takeIf { it > 0 }?.let { updates["DISCNUMBER"] = it.toString() }
+        metadata.year?.takeIf { it > 0 }?.let { year ->
+            val existingDate = existingComments
+                .firstOrNull { it.first.equals("DATE", ignoreCase = true) }
+                ?.second
+                ?.trim()
+            if (existingDate == null || !existingDate.startsWith(year.toString())) {
+                updates["DATE"] = year.toString()
+            }
+        }
         metadata.replayGainTrackDb?.let { gain ->
-            comments += String.format(Locale.US, "REPLAYGAIN_TRACK_GAIN=%.2f dB", gain)
+            updates["REPLAYGAIN_TRACK_GAIN"] = String.format(Locale.US, "%.2f dB", gain)
         }
         metadata.trackId?.takeIf { it.isNotBlank() }?.let { id ->
-            comments += "${AudioTagInspector.TAG_TRACK_ID}=$id"
+            updates[AudioTagInspector.TAG_TRACK_ID] = id
         }
         metadata.qualityTag?.takeIf { it.isNotBlank() }?.let { quality ->
-            comments += "${AudioTagInspector.TAG_QUALITY}=$quality"
+            updates[AudioTagInspector.TAG_QUALITY] = quality
         }
         metadata.audioSha256?.takeIf { it.isNotBlank() }?.let { sha ->
-            comments += "${AudioTagInspector.TAG_AUDIO_SHA256}=$sha"
+            updates[AudioTagInspector.TAG_AUDIO_SHA256] = sha
         }
-        metadata.lyrics?.takeIf { it.isNotBlank() }?.let { comments += "LYRICS=$it" }
+        metadata.lyrics?.takeIf { it.isNotBlank() }?.let { incomingLyrics ->
+            val existingLyrics = existingComments
+                .firstOrNull { it.first.equals("LYRICS", ignoreCase = true) }
+                ?.second
+                ?.takeIf { it.isNotBlank() }
+            val existingIsSynced = existingLyrics?.let {
+                LyricsParser.parse(it, LyricsSource.EMBEDDED)?.isSynced
+            } == true
+            val incomingIsSynced = LyricsParser.parse(incomingLyrics, LyricsSource.EMBEDDED)?.isSynced == true
+            if (!existingIsSynced || incomingIsSynced) {
+                updates["LYRICS"] = incomingLyrics
+            }
+        }
+
+        val comments = buildList {
+            for ((key, value) in existingComments) {
+                if (key.uppercase(Locale.US) !in updates) {
+                    add("$key=$value")
+                }
+            }
+            for ((key, value) in updates) {
+                add("$key=$value")
+            }
+        }
 
         val out = ByteArrayOutputStream()
-        val vendor = "music-player".toByteArray(Charsets.UTF_8)
+        val vendor = (existing?.vendor?.takeIf { it.isNotBlank() } ?: "music-player")
+            .toByteArray(Charsets.UTF_8)
         writeLeInt(out, vendor.size)
         out.write(vendor)
         writeLeInt(out, comments.size)
@@ -343,6 +438,12 @@ object FlacTagWriter {
         }
         return out.toByteArray()
     }
+
+    private fun readLeInt(bytes: ByteArray, offset: Int): Int =
+        (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 3].toInt() and 0xFF) shl 24)
 
     private fun buildPictureBlock(imageBytes: ByteArray, mimeType: String): ByteArray {
         val mimeBytes = mimeType.toByteArray(Charsets.US_ASCII)

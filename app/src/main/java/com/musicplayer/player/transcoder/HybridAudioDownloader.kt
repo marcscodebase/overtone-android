@@ -5,10 +5,12 @@ import com.musicplayer.core.common.Dispatcher
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.TranscodeSource
 import com.musicplayer.data.local.AudioTagInspector
 import com.musicplayer.data.local.AudioTagMetadata
 import com.musicplayer.data.local.AudioTagWriter
+import com.musicplayer.data.local.EmbeddedLyricsReader
 import com.musicplayer.player.PlaybackOkHttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
@@ -203,6 +205,7 @@ data class HybridDownloadRequest(
     val deviceId: String? = null,
     val title: String,
     val artist: String,
+    val albumArtist: String? = null,
     val album: String,
     val trackNumber: Int?,
     val discNumber: Int?,
@@ -210,6 +213,7 @@ data class HybridDownloadRequest(
     val containerHint: String?,
     val sourceBitrateKbps: Int?,
     val replayGainTrackDb: Float?,
+    val lyrics: String? = null,
     val artworkItemId: String?,
     val quality: DownloadQuality,
 )
@@ -236,6 +240,8 @@ class HybridAudioDownloader @Inject constructor(
     ): HybridDownloadResult {
         workDir.mkdirs()
         val cleanBase = request.baseUrl.trimEnd('/')
+
+        var resolvedLyrics = request.lyrics?.takeIf { it.isNotBlank() }
 
         val (preparedFile, extension, transcodeSource, bitrateKbps) = when (request.quality.mode) {
             DownloadQualityMode.LOSSLESS -> {
@@ -291,6 +297,13 @@ class HybridAudioDownloader @Inject constructor(
                         onProgress = onProgress,
                     )
                     try {
+                        if (resolvedLyrics == null) {
+                            resolvedLyrics = runCatching {
+                                originalFile.inputStream().buffered().use { stream ->
+                                    EmbeddedLyricsReader.readFromStream(stream)
+                                }
+                            }.getOrNull()?.let(LyricsParser::formatForEmbedding)
+                        }
                         onStatusChange(DownloadStatus.TRANSCODING)
                         val encodedFile = File(workDir, "${request.trackId}_encoded.mp3")
                         val encoded = onDeviceMp3Encoder.encodeToMp3(
@@ -327,12 +340,13 @@ class HybridAudioDownloader @Inject constructor(
             metadata = AudioTagMetadata(
                 title = request.title,
                 artist = request.artist,
-                albumArtist = request.artist,
+                albumArtist = request.albumArtist,
                 album = request.album,
                 trackNumber = request.trackNumber,
                 discNumber = request.discNumber,
                 year = request.year,
                 replayGainTrackDb = request.replayGainTrackDb,
+                lyrics = resolvedLyrics,
                 coverArtBytes = coverArtBytes,
                 coverArtMimeType = coverMime,
                 trackId = request.trackId,

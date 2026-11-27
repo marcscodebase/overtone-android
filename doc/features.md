@@ -105,7 +105,7 @@ A complete, code-verified overview of all features currently implemented in **an
   2. Automatically falls back to downloading the original lossless file and transcoding **on-device** (`MediaCodec` PCM decode + `jump3r` CBR LAME MP3 encoder) if server transcoding fails or is unavailable.
 - **Public `Music/` Storage (`MediaStore`) & Tagging:**
   - Writes files atomically (`IS_PENDING`) to `Music/music-player/<Artist>/<Album>/<TrackNo> - <Title>.<ext>` (using `<DiscNo>-<TrackNo>` for multi-disc albums, with sanitized filenames).
-  - Embeds ID3v2.4 (MP3) / Vorbis Comment (FLAC) metadata, album artwork, Track ReplayGain, and verification tags (`MUSICPLAYER_TRACK_ID`, `MUSICPLAYER_QUALITY`, `MUSICPLAYER_AUDIO_SHA256`).
+  - Embeds ID3v2.4 (MP3) / Vorbis Comment (FLAC) metadata, album artwork, Track ReplayGain, Jellyfin synced/plain lyrics (for full offline lyrics support), and verification tags (`MUSICPLAYER_TRACK_ID`, `MUSICPLAYER_QUALITY`, `MUSICPLAYER_AUDIO_SHA256`), while preserving existing FLAC Vorbis Comments (such as genre, album ReplayGain, precise release dates, and MusicBrainz IDs).
 - **Automatic Offline Folder Recognition & Deduplication:**
   - Uses `READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` (Android 12) to auto-discover and adopt existing verified files in `Music/music-player/` on sign-in, Home refresh, or manual verification across reinstalls or debug-to-release upgrades.
   - Verifies identity via embedded Track ID (or strict path, `±3 s` duration, and tag checks for legacy files), reuses identical files via audio-payload SHA-256 on Scoped Storage conflicts, and cleans up ` (1)` duplicates via full-file SHA-256.

@@ -1,7 +1,9 @@
 package com.musicplayer.data.local
 
+import com.musicplayer.core.model.LyricLine
 import com.musicplayer.core.model.LyricsParser
 import com.musicplayer.core.model.LyricsSource
+import com.musicplayer.core.model.TrackLyrics
 import com.musicplayer.data.repository.JellyfinLyricLineDto
 import com.musicplayer.data.repository.JellyfinLyricsMapper
 import com.musicplayer.data.repository.JellyfinLyricsResponseDto
@@ -135,5 +137,32 @@ class LyricsParserAndReaderTest {
         assertNotNull(read)
         assertFalse(read!!.isSynced)
         assertEquals(listOf("Plain first line", "Plain second line"), read.lines.map { it.text })
+    }
+
+    @Test
+    fun `formats synced and plain lyrics cleanly for embedding and round trips`() {
+        val synced = TrackLyrics(
+            lines = listOf(
+                LyricLine("First synced line", startTimeMs = 12_500L),
+                LyricLine("Late track line", startTimeMs = 6_305_250L), // 105:05.25
+            ),
+            isSynced = true,
+            source = LyricsSource.JELLYFIN,
+        )
+        val lrc = LyricsParser.formatForEmbedding(synced)
+        assertEquals("[00:12.50]First synced line\n[105:05.25]Late track line", lrc)
+
+        val reparsed = LyricsParser.parse(lrc!!, LyricsSource.EMBEDDED)
+        assertNotNull(reparsed)
+        assertTrue(reparsed!!.isSynced)
+        assertEquals(listOf(12_500L, 6_305_250L), reparsed.lines.map { it.startTimeMs })
+        assertEquals(listOf("First synced line", "Late track line"), reparsed.lines.map { it.text })
+
+        val plain = TrackLyrics(
+            lines = listOf(LyricLine("Line A"), LyricLine("Line B")),
+            isSynced = false,
+            source = LyricsSource.JELLYFIN,
+        )
+        assertEquals("Line A\nLine B", LyricsParser.formatForEmbedding(plain))
     }
 }
