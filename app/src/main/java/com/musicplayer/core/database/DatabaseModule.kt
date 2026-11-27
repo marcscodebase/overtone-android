@@ -33,6 +33,7 @@ object DatabaseModule {
             MusicPlayerDatabase.MIGRATION_1_2,
             MusicPlayerDatabase.MIGRATION_2_3,
             MusicPlayerDatabase.MIGRATION_3_4,
+            MusicPlayerDatabase.MIGRATION_4_5,
         )
         .build()
 

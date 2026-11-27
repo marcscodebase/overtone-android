@@ -69,9 +69,12 @@ import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.catalog.CatalogContent
 import com.musicplayer.feature.catalog.CatalogViewModel
+import com.musicplayer.feature.home.ExploreTagKind
 import com.musicplayer.feature.home.HomeCollectionSection
 import com.musicplayer.feature.home.HomeContent
 import com.musicplayer.feature.home.HomeViewModel
+import com.musicplayer.feature.home.QuickAccessTarget
+import com.musicplayer.feature.home.SmartMixType
 import com.musicplayer.feature.library.LibraryCollectionSection
 import com.musicplayer.feature.library.LibraryContent
 import com.musicplayer.feature.library.LibraryFilter
@@ -83,6 +86,7 @@ import kotlinx.coroutines.launch
 fun MainPagerRoute(
     onSearchClick: () -> Unit,
     onDaylistClick: () -> Unit,
+    onOpenSmartMix: (SmartMixType, seedId: String?, seedName: String?) -> Unit,
     onOpenHomeCollection: (HomeCollectionSection) -> Unit,
     onOpenLibraryCollection: (LibraryCollectionSection) -> Unit,
     onAlbumClick: (String) -> Unit,
@@ -193,15 +197,16 @@ fun MainPagerRoute(
                 0 -> HomePagerPage(
                     viewModel = homeViewModel,
                     onDaylistClick = onDaylistClick,
-                    onShowAllRecentlyAdded = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_ADDED) },
+                    onOpenSmartMix = onOpenSmartMix,
+                    onOpenHomeCollection = onOpenHomeCollection,
+                    onOpenLibraryCollection = onOpenLibraryCollection,
                     onShowAllPlaylists = {
                         libraryViewModel.onClosePlaylistFolder()
                         libraryViewModel.onFilterSelected(LibraryFilter.PLAYLISTS, forceSelect = true)
                         coroutineScope.launch { pagerState.animateScrollToPage(1) }
                     },
-                    onShowAllFavorites = { onOpenLibraryCollection(LibraryCollectionSection.FAVORITES) },
-                    onShowAllRecentlyPlayed = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_PLAYED) },
                     onAlbumClick = onAlbumClick,
+                    onArtistClick = onArtistClick,
                     onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
@@ -245,11 +250,12 @@ fun MainPagerRoute(
 private fun HomePagerPage(
     viewModel: HomeViewModel,
     onDaylistClick: () -> Unit,
-    onShowAllRecentlyAdded: () -> Unit,
+    onOpenSmartMix: (SmartMixType, seedId: String?, seedName: String?) -> Unit,
+    onOpenHomeCollection: (HomeCollectionSection) -> Unit,
+    onOpenLibraryCollection: (LibraryCollectionSection) -> Unit,
     onShowAllPlaylists: () -> Unit,
-    onShowAllFavorites: () -> Unit,
-    onShowAllRecentlyPlayed: () -> Unit,
     onAlbumClick: (String) -> Unit,
+    onArtistClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
@@ -270,13 +276,38 @@ private fun HomePagerPage(
     HomeContent(
         state = state,
         onRefresh = viewModel::refreshLibrary,
-        onDaylistClick = onDaylistClick,
-        onPlayDaylist = viewModel::onPlayDaylist,
-        onShuffleDaylist = viewModel::onShuffleDaylist,
-        onShowAllRecentlyAdded = onShowAllRecentlyAdded,
+        onQuickAccessClick = { tile ->
+            when (val target = tile.target) {
+                is QuickAccessTarget.AlbumTarget -> onAlbumClick(target.albumId)
+                is QuickAccessTarget.PlaylistTarget -> onPlaylistClick(target.playlistId)
+                is QuickAccessTarget.ArtistTarget -> onArtistClick(target.artistId)
+                is QuickAccessTarget.CollectionTarget -> onOpenLibraryCollection(target.section)
+            }
+        },
+        onQuickAccessPlay = viewModel::onPlayQuickAccess,
+        onSmartMixClick = { mix ->
+            if (mix.type == SmartMixType.DAYLIST) {
+                onDaylistClick()
+            } else {
+                onOpenSmartMix(mix.type, mix.seedId, mix.seedName)
+            }
+        },
+        onSmartMixPlay = viewModel::onPlaySmartMix,
+        onSpotlightOpen = { album -> onAlbumClick(album.id) },
+        onSpotlightPlay = viewModel::onPlaySpotlightAlbum,
+        onSpotlightNext = viewModel::onNextSpotlight,
+        onExploreTagClick = { tag ->
+            when (tag.kind) {
+                ExploreTagKind.GENRE -> onOpenSmartMix(SmartMixType.GENRE_MIX, null, tag.value)
+                ExploreTagKind.DECADE -> onOpenSmartMix(SmartMixType.DECADE_MIX, tag.value, tag.label)
+            }
+        },
+        onShowAllRecentlyAdded = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_ADDED) },
+        onShowAllMoreFromArtists = { onOpenHomeCollection(HomeCollectionSection.MORE_FROM_ARTISTS_YOU_LOVE) },
+        onShowAllRediscover = { onOpenHomeCollection(HomeCollectionSection.REDISCOVER_ALBUMS) },
+        onShowAllUnplayed = { onOpenHomeCollection(HomeCollectionSection.UNPLAYED_GEMS) },
         onShowAllPlaylists = onShowAllPlaylists,
-        onShowAllFavorites = onShowAllFavorites,
-        onShowAllRecentlyPlayed = onShowAllRecentlyPlayed,
+        onShowAllRecentlyPlayed = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_PLAYED) },
         onAlbumClick = onAlbumClick,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onTrackClick,

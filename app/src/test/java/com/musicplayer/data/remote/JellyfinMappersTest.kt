@@ -30,6 +30,7 @@ class JellyfinMappersTest {
               "ParentIndexNumber": 1,
               "ProductionYear": 1971,
               "PremiereDate": "1971-11-05T00:00:00.0000000Z",
+              "Genres": ["Progressive Rock", "Psychedelic Rock"],
               "RunTimeTicks": 14110000000,
               "NormalizationGain": -4.2,
               "HasLyrics": true,
@@ -109,6 +110,10 @@ class JellyfinMappersTest {
         assertEquals("img-tag-1", entity.primaryImageTag)
         assertEquals(1971, entity.year)
         assertTrue((entity.premiereDate ?: 0L) != 0L)
+        assertEquals(
+            listOf("Progressive Rock", "Psychedelic Rock"),
+            com.musicplayer.core.model.GenresCodec.decode(entity.genresJson),
+        )
     }
 
     @Test

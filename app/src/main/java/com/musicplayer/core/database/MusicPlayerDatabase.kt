@@ -34,7 +34,7 @@ import com.musicplayer.core.database.entity.TrackEntity
         PlaybackQueueEntity::class,
         PendingSyncActionEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -70,6 +70,13 @@ abstract class MusicPlayerDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE tracks ADD COLUMN year INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE tracks ADD COLUMN premiereDate INTEGER DEFAULT NULL")
                 db.execSQL("ALTER TABLE albums ADD COLUMN premiereDate INTEGER DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN genresJson TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE albums ADD COLUMN genresJson TEXT DEFAULT NULL")
             }
         }
     }

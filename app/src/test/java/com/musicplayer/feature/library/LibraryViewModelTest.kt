@@ -170,6 +170,13 @@ class LibraryViewModelTest {
             downloadedOnly: Boolean,
             excludeTrackIds: Set<String>,
         ): List<Track> = emptyList()
+        override suspend fun getInstantMix(
+            seedKind: com.musicplayer.core.model.InstantMixSeedKind,
+            seedId: String?,
+            genreName: String?,
+            limit: Int,
+        ): com.musicplayer.core.model.InstantMixResult =
+            com.musicplayer.core.model.InstantMixResult(emptyList(), fromJellyfinServer = false)
         override suspend fun syncLibrary(): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun search(query: String): AppResult<SearchResults> = AppResult.Success(SearchResults())

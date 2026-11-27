@@ -94,6 +94,9 @@ fun HomeCollectionScreen(
     val titleRes = when (state.section) {
         HomeCollectionSection.RECENTLY_ADDED -> R.string.home_recently_added
         HomeCollectionSection.RECENTLY_PLAYED -> R.string.home_recently_played
+        HomeCollectionSection.MORE_FROM_ARTISTS_YOU_LOVE -> R.string.home_more_from_artists
+        HomeCollectionSection.REDISCOVER_ALBUMS -> R.string.home_rediscover_albums
+        HomeCollectionSection.UNPLAYED_GEMS -> R.string.home_unplayed_gems
     }
 
     SwipeDownToDismissContainer(
@@ -123,8 +126,8 @@ fun HomeCollectionScreen(
                 )
             },
         ) { innerPadding ->
-            when (state.section) {
-                HomeCollectionSection.RECENTLY_ADDED -> {
+            when {
+                state.section.isAlbumCollection -> {
                     if (state.albums.isEmpty()) {
                         EmptyState(
                             title = stringResource(R.string.library_empty_title),
@@ -161,6 +164,7 @@ fun HomeCollectionScreen(
                                 ) { album ->
                                     RecentlyAddedAlbumRow(
                                         album = album,
+                                        subtitleOverride = state.albumSubtitles[album.id],
                                         onClick = { onAlbumClick(album.id) },
                                     )
                                 }
@@ -169,7 +173,7 @@ fun HomeCollectionScreen(
                     }
                 }
 
-                HomeCollectionSection.RECENTLY_PLAYED -> {
+                else -> {
                     if (state.tracks.isEmpty()) {
                         EmptyState(
                             title = stringResource(R.string.home_recently_played_empty_title),
@@ -258,8 +262,9 @@ fun HomeCollectionScreen(
 private fun RecentlyAddedAlbumRow(
     album: Album,
     onClick: () -> Unit,
+    subtitleOverride: String? = null,
 ) {
-    val subtitle = listOfNotNull(
+    val subtitle = subtitleOverride ?: listOfNotNull(
         album.artistName,
         album.year?.toString(),
     ).joinToString(" • ")

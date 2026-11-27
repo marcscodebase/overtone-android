@@ -43,6 +43,7 @@ data class TrackEntity(
     val primaryImageTag: String? = null,
     val year: Int? = null,
     val premiereDate: Long? = null,
+    val genresJson: String? = null,
 )
 
 @Entity(
@@ -63,6 +64,7 @@ data class AlbumEntity(
     val dateAdded: Long = 0L,
     val primaryImageTag: String? = null,
     val premiereDate: Long? = null,
+    val genresJson: String? = null,
 )
 
 @Entity(tableName = "artists")

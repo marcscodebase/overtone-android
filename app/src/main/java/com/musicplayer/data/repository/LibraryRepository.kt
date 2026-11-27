@@ -16,6 +16,8 @@ import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.InstantMixResult
+import com.musicplayer.core.model.InstantMixSeedKind
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.SearchResults
 import com.musicplayer.core.model.Track
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.extensions.artistsApi
+import org.jellyfin.sdk.api.client.extensions.instantMixApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.playlistsApi
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -66,6 +69,13 @@ interface LibraryRepository {
         downloadedOnly: Boolean = false,
         excludeTrackIds: Set<String> = emptySet(),
     ): List<Track>
+
+    suspend fun getInstantMix(
+        seedKind: InstantMixSeedKind,
+        seedId: String? = null,
+        genreName: String? = null,
+        limit: Int = 50,
+    ): InstantMixResult
 
     suspend fun syncLibrary(): AppResult<Unit>
     suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit>
@@ -284,6 +294,214 @@ class JellyfinLibraryRepository @Inject constructor(
         }
     }
 
+    override suspend fun getInstantMix(
+        seedKind: InstantMixSeedKind,
+        seedId: String?,
+        genreName: String?,
+        limit: Int,
+    ): InstantMixResult = withContext(ioDispatcher) {
+        if (limit <= 0) return@withContext InstantMixResult(emptyList(), fromJellyfinServer = false)
+        val prefs = preferencesDataStore.userPreferences.first()
+        val offline = prefs.offlineModeEnabled || !networkMonitor.networkState.value.isConnected
+        val completedDownloads = downloadDao.getCompletedRecords().associateBy { it.trackId }
+
+        if (!offline) {
+            val session = authSessionStore.getSession()
+            val userUuid = session?.userId?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val seedUuid = seedId?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            if (userUuid != null) {
+                try {
+                    val api = clientProvider.getClient()
+                    val fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.GENRES)
+                    val dtos = when (seedKind) {
+                        InstantMixSeedKind.TRACK -> seedUuid?.let { id ->
+                            api.instantMixApi.getInstantMixFromSong(
+                                itemId = id,
+                                userId = userUuid,
+                                limit = limit,
+                                fields = fields,
+                            ).content.items
+                        }
+
+                        InstantMixSeedKind.ALBUM -> seedUuid?.let { id ->
+                            api.instantMixApi.getInstantMixFromAlbum(
+                                itemId = id,
+                                userId = userUuid,
+                                limit = limit,
+                                fields = fields,
+                            ).content.items
+                        }
+
+                        InstantMixSeedKind.ARTIST -> seedUuid?.let { id ->
+                            api.instantMixApi.getInstantMixFromArtists(
+                                itemId = id,
+                                userId = userUuid,
+                                limit = limit,
+                                fields = fields,
+                            ).content.items
+                        }
+
+                        InstantMixSeedKind.PLAYLIST -> seedUuid?.let { id ->
+                            api.instantMixApi.getInstantMixFromPlaylist(
+                                itemId = id,
+                                userId = userUuid,
+                                limit = limit,
+                                fields = fields,
+                            ).content.items
+                        }
+
+                        InstantMixSeedKind.GENRE -> genreName?.trim()?.takeIf { it.isNotEmpty() }?.let { genre ->
+                            api.instantMixApi.getInstantMixFromMusicGenreByName(
+                                name = genre,
+                                userId = userUuid,
+                                limit = limit,
+                                fields = fields,
+                            ).content.items
+                        }
+                    }.orEmpty()
+
+                    val mapped = dtos
+                        .filter { it.type == BaseItemKind.AUDIO }
+                        .map { dto ->
+                            val entity = JellyfinMappers.toTrackEntity(dto)
+                            entity.toDomain(
+                                artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(
+                                    trackId = entity.id,
+                                    albumId = entity.albumId,
+                                    imageTag = entity.primaryImageTag,
+                                ),
+                                downloadRecord = completedDownloads[entity.id],
+                            )
+                        }
+                        .distinctBy { it.id }
+
+                    if (mapped.isNotEmpty()) {
+                        return@withContext InstantMixResult(
+                            tracks = mapped.take(limit),
+                            fromJellyfinServer = true,
+                        )
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Throwable) {
+                    // Fall back cleanly to the local Room mix engine below
+                }
+            }
+        }
+
+        val allLocal = trackDao.getAllSnapshot().map { entity ->
+            entity.toDomain(
+                artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(
+                    trackId = entity.id,
+                    albumId = entity.albumId,
+                    imageTag = entity.primaryImageTag,
+                ),
+                downloadRecord = completedDownloads[entity.id],
+            )
+        }
+        val pool = if (offline) {
+            allLocal.filter { it.isDownloaded }.ifEmpty { allLocal }
+        } else {
+            allLocal
+        }
+        val localTracks = buildLocalInstantMix(
+            pool = pool,
+            seedKind = seedKind,
+            seedId = seedId,
+            genreName = genreName,
+            limit = limit,
+        )
+        InstantMixResult(tracks = localTracks, fromJellyfinServer = false)
+    }
+
+    private fun buildLocalInstantMix(
+        pool: List<Track>,
+        seedKind: InstantMixSeedKind,
+        seedId: String?,
+        genreName: String?,
+        limit: Int,
+    ): List<Track> {
+        if (pool.isEmpty()) return emptyList()
+        val targetGenres: Set<String>
+        val seedArtistIds: Set<String>
+        val seedDecade: Int?
+
+        when (seedKind) {
+            InstantMixSeedKind.GENRE -> {
+                targetGenres = setOfNotNull(genreName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() })
+                seedArtistIds = emptySet()
+                seedDecade = null
+            }
+
+            InstantMixSeedKind.ARTIST -> {
+                val artistTracks = pool.filter { track ->
+                    track.artistId == seedId || track.resolvedArtists.any { it.id == seedId }
+                }
+                targetGenres = artistTracks.flatMap { it.genres }.map { it.lowercase() }.toSet()
+                seedArtistIds = setOfNotNull(seedId)
+                seedDecade = artistTracks.mapNotNull { it.year }.firstOrNull()?.let { (it / 10) * 10 }
+            }
+
+            InstantMixSeedKind.ALBUM -> {
+                val albumTracks = pool.filter { it.albumId == seedId }
+                targetGenres = albumTracks.flatMap { it.genres }.map { it.lowercase() }.toSet()
+                seedArtistIds = albumTracks.mapNotNull { it.artistId }.toSet()
+                seedDecade = albumTracks.mapNotNull { it.year }.firstOrNull()?.let { (it / 10) * 10 }
+            }
+
+            InstantMixSeedKind.TRACK -> {
+                val seedTrack = pool.firstOrNull { it.id == seedId }
+                targetGenres = seedTrack?.genres.orEmpty().map { it.lowercase() }.toSet()
+                seedArtistIds = seedTrack?.resolvedArtists.orEmpty().map { it.id }.toSet()
+                seedDecade = seedTrack?.year?.let { (it / 10) * 10 }
+            }
+
+            InstantMixSeedKind.PLAYLIST -> {
+                targetGenres = emptySet()
+                seedArtistIds = emptySet()
+                seedDecade = null
+            }
+        }
+
+        val primary = mutableListOf<Track>()
+        val secondary = mutableListOf<Track>()
+        val remainder = mutableListOf<Track>()
+
+        for (track in pool) {
+            val matchesGenre = targetGenres.isNotEmpty() &&
+                track.genres.any { it.lowercase() in targetGenres }
+            val matchesArtist = seedArtistIds.isNotEmpty() &&
+                (track.artistId in seedArtistIds || track.resolvedArtists.any { it.id in seedArtistIds })
+            val matchesDecade = seedDecade != null && track.year != null &&
+                (track.year / 10) * 10 == seedDecade
+
+            when {
+                matchesGenre || matchesArtist -> primary += track
+                matchesDecade || track.isFavorite || track.playCount > 0 -> secondary += track
+                else -> remainder += track
+            }
+        }
+
+        val picked = LinkedHashMap<String, Track>(limit)
+        fun append(source: List<Track>, maxCount: Int) {
+            for (track in source.shuffled()) {
+                if (picked.size >= limit || picked.size >= maxCount) break
+                picked.putIfAbsent(track.id, track)
+            }
+        }
+
+        if (seedKind == InstantMixSeedKind.GENRE && primary.isNotEmpty()) {
+            append(primary, limit)
+            if (picked.size < limit) append(secondary, limit)
+        } else {
+            val primaryCap = (limit * 0.7f).toInt().coerceAtLeast(1)
+            append(primary, primaryCap)
+            append(secondary, limit)
+            append(remainder, limit)
+        }
+        return picked.values.toList()
+    }
+
     override suspend fun syncLibrary(): AppResult<Unit> = withContext(ioDispatcher) {
         val prefs = preferencesDataStore.userPreferences.first()
         if (prefs.offlineModeEnabled || !networkMonitor.networkState.value.isConnected) {
@@ -339,7 +557,7 @@ class JellyfinLibraryRepository @Inject constructor(
                 val items = api.playlistsApi.getPlaylistItems(
                     playlistId = playlistUuid,
                     userId = userUuid,
-                    fields = listOf(ItemFields.MEDIA_SOURCES),
+                    fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.GENRES),
                 ).content.items.orEmpty()
 
                 val trackEntities = items.map(JellyfinMappers::toTrackEntity)
@@ -391,7 +609,12 @@ class JellyfinLibraryRepository @Inject constructor(
                         BaseItemKind.MUSIC_ARTIST,
                         BaseItemKind.PLAYLIST,
                     ),
-                    fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.DATE_CREATED, ItemFields.TAGS),
+                    fields = listOf(
+                        ItemFields.MEDIA_SOURCES,
+                        ItemFields.DATE_CREATED,
+                        ItemFields.TAGS,
+                        ItemFields.GENRES,
+                    ),
                     limit = SEARCH_LIMIT,
                 ).content.items.orEmpty()
 
@@ -533,7 +756,7 @@ class JellyfinLibraryRepository @Inject constructor(
                 parentId = parentId,
                 recursive = true,
                 includeItemTypes = listOf(BaseItemKind.MUSIC_ALBUM),
-                fields = listOf(ItemFields.DATE_CREATED),
+                fields = listOf(ItemFields.DATE_CREATED, ItemFields.GENRES),
                 sortBy = listOf(ItemSortBy.DATE_CREATED),
                 sortOrder = listOf(SortOrder.DESCENDING),
                 startIndex = startIndex,
@@ -561,7 +784,7 @@ class JellyfinLibraryRepository @Inject constructor(
                 parentId = parentId,
                 recursive = true,
                 includeItemTypes = listOf(BaseItemKind.AUDIO),
-                fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.DATE_CREATED),
+                fields = listOf(ItemFields.MEDIA_SOURCES, ItemFields.DATE_CREATED, ItemFields.GENRES),
                 startIndex = startIndex,
                 limit = PAGE_SIZE,
             ).content

@@ -49,11 +49,18 @@ A complete, code-verified overview of all features currently implemented in **an
 
 ---
 
-## 4. Home, Daylist & Unified Search
-- **Daylist (50-Track Auto-Refreshing Mix):**
-  - Prominent Home card with a 2×2 cover mosaic, **Late Night Mix** (`00:00–06:00`), **Morning Mix** (`06:00–12:00`), **Afternoon Mix** (`12:00–18:00`), and **Evening Mix** (`18:00–00:00`) indicator, next refresh time, and one-tap **Play** & **Shuffle** buttons.
-  - Deterministically generates **50 shuffled songs** from your library 4 times daily (`00:00`, `06:00`, `12:00`, `18:00`), auto-checks for rollover on app resume, includes a **Refresh now** button in the Daylist detail view to roll a brand-new 50-song mix on demand, and degrades gracefully offline by playing/shuffling downloaded Daylist tracks.
-- **Home Feed:** Daylist, Recently Added (5 albums with **Show all** header shortcut to a full chronological Recently Added list view), Your Playlists (5 playlists with **Show all** header shortcut to Library → Playlists), Favorites (5 songs with bottom **Show all** button opening the full Favorites collection view), and Recently Played (5 songs with bottom **Show all** button opening the full Recently Played list view with Play/Shuffle), plus pull-to-refresh, top-bar Refresh (which also reconciles offline downloads), and an Offline status banner with a one-tap **Go online** action.
+## 4. 3-Zone Home, Smart Mixes & Unified Search
+- **Zone 1 — Quick Access ("Jump Back In"):** Compact 2×3 speed-dial grid at the very top of Home combining recently played albums, pinned Library collections (*Favorite Songs*, *Downloaded Songs*), and top playlists — each tile supports tap-to-open and a 1-tap instant Play button, automatically shifting to downloaded content when offline.
+- **Zone 2 — Smart Mixes ("Made For You" — Jellyfin + Offline-First):**
+  - **Daylist:** Deterministically blends familiar favorites/rotation (~45 %), rediscovery tracks (~30 %), and unplayed catalog gems (~25 %) into a 50-track mix refreshed 4 times daily (`00:00`, `06:00`, `12:00`, `18:00`) plus on-demand **Refresh now** in the detail screen.
+  - **On Repeat:** Your heavy-rotation tracks ranked by play count, recency, and favorites.
+  - **Jellyfin Instant Mix:** Live artist radio powered by Jellyfin's native `InstantMixApi` when online, seamlessly falling back to a genre/decade/artist local Room mix when offline or unreachable.
+  - **Time Capsule:** Rediscover beloved tracks & favorites you haven't played in weeks/months.
+  - **Deep Cuts:** Completely unplayed tracks (`playCount == 0`) from your catalog, weighted toward artists you already love.
+- **Zone 3 — Conscious Listening & Discovery ("From Your Shelf"):**
+  - **Album Spotlight Card:** Calm Apple-Music/Roon-inspired hero pick with contextual reason badges (*From an artist you love*, *Haven't played in X mo*, *Unplayed in your catalog*, *Newly added • Unplayed*), 1-tap **Play**, and a **Dice / Next Pick** button to flip through albums right on Home.
+  - **Explore by Genre & Era:** Synced Jellyfin **Genre** chips (cached locally in Room) and **Decade** chips (`2020s`, `2010s`, `90s`, …) opening dedicated genre/era Smart Mixes powered by Jellyfin's `InstantMixApi` online and Room locally offline.
+  - **Curated Discovery Album Shelves** (all with **Show all** list views): **More from Artists You Love** (unplayed albums by your favorite/most-played artists), **Rediscover Albums** (previously played albums with relative *last played* labels), **Unplayed Gems** (daily-rotated unplayed server albums), and **Recently Added**, followed by compact **Your Playlists** and **Recently Played** sections.
 - **Unified Online & Offline Search:** Auto-focused, 300 ms debounced live Jellyfin search across songs, albums, artists, and playlists, automatically falling back to cached local Room search when offline with a visible local-results indicator banner.
 
 ---

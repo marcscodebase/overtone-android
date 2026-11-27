@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Album
+import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
@@ -12,6 +13,7 @@ import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.DownloadRepository
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
+import com.musicplayer.feature.library.LibraryCollectionSection
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -27,11 +30,18 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
+    val quickAccessTiles: List<QuickAccessTile> = emptyList(),
     val daylist: Daylist? = null,
+    val smartMixes: List<SmartMixPreview> = emptyList(),
+    val spotlight: AlbumSpotlight? = null,
+    val hasMultipleSpotlights: Boolean = false,
+    val exploreTags: List<ExploreTag> = emptyList(),
     val recentlyAddedAlbums: List<Album> = emptyList(),
-    val recentlyPlayedTracks: List<Track> = emptyList(),
-    val favoriteTracks: List<Track> = emptyList(),
+    val moreFromArtistsYouLove: List<Album> = emptyList(),
+    val rediscoverAlbums: List<RediscoverAlbumItem> = emptyList(),
+    val unplayedGems: List<Album> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
+    val recentlyPlayedTracks: List<Track> = emptyList(),
     val activeTrackId: String? = null,
     val offlineStatus: OfflineStatus = OfflineStatus(),
     val isRefreshing: Boolean = false,
@@ -39,8 +49,15 @@ data class HomeUiState(
 ) {
     val isOffline: Boolean get() = offlineStatus.isOffline
     val isEmpty: Boolean
-        get() = daylist == null && recentlyAddedAlbums.isEmpty() && recentlyPlayedTracks.isEmpty() &&
-            favoriteTracks.isEmpty() && playlists.isEmpty()
+        get() = quickAccessTiles.isEmpty() &&
+            smartMixes.isEmpty() &&
+            spotlight == null &&
+            recentlyAddedAlbums.isEmpty() &&
+            moreFromArtistsYouLove.isEmpty() &&
+            rediscoverAlbums.isEmpty() &&
+            unplayedGems.isEmpty() &&
+            playlists.isEmpty() &&
+            recentlyPlayedTracks.isEmpty()
 }
 
 @HiltViewModel
@@ -56,36 +73,39 @@ class HomeViewModel @Inject constructor(
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val daylistSlot = MutableStateFlow(DaylistSlot.current())
+    private val spotlightOffset = MutableStateFlow(0)
+
+    private data class RemoteMixCache(
+        val seedId: String? = null,
+        val tracks: List<Track> = emptyList(),
+        val fromServer: Boolean = false,
+    )
+
+    private val remoteInstantMix = MutableStateFlow(RemoteMixCache())
+    private var lastFetchedSeedId: String? = null
 
     private val activeTrackId = playbackController.playbackState
         .map { it.currentTrack?.id }
         .distinctUntilChanged()
 
-    private val daylistRefreshPrefs = preferencesDataStore.userPreferences
-        .map { it.daylistRefreshSlotKey to it.daylistRefreshNonce }
+    private val prefsBundle = preferencesDataStore.userPreferences
+        .map { prefs ->
+            HomePrefsBundle(
+                daylistSlotKey = prefs.daylistRefreshSlotKey,
+                daylistNonce = prefs.daylistRefreshNonce,
+                pinnedKeys = prefs.pinnedLibraryKeys,
+            )
+        }
         .distinctUntilChanged()
 
-    private val daylistFlow = combine(
+    private val libraryBundle = combine(
         libraryRepository.observeAllTracks(),
-        daylistSlot,
-        daylistRefreshPrefs,
-    ) { allTracks, slot, (savedSlotKey, savedNonce) ->
-        if (allTracks.isNotEmpty()) {
-            val effectiveNonce = if (savedSlotKey == slot.slotKey) savedNonce else 0L
-            DaylistGenerator.generate(
-                allTracks = allTracks,
-                slot = slot,
-                refreshNonce = effectiveNonce,
-            )
-        } else {
-            null
-        }
+        libraryRepository.observeAllAlbums(),
+        libraryRepository.observeAllArtists(),
+        libraryRepository.observeAllPlaylists(),
+    ) { tracks, albums, artists, playlists ->
+        HomeLibraryBundle(tracks, albums, artists, playlists)
     }
-
-    private val trackFeeds = combine(
-        libraryRepository.observeRecentlyPlayedTracks(limit = HOME_PREVIEW_LIMIT),
-        libraryRepository.observeFavoriteTracks(),
-    ) { recent, favorites -> recent to favorites.take(HOME_PREVIEW_LIMIT) }
 
     private val statusBundle = combine(
         activeTrackId,
@@ -96,19 +116,64 @@ class HomeViewModel @Inject constructor(
         HomeStatusBundle(activeId, offline, refreshing, error)
     }
 
+    private val controlsBundle = combine(
+        daylistSlot,
+        prefsBundle,
+        spotlightOffset,
+        remoteInstantMix,
+    ) { slot, prefs, offset, remoteMix ->
+        HomeControlsBundle(slot, prefs, offset, remoteMix)
+    }
+
     val uiState: StateFlow<HomeUiState> = combine(
-        daylistFlow,
-        libraryRepository.observeRecentlyAddedAlbums(limit = HOME_PREVIEW_LIMIT),
-        trackFeeds,
-        libraryRepository.observeAllPlaylists().map { it.take(HOME_PREVIEW_LIMIT) },
+        libraryBundle,
+        controlsBundle,
         statusBundle,
-    ) { daylist, albums, (recentTracks, favorites), playlists, status ->
+    ) { library, controls, status ->
+        val effectiveNonce = if (controls.prefs.daylistSlotKey == controls.slot.slotKey) {
+            controls.prefs.daylistNonce
+        } else {
+            0L
+        }
+        val feed = HomeDiscoveryEngine.buildHomeFeed(
+            allTracks = library.tracks,
+            allAlbums = library.albums,
+            allArtists = library.artists,
+            playlists = library.playlists,
+            pinnedKeys = controls.prefs.pinnedKeys,
+            slot = controls.slot,
+            daylistRefreshNonce = effectiveNonce,
+            isOffline = status.offlineStatus.isOffline,
+            jellyfinInstantMixTracks = controls.remoteMix.tracks,
+            jellyfinInstantMixFromServer = controls.remoteMix.fromServer,
+        )
+
+        val seed = feed.instantMixSeed
+        if (seed != null && !status.offlineStatus.isOffline && seed.id != lastFetchedSeedId) {
+            lastFetchedSeedId = seed.id
+            fetchRemoteInstantMix(seed)
+        }
+
+        val candidates = feed.spotlightCandidates
+        val currentSpotlight = if (candidates.isNotEmpty()) {
+            candidates[controls.spotlightOffset.mod(candidates.size)]
+        } else {
+            null
+        }
+
         HomeUiState(
-            daylist = daylist,
-            recentlyAddedAlbums = albums,
-            recentlyPlayedTracks = recentTracks,
-            favoriteTracks = favorites,
-            playlists = playlists,
+            quickAccessTiles = feed.quickAccessTiles,
+            daylist = feed.daylist,
+            smartMixes = feed.smartMixes,
+            spotlight = currentSpotlight,
+            hasMultipleSpotlights = candidates.size > 1,
+            exploreTags = feed.exploreTags,
+            recentlyAddedAlbums = feed.recentlyAddedAlbums,
+            moreFromArtistsYouLove = feed.moreFromArtistsYouLove,
+            rediscoverAlbums = feed.rediscoverAlbums,
+            unplayedGems = feed.unplayedGems,
+            playlists = feed.playlists,
+            recentlyPlayedTracks = feed.recentlyPlayedTracks,
             activeTrackId = status.activeTrackId,
             offlineStatus = status.offlineStatus,
             isRefreshing = status.isRefreshing,
@@ -122,6 +187,26 @@ class HomeViewModel @Inject constructor(
             initialValue = HomeUiState(isRefreshing = true),
         )
 
+    private data class HomePrefsBundle(
+        val daylistSlotKey: String,
+        val daylistNonce: Long,
+        val pinnedKeys: List<String>,
+    )
+
+    private data class HomeLibraryBundle(
+        val tracks: List<Track>,
+        val albums: List<Album>,
+        val artists: List<Artist>,
+        val playlists: List<Playlist>,
+    )
+
+    private data class HomeControlsBundle(
+        val slot: DaylistSlot,
+        val prefs: HomePrefsBundle,
+        val spotlightOffset: Int,
+        val remoteMix: RemoteMixCache,
+    )
+
     private data class HomeStatusBundle(
         val activeTrackId: String?,
         val offlineStatus: OfflineStatus,
@@ -131,6 +216,23 @@ class HomeViewModel @Inject constructor(
 
     init {
         refreshLibrary()
+    }
+
+    private fun fetchRemoteInstantMix(seed: InstantMixSeed) {
+        viewModelScope.launch {
+            val result = libraryRepository.getInstantMix(
+                seedKind = seed.kind,
+                seedId = seed.id,
+                limit = 40,
+            )
+            if (result.tracks.isNotEmpty() && result.fromJellyfinServer) {
+                remoteInstantMix.value = RemoteMixCache(
+                    seedId = seed.id,
+                    tracks = result.tracks,
+                    fromServer = true,
+                )
+            }
+        }
     }
 
     fun checkDaylistSlot() {
@@ -146,6 +248,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             isRefreshing.value = true
             errorMessage.value = null
+            lastFetchedSeedId = null
             when (val result = libraryRepository.syncLibrary()) {
                 is AppResult.Success -> {
                     errorMessage.value = null
@@ -157,31 +260,72 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun onPlayDaylist() {
-        val state = uiState.value
-        val tracks = state.daylist?.tracks.orEmpty()
-        val playable = if (state.isOffline) tracks.filter { it.isDownloaded } else tracks
+    fun onNextSpotlight() {
+        spotlightOffset.value += 1
+    }
+
+    fun onPlayQuickAccess(tile: QuickAccessTile) {
+        val isOffline = uiState.value.isOffline
+        viewModelScope.launch {
+            val rawTracks: List<Track> = when (val target = tile.target) {
+                is QuickAccessTarget.AlbumTarget ->
+                    libraryRepository.observeAlbumTracks(target.albumId).first()
+                is QuickAccessTarget.PlaylistTarget -> {
+                    val cached = libraryRepository.observePlaylistTracks(target.playlistId).first()
+                    if (cached.isNotEmpty() || isOffline) {
+                        cached
+                    } else {
+                        libraryRepository.syncPlaylistTracks(target.playlistId)
+                        libraryRepository.observePlaylistTracks(target.playlistId).first()
+                    }
+                }
+                is QuickAccessTarget.ArtistTarget ->
+                    libraryRepository.observeArtistTracks(target.artistId).first()
+                is QuickAccessTarget.CollectionTarget -> when (target.section) {
+                    LibraryCollectionSection.FAVORITES ->
+                        libraryRepository.observeFavoriteTracks().first()
+                    LibraryCollectionSection.DOWNLOADED ->
+                        libraryRepository.observeDownloadedTracks().first()
+                }
+            }
+            val playable = if (isOffline) rawTracks.filter { it.isDownloaded } else rawTracks
+            if (playable.isNotEmpty()) {
+                playbackController.playTracks(
+                    tracks = playable,
+                    startIndex = 0,
+                    shuffle = false,
+                    contextLabel = tile.title,
+                )
+            }
+        }
+    }
+
+    fun onPlaySmartMix(mix: SmartMixPreview) {
+        val isOffline = uiState.value.isOffline
+        val playable = if (isOffline) mix.tracks.filter { it.isDownloaded } else mix.tracks
         if (playable.isNotEmpty()) {
             playbackController.playTracks(
                 tracks = playable,
                 startIndex = 0,
                 shuffle = false,
-                contextLabel = DaylistViewModel.DAYLIST_CONTEXT_LABEL,
+                contextLabel = mix.title,
             )
         }
     }
 
-    fun onShuffleDaylist() {
-        val state = uiState.value
-        val tracks = state.daylist?.tracks.orEmpty()
-        val playable = if (state.isOffline) tracks.filter { it.isDownloaded } else tracks
-        if (playable.isNotEmpty()) {
-            playbackController.playTracks(
-                tracks = playable,
-                startIndex = 0,
-                shuffle = true,
-                contextLabel = DaylistViewModel.DAYLIST_CONTEXT_LABEL,
-            )
+    fun onPlaySpotlightAlbum(album: Album) {
+        val isOffline = uiState.value.isOffline
+        viewModelScope.launch {
+            val tracks = libraryRepository.observeAlbumTracks(album.id).first()
+            val playable = if (isOffline) tracks.filter { it.isDownloaded } else tracks
+            if (playable.isNotEmpty()) {
+                playbackController.playTracks(
+                    tracks = playable,
+                    startIndex = 0,
+                    shuffle = false,
+                    contextLabel = album.title,
+                )
+            }
         }
     }
 
@@ -196,8 +340,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun onPlayNext(track: Track) = playbackController.playNext(track)
-
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
 
     fun onToggleFavorite(track: Track) {
@@ -206,9 +348,5 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             syncRepository.setTrackFavorite(track.id, target)
         }
-    }
-
-    companion object {
-        internal const val HOME_PREVIEW_LIMIT = 5
     }
 }

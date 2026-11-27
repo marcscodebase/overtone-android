@@ -26,7 +26,13 @@ import javax.inject.Inject
 enum class HomeCollectionSection(val routeKey: String) {
     RECENTLY_ADDED("recently_added"),
     RECENTLY_PLAYED("recently_played"),
+    MORE_FROM_ARTISTS_YOU_LOVE("more_from_artists"),
+    REDISCOVER_ALBUMS("rediscover_albums"),
+    UNPLAYED_GEMS("unplayed_gems"),
     ;
+
+    val isAlbumCollection: Boolean
+        get() = this != RECENTLY_PLAYED
 
     companion object {
         fun fromRouteKey(key: String?): HomeCollectionSection =
@@ -37,6 +43,7 @@ enum class HomeCollectionSection(val routeKey: String) {
 data class HomeCollectionUiState(
     val section: HomeCollectionSection = HomeCollectionSection.RECENTLY_ADDED,
     val albums: List<Album> = emptyList(),
+    val albumSubtitles: Map<String, String> = emptyMap(),
     val tracks: List<Track> = emptyList(),
     val activeTrackId: String? = null,
     val offlineStatus: OfflineStatus = OfflineStatus(),
@@ -57,12 +64,47 @@ class HomeCollectionViewModel @Inject constructor(
     private val destination = savedStateHandle.toRoute<HomeCollectionDestination>()
     private val section = HomeCollectionSection.fromRouteKey(destination.section)
 
-    private val albumsFlow = if (section == HomeCollectionSection.RECENTLY_ADDED) {
-        libraryRepository.observeAllAlbums().map { albums ->
-            albums.sortedByDescending { it.dateAdded }
+    private val albumsBundleFlow = when (section) {
+        HomeCollectionSection.RECENTLY_ADDED -> libraryRepository.observeAllAlbums().map { albums ->
+            albums.sortedByDescending { it.dateAdded } to emptyMap<String, String>()
         }
-    } else {
-        flowOf(emptyList())
+
+        HomeCollectionSection.MORE_FROM_ARTISTS_YOU_LOVE -> combine(
+            libraryRepository.observeAllAlbums(),
+            libraryRepository.observeAllTracks(),
+            libraryRepository.observeAllArtists(),
+            offlineStateProvider.offlineStatus,
+        ) { albums, tracks, artists, offline ->
+            val pool = filterAlbumsForOffline(albums, tracks, offline.isOffline)
+            HomeDiscoveryEngine.buildMoreFromArtistsYouLove(pool, tracks, artists) to emptyMap()
+        }
+
+        HomeCollectionSection.REDISCOVER_ALBUMS -> combine(
+            libraryRepository.observeAllAlbums(),
+            libraryRepository.observeAllTracks(),
+            offlineStateProvider.offlineStatus,
+        ) { albums, tracks, offline ->
+            val pool = filterAlbumsForOffline(albums, tracks, offline.isOffline)
+            val rediscover = HomeDiscoveryEngine.buildRediscoverAlbums(pool, tracks)
+            val subtitles = rediscover.associate { item ->
+                item.album.id to listOfNotNull(
+                    item.album.artistName,
+                    formatRelativeDaysAgo(item.daysSinceLastPlayed),
+                ).joinToString(" • ")
+            }
+            rediscover.map { it.album } to subtitles
+        }
+
+        HomeCollectionSection.UNPLAYED_GEMS -> combine(
+            libraryRepository.observeAllAlbums(),
+            libraryRepository.observeAllTracks(),
+            offlineStateProvider.offlineStatus,
+        ) { albums, tracks, offline ->
+            val pool = filterAlbumsForOffline(albums, tracks, offline.isOffline)
+            HomeDiscoveryEngine.buildUnplayedGems(pool, tracks) to emptyMap()
+        }
+
+        HomeCollectionSection.RECENTLY_PLAYED -> flowOf(emptyList<Album>() to emptyMap())
     }
 
     private val tracksFlow = if (section == HomeCollectionSection.RECENTLY_PLAYED) {
@@ -72,14 +114,15 @@ class HomeCollectionViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<HomeCollectionUiState> = combine(
-        albumsFlow,
+        albumsBundleFlow,
         tracksFlow,
         playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
         offlineStateProvider.offlineStatus,
-    ) { albums, tracks, activeId, offline ->
+    ) { (albums, subtitles), tracks, activeId, offline ->
         HomeCollectionUiState(
             section = section,
             albums = albums,
+            albumSubtitles = subtitles,
             tracks = tracks,
             activeTrackId = activeId,
             offlineStatus = offline,
@@ -91,6 +134,23 @@ class HomeCollectionViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = HomeCollectionUiState(section = section),
         )
+
+    private fun filterAlbumsForOffline(
+        albums: List<Album>,
+        tracks: List<Track>,
+        isOffline: Boolean,
+    ): List<Album> {
+        if (!isOffline) return albums
+        val downloadedAlbumIds = tracks.asSequence()
+            .filter { it.isDownloaded }
+            .mapNotNull { it.albumId }
+            .toSet()
+        return if (downloadedAlbumIds.isNotEmpty()) {
+            albums.filter { it.id in downloadedAlbumIds }
+        } else {
+            albums
+        }
+    }
 
     fun onPlayAll() {
         val playable = uiState.value.playableTracks
@@ -136,5 +196,17 @@ class HomeCollectionViewModel @Inject constructor(
 
     companion object {
         private const val RECENTLY_PLAYED_LIMIT = 100
+    }
+}
+
+internal fun formatRelativeDaysAgo(days: Int): String? = when {
+    days <= 0 -> null
+    days == 1 -> "1 day ago"
+    days < 14 -> "$days days ago"
+    days < 60 -> "${days / 7} wk ago"
+    days < 365 -> "${days / 30} mo ago"
+    else -> {
+        val years = days / 365
+        if (years == 1) "1 yr ago" else "$years yrs ago"
     }
 }

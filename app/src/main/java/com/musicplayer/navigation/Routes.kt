@@ -12,6 +12,13 @@ data object SearchDestination
 data object DaylistDestination
 
 @Serializable
+data class SmartMixDestination(
+    val mixType: String,
+    val seedId: String? = null,
+    val seedName: String? = null,
+)
+
+@Serializable
 data class HomeCollectionDestination(val section: String)
 
 @Serializable

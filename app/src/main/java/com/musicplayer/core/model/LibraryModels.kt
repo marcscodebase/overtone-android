@@ -24,6 +24,37 @@ object TrackArtistsCodec {
     }
 }
 
+object GenresCodec {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun encode(genres: List<String>): String? {
+        val cleaned = genres
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+        if (cleaned.isEmpty()) return null
+        return runCatching { json.encodeToString(cleaned) }.getOrNull()
+    }
+
+    fun decode(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
+    }
+}
+
+enum class InstantMixSeedKind {
+    TRACK,
+    ALBUM,
+    ARTIST,
+    PLAYLIST,
+    GENRE,
+}
+
+data class InstantMixResult(
+    val tracks: List<Track>,
+    val fromJellyfinServer: Boolean,
+)
+
 data class Track(
     val id: String,
     val title: String,
@@ -49,6 +80,7 @@ data class Track(
     val localUri: String? = null,
     val year: Int? = null,
     val premiereDate: Long? = null,
+    val genres: List<String> = emptyList(),
 ) {
     val resolvedArtists: List<TrackArtist>
         get() = if (artists.isNotEmpty()) {
@@ -70,6 +102,7 @@ data class Album(
     val dateAdded: Long,
     val artworkUrl: String?,
     val premiereDate: Long? = null,
+    val genres: List<String> = emptyList(),
 )
 
 data class Artist(

@@ -8,6 +8,7 @@ import com.musicplayer.core.database.entity.TrackEntity
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.DownloadStatus
+import com.musicplayer.core.model.GenresCodec
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.Track
@@ -78,6 +79,7 @@ object JellyfinMappers {
             primaryImageTag = primaryImageTag,
             year = dto.productionYear,
             premiereDate = dto.premiereDate?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
+            genresJson = GenresCodec.encode(dto.genres.orEmpty()),
         )
     }
 
@@ -99,6 +101,7 @@ object JellyfinMappers {
             dateAdded = dto.dateCreated?.toInstant(ZoneOffset.UTC)?.toEpochMilli() ?: 0L,
             primaryImageTag = dto.imageTags?.get(ImageType.PRIMARY),
             premiereDate = dto.premiereDate?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
+            genresJson = GenresCodec.encode(dto.genres.orEmpty()),
         )
     }
 
@@ -162,6 +165,7 @@ object JellyfinMappers {
             localUri = if (isCompletedLocal) downloadRecord.mediaStoreUri else null,
             year = year,
             premiereDate = premiereDate,
+            genres = GenresCodec.decode(genresJson),
         )
     }
 
@@ -176,6 +180,7 @@ object JellyfinMappers {
         dateAdded = dateAdded,
         artworkUrl = artworkUrl,
         premiereDate = premiereDate,
+        genres = GenresCodec.decode(genresJson),
     )
 
     fun ArtistEntity.toDomain(artworkUrl: String?): Artist = Artist(

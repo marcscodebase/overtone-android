@@ -45,6 +45,7 @@ import com.musicplayer.feature.download.DownloadActionsViewModel
 import com.musicplayer.feature.download.DownloadQualitySheet
 import com.musicplayer.feature.home.DaylistRoute
 import com.musicplayer.feature.home.HomeCollectionRoute
+import com.musicplayer.feature.home.SmartMixRoute
 import com.musicplayer.feature.library.LibraryCollectionRoute
 import com.musicplayer.feature.library.detail.AlbumDetailRoute
 import com.musicplayer.feature.library.detail.ArtistCollectionRoute
@@ -285,6 +286,15 @@ private fun AuthenticatedShell(
                 MainPagerRoute(
                     onSearchClick = { navController.navigate(SearchDestination) },
                     onDaylistClick = { navController.navigate(DaylistDestination) },
+                    onOpenSmartMix = { mixType, seedId, seedName ->
+                        navController.navigate(
+                            SmartMixDestination(
+                                mixType = mixType.routeKey,
+                                seedId = seedId,
+                                seedName = seedName,
+                            ),
+                        )
+                    },
                     onOpenHomeCollection = { section ->
                         navController.navigate(HomeCollectionDestination(section = section.routeKey))
                     },
@@ -319,6 +329,19 @@ private fun AuthenticatedShell(
 
             composable<DaylistDestination> {
                 DaylistRoute(
+                    onBackClick = { navController.popBackStack() },
+                    onAlbumClick = navigateToAlbum,
+                    onGoToTrackArtist = onGoToTrackArtist,
+                    onAddToPlaylist = { track ->
+                        playlistPickerInitialFavorite = track.isFavorite
+                        trackForPlaylistPicker = track
+                    },
+                    onToggleTrackDownload = downloadActionsViewModel::onToggleTrackDownload,
+                )
+            }
+
+            composable<SmartMixDestination> {
+                SmartMixRoute(
                     onBackClick = { navController.popBackStack() },
                     onAlbumClick = navigateToAlbum,
                     onGoToTrackArtist = onGoToTrackArtist,
