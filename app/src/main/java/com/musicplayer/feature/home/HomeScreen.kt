@@ -591,7 +591,6 @@ private fun SmartMixCard(
     Column(
         modifier = modifier
             .width(156.dp)
-            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
     ) {
         Box(
