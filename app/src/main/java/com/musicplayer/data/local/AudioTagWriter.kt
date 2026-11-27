@@ -426,7 +426,7 @@ object FlacTagWriter {
         }
 
         val out = ByteArrayOutputStream()
-        val vendor = (existing?.vendor?.takeIf { it.isNotBlank() } ?: "music-player")
+        val vendor = (existing?.vendor?.takeIf { it.isNotBlank() } ?: "Overtone")
             .toByteArray(Charsets.UTF_8)
         writeLeInt(out, vendor.size)
         out.write(vendor)

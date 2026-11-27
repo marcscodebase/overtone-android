@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">music-player</string>
+    <string name="app_name">Overtone</string>
     <string name="nav_home">Home</string>
     <string name="nav_search">Search</string>
     <string name="nav_library">Library</string>
@@ -158,7 +158,7 @@
     <string name="settings_ask_download_quality">Ask Quality Every Time</string>
     <string name="settings_ask_download_quality_subtitle">Show Lossless vs. MP3 picker before each download</string>
     <string name="settings_storage_manager">Downloads &amp; Storage</string>
-    <string name="settings_storage_manager_subtitle">Inspect local Music/music-player files and free up space</string>
+    <string name="settings_storage_manager_subtitle">Inspect local Music/Overtone files and free up space</string>
     <string name="download_notification_channel">Audio Downloads</string>
     <string name="download_notification_downloading">Downloading %1$s</string>
     <string name="download_notification_transcoding">Converting to MP3: %1$s</string>
@@ -175,7 +175,7 @@
     <string name="storage_reconcile">Verify files</string>
     <string name="storage_clear_all">Clear all</string>
     <string name="storage_clear_all_title">Clear all downloads?</string>
-    <string name="storage_clear_all_message">This deletes all downloaded audio files from Music/music-player/ on your device. Your Jellyfin library will not be affected.</string>
+    <string name="storage_clear_all_message">This deletes all downloaded audio files from Music/Overtone/ on your device. Your Jellyfin library will not be affected.</string>
     <string name="offline_banner_manual">Offline Mode — showing downloaded &amp; cached music</string>
     <string name="offline_banner_no_network">No internet connection — playing downloaded tracks</string>
     <string name="offline_go_online">Go online</string>
@@ -264,7 +264,7 @@
     <string name="home_recently_played_empty_title">No recently played songs</string>
     <string name="home_recently_played_empty_subtitle">Songs you play will appear here.</string>
     <string name="wireguard_title">Home Network (WireGuard)</string>
-    <string name="wireguard_settings_subtitle_unconfigured">Connect only music-player to your home network without a system VPN</string>
+    <string name="wireguard_settings_subtitle_unconfigured">Connect only Overtone to your home network without a system VPN</string>
     <string name="wireguard_auth_button">Configure WireGuard tunnel</string>
     <string name="wireguard_app_only_badge">App-only userspace tunnel • No Android system VPN</string>
     <string name="wireguard_state_connected">Connected via WireGuard</string>
@@ -279,9 +279,9 @@
     <string name="wireguard_mode_always">Always</string>
     <string name="wireguard_mode_off_desc">WireGuard is disabled. All requests connect directly.</string>
     <string name="wireguard_mode_auto_desc">Connects directly on home Wi-Fi; automatically activates WireGuard when away from home.</string>
-    <string name="wireguard_mode_always_desc">Always routes music-player traffic through your WireGuard home tunnel.</string>
+    <string name="wireguard_mode_always_desc">Always routes Overtone traffic through your WireGuard home tunnel.</string>
     <string name="wireguard_setup_title">Add a WireGuard Profile</string>
-    <string name="wireguard_setup_description">Import a WireGuard .conf file from your router (FritzBox, wg-easy, PiVPN, OPNsense). Keys are encrypted in the Android Keystore and only music-player uses this tunnel.</string>
+    <string name="wireguard_setup_description">Import a WireGuard .conf file from your router (FritzBox, wg-easy, PiVPN, OPNsense). Keys are encrypted in the Android Keystore and only Overtone uses this tunnel.</string>
     <string name="wireguard_import_conf_button">Import .conf file</string>
     <string name="wireguard_paste_conf_button">Paste configuration</string>
     <string name="wireguard_import_file">Import .conf</string>

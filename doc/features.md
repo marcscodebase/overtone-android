@@ -1,6 +1,6 @@
-# `android-music-player` (`music-player`) — Features
+# Overtone (`io.saier.overtone`) — Features
 
-A complete, code-verified overview of all features currently implemented in **android-music-player** (Android app display name: **`music-player`**), a native Android 12–15 (`minSdk 31`, `targetSdk 35`) lossless Jellyfin music player built with Kotlin, Jetpack Compose, Pure Material You, and AndroidX Media3.
+A complete, code-verified overview of all features currently implemented in **Overtone** (`io.saier.overtone`), a native Android 12–15 (`minSdk 31`, `targetSdk 35`) audiophile lossless Jellyfin music client built with Kotlin, Jetpack Compose, Pure Material You, and AndroidX Media3.
 
 ---
 
@@ -18,12 +18,12 @@ A complete, code-verified overview of all features currently implemented in **an
 
 ## 2. Built-In App-Only Userspace WireGuard Tunnel
 - **Zero System VPN Required:** Embeds official **`wireguard-go` + `gVisor netstack`** directly inside the app process (`libwguserspace.so`, 16 KB page-aligned for Android 15+, bundled for `arm64-v8a` and `x86_64` with graceful fallback on 32-bit devices) without using Android's `VpnService`.
-- **100 % App-Isolated:** Only `music-player` connects to your home network; all other Android apps remain untouched, no Android VPN slot is occupied, no system VPN icon appears, and another system VPN can run in parallel.
+- **100 % App-Isolated:** Only Overtone connects to your home network; all other Android apps remain untouched, no Android VPN slot is occupied, no system VPN icon appears, and another system VPN can run in parallel.
 - **Authenticated Loopback Bridge:** Routes all app networking — **Jellyfin API, ExoPlayer streams, Lyrics API, Coil cover art, and background downloads** — through a loopback-only (`127.0.0.1`) HTTP & HTTPS (`CONNECT`) proxy secured with a fresh random 256-bit token on every tunnel start/restart, internal home-network DNS resolution (e.g. `.fritz.box`, `.home.arpa`), and automatic OkHttp connection-pool eviction on tunnel transitions.
 - **Three Tunnel Modes:**
   - **Off:** Direct connections only.
   - **Auto (Smart Home Detection):** Connects directly on home Wi-Fi (or whenever the Jellyfin server is publicly reachable); automatically starts WireGuard for private/local home hosts or when direct probing fails across Wi-Fi and cellular handoffs.
-  - **Always:** Always routes `music-player` traffic through the WireGuard tunnel.
+  - **Always:** Always routes Overtone traffic through the WireGuard tunnel.
 - **Easy Setup & Diagnostics:**
   - Import standard `wg-quick` `.conf` files (FritzBox, wg-easy, PiVPN, OPNsense) via file picker or paste dialog, supporting IPv4/IPv6 endpoints, optional `PresharedKey`, and sensible defaults (`MTU 1280`, `25 s` keepalive, `1.1.1.1` fallback DNS).
   - The entire WireGuard configuration (private key, preshared key, peer key, endpoint, tunnel IPs, DNS) is stored **AES-256-GCM encrypted in the Android Keystore**.
@@ -120,10 +120,10 @@ A complete, code-verified overview of all features currently implemented in **an
   1. Requests server-side MP3 transcoding from Jellyfin first and sniffs the audio header to verify real MP3 frames (rejecting error pages or non-MP3 payloads).
   2. Automatically falls back to downloading the original lossless file and transcoding **on-device** (`MediaCodec` PCM decode + `jump3r` CBR LAME MP3 encoder) if server transcoding fails or is unavailable.
 - **Public `Music/` Storage (`MediaStore`) & Tagging:**
-  - Writes files atomically (`IS_PENDING`) to `Music/music-player/<Artist>/<Album>/<TrackNo> - <Title>.<ext>` (using `<DiscNo>-<TrackNo>` for multi-disc albums, with sanitized filenames).
+  - Writes files atomically (`IS_PENDING`) to `Music/Overtone/<Artist>/<Album>/<TrackNo> - <Title>.<ext>` (using `<DiscNo>-<TrackNo>` for multi-disc albums, with sanitized filenames).
   - Embeds ID3v2.4 (MP3) / Vorbis Comment (FLAC) metadata, album artwork, Track ReplayGain, Jellyfin synced/plain lyrics (for full offline lyrics support), and verification tags (`MUSICPLAYER_TRACK_ID`, `MUSICPLAYER_QUALITY`, `MUSICPLAYER_AUDIO_SHA256`), while preserving existing FLAC Vorbis Comments (such as genre, album ReplayGain, precise release dates, and MusicBrainz IDs).
 - **Automatic Offline Folder Recognition & Deduplication:**
-  - Uses `READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` (Android 12) to auto-discover and adopt existing verified files in `Music/music-player/` on sign-in, Home refresh, or manual verification across reinstalls or debug-to-release upgrades.
+  - Uses `READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` (Android 12) to auto-discover and adopt existing verified files in `Music/Overtone/` on sign-in, Home refresh, or manual verification across reinstalls or debug-to-release upgrades.
   - Verifies identity via embedded Track ID (or strict path, `±3 s` duration, and tag checks for legacy files), reuses identical files via audio-payload SHA-256 on Scoped Storage conflicts, and cleans up ` (1)` duplicates via full-file SHA-256.
 - **Reference-Counted Deletion & Storage Manager:** Tracks ownership across tracks, albums, and playlists so removing one playlist never deletes songs still downloaded via another album or playlist. **Settings → Downloads & Storage** displays total space used, lossless vs. MP3 breakdown, a full per-track download queue & file list (live status, errors, codec/bitrate, `Original` / `Server` / `On-device` badge, and per-track Cancel / Retry / Delete), **Verify files**, and **Clear all**.
 - **Downloaded Playlist Auto-Sync:** Per-playlist **Auto-Sync Downloads** toggle backed by a 6-hour periodic (plus reconnect and manual) WorkManager sync that downloads newly added tracks and reference-count prunes removed tracks automatically.

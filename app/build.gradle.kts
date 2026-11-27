@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,25 +9,69 @@ plugins {
     alias(libs.plugins.room)
 }
 
+val localKeystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.isFile) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun signingProp(envName: String, propName: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: localKeystoreProps.getProperty(propName)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = signingProp("OVERTONE_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = signingProp("OVERTONE_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingProp("OVERTONE_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingProp("OVERTONE_KEY_PASSWORD", "keyPassword")
+val hasReleaseSigning = !releaseStorePath.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.musicplayer"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.musicplayer"
+        applicationId = "io.saier.overtone"
         minSdk = 31
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-alpha01"
+        versionName = "0.1.0-test.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Required for F-Droid & reproducible builds: strip encrypted Play Store dependency block
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            vcsInfo {
+                include = false
+            }
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            } else if (project.findProperty("useDebugSigning")?.toString()?.toBoolean() == true) {
+                signingConfig = signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

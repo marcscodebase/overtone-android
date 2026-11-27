@@ -72,7 +72,7 @@ object NetworkModule {
         return createJellyfin {
             this.context = context
             clientInfo = ClientInfo(
-                name = "music-player",
+                name = "Overtone",
                 version = BuildConfig.VERSION_NAME,
             )
             apiClientFactory = okHttpFactory

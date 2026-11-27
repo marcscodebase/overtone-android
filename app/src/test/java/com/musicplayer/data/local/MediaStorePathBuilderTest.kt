@@ -16,7 +16,7 @@ class MediaStorePathBuilderTest {
             extension = "FLAC",
         )
 
-        assertEquals("Music/music-player/Pink Floyd/The Dark Side of the Moon/", target.relativePath)
+        assertEquals("Music/Overtone/Pink Floyd/The Dark Side of the Moon/", target.relativePath)
         assertEquals("04 - Time.flac", target.displayName)
         assertEquals("audio/flac", target.mimeType)
     }
@@ -32,7 +32,7 @@ class MediaStorePathBuilderTest {
             extension = ".mp3",
         )
 
-        assertEquals("Music/music-player/AC_DC/Live_ 1991_/", target.relativePath)
+        assertEquals("Music/Overtone/AC_DC/Live_ 1991_/", target.relativePath)
         assertEquals("2-03 - Back_In_Black.mp3", target.displayName)
         assertEquals("audio/mpeg", target.mimeType)
     }
@@ -48,7 +48,7 @@ class MediaStorePathBuilderTest {
             extension = "mp3",
         )
 
-        assertEquals("Music/music-player/Unknown Artist/Unknown Album/", target.relativePath)
+        assertEquals("Music/Overtone/Unknown Artist/Unknown Album/", target.relativePath)
         assertEquals("Single Track.mp3", target.displayName)
     }
 }

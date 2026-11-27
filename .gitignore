@@ -22,6 +22,7 @@ google-services.json
 
 # Native / NDK
 obj/
+app/src/main/jniLibs/
 
 # macOS / OS
 .DS_Store
@@ -30,3 +31,5 @@ Thumbs.db
 # Logs & Temp
 *.log
 tmp/
+__pycache__/
+*.pyc

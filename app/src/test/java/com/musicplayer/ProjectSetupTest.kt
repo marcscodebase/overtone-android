@@ -6,6 +6,6 @@ import org.junit.Test
 class ProjectSetupTest {
     @Test
     fun applicationIdMatchesSpecification() {
-        assertEquals("com.musicplayer", BuildConfig.APPLICATION_ID)
+        assertEquals("io.saier.overtone", BuildConfig.APPLICATION_ID)
     }
 }

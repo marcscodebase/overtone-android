@@ -1,0 +1,36 @@
+# Draft F-Droid metadata recipe for future submission to https://gitlab.com/fdroid/fdroiddata
+# Place as: metadata/io.saier.overtone.yml
+
+Categories:
+  - Multimedia
+License: GPL-3.0-or-later
+AuthorName: Marc Saier
+SourceCode: https://github.com/marcscodebase/android-music-player
+IssueTracker: https://github.com/marcscodebase/android-music-player/issues
+Changelog: https://github.com/marcscodebase/android-music-player/releases
+
+AutoName: Overtone
+
+RepoType: git
+Repo: https://github.com/marcscodebase/android-music-player.git
+
+Builds:
+  - versionName: '0.1.0'
+    versionCode: 1
+    commit: v0.1.0
+    subdir: app
+    gradle:
+      - yes
+    ndk: 27.2.12479018
+    srclibs:
+      - go@go1.24.2
+    prebuild:
+      - export PATH="$$go$$/bin:$PATH"
+      - export ANDROID_NDK_HOME="$$NDK$$"
+      - ../wireguard-core/build-android.sh
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+UpdateCheckData: app/build.gradle.kts|versionCode\s*=\s*(\d+)|app/build.gradle.kts|versionName\s*=\s*"([^"]+)"
+CurrentVersion: '0.1.0'
+CurrentVersionCode: 1

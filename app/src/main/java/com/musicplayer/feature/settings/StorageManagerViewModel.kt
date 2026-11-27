@@ -67,7 +67,7 @@ class StorageManagerViewModel @Inject constructor(
             statusMessage.value = if (parts.isNotEmpty()) {
                 parts.joinToString(", ") + "."
             } else {
-                "All downloaded files verified in Music/music-player/."
+                "All downloaded files verified in Music/Overtone/."
             }
             isBusy.value = false
         }

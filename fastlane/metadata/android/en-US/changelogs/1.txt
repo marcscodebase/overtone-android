@@ -1,0 +1,1 @@
+Initial Overtone release with lossless Direct Play, Android 14+ Bit-Perfect USB DAC support, 3-zone Home & Smart Mixes, curated Library + Catalog, offline downloads, and built-in app-only WireGuard tunnel.

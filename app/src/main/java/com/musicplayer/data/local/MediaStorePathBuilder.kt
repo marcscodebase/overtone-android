@@ -11,7 +11,7 @@ data class MediaStoreTarget(
 
 object MediaStorePathBuilder {
 
-    const val ROOT_RELATIVE_PATH = "Music/music-player"
+    const val ROOT_RELATIVE_PATH = "Music/Overtone"
 
     fun build(
         artistName: String,

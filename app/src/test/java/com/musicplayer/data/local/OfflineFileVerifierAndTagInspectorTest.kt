@@ -123,7 +123,7 @@ class OfflineFileVerifierAndTagInspectorTest {
         val matching = ScannedMediaStoreAudio(
             id = 1L,
             contentUri = "content://media/external/audio/media/1",
-            relativePath = "Music/music-player/Pink Floyd/The Dark Side of the Moon/",
+            relativePath = "Music/Overtone/Pink Floyd/The Dark Side of the Moon/",
             displayName = "04 - Time.flac",
             sizeBytes = 25_000_000L,
             durationMs = 413_200L,
@@ -157,7 +157,7 @@ class OfflineFileVerifierAndTagInspectorTest {
         val legacyFile = ScannedMediaStoreAudio(
             id = 2L,
             contentUri = "content://media/external/audio/media/2",
-            relativePath = "Music/music-player/Pink Floyd/The Dark Side of the Moon/",
+            relativePath = "Music/Overtone/Pink Floyd/The Dark Side of the Moon/",
             displayName = "04 - Time.flac",
             sizeBytes = 24_000_000L,
             durationMs = 412_500L,
@@ -187,7 +187,7 @@ class OfflineFileVerifierAndTagInspectorTest {
         val clean = ScannedMediaStoreAudio(
             id = 10L,
             contentUri = "content://media/external/audio/media/10",
-            relativePath = "Music/music-player/Pink Floyd/The Dark Side of the Moon/",
+            relativePath = "Music/Overtone/Pink Floyd/The Dark Side of the Moon/",
             displayName = "04 - Time.flac",
             sizeBytes = 24_000_000L,
             durationMs = 413_000L,

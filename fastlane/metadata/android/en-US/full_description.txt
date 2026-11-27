@@ -1,0 +1,10 @@
+Overtone is a native, audiophile Android music client for personal Jellyfin servers featuring Pure Material You theming, gapless lossless streaming, offline downloads, and an embedded app-only WireGuard tunnel.
+
+Features:
+• Lossless Direct Play (FLAC, ALAC, WAV, AIFF, Opus, AAC, MP3) with 24-bit float PCM output and Android 14+ Bit-Perfect USB DAC support.
+• Live seamless quality switching (Lossless, Downloaded/Local, 320–128 kbps MP3) and custom ReplayGain loudness normalization.
+• 3-zone Home screen with 2×3 Quick Access, Smart Mixes (Daylist, On Repeat, Jellyfin Instant Mix with offline fallback, Time Capsule, Deep Cuts), Album Spotlight, and Genre & Era discovery.
+• Curated personal Library with pinning and playlist folders alongside a full-server Catalog tab.
+• Embedded app-only userspace WireGuard tunnel (no Android VPN slot required) with automatic Home LAN detection and smooth Wi-Fi ↔ mobile data handoffs.
+• Offline downloads to Music/Overtone/ with hybrid MP3 compression (server transcoding + on-device fallback), embedded cover art, ReplayGain, and synced LRC lyrics.
+• Pure Material You dynamic colors, alphabetical fast-scroller with opposite-side index rail, lockscreen Quick Favorite button, and optional Left-Handed Mode.

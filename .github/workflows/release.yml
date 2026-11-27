@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing SemVer tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RELEASE_TAG="${{ inputs.tag }}"
+          else
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "value=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+
+          # Enforce strict Semantic Versioning: vMAJOR.MINOR.PATCH[-prerelease]
+          SEMVER_REGEX='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "${RELEASE_TAG}" =~ ${SEMVER_REGEX} ]]; then
+            echo "::error::Tag '${RELEASE_TAG}' violates Semantic Versioning (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease)."
+            exit 1
+          fi
+
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository (full history for changelog)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.value }}
+          fetch-depth: 0
+
+      - name: Verify Gradle versionName & versionCode match SemVer tag
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.value }}"
+          EXPECTED_VERSION="${TAG#v}"
+          GRADLE_VERSION="$(grep -E '^\s*versionName\s*=' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          GRADLE_CODE="$(grep -E '^\s*versionCode\s*=' app/build.gradle.kts | head -n 1 | sed -E 's/.*=\s*([0-9]+).*/\1/')"
+
+          echo "Tag:             ${TAG}"
+          echo "versionName:     ${GRADLE_VERSION}"
+          echo "versionCode:     ${GRADLE_CODE}"
+
+          if [[ "${GRADLE_VERSION}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::app/build.gradle.kts versionName ('${GRADLE_VERSION}') must match tag '${TAG}' (expected '${EXPECTED_VERSION}')."
+            exit 1
+          fi
+          if [[ -z "${GRADLE_CODE}" || "${GRADLE_CODE}" -lt 1 ]]; then
+            echo "::error::app/build.gradle.kts must define a positive integer versionCode."
+            exit 1
+          fi
+
+      - name: Generate changelog from commits since previous release
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 .github/scripts/generate_changelog.py "${{ steps.tag.outputs.value }}" release-notes.md
+          cat release-notes.md
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.2"
+          cache-dependency-path: wireguard-core/go.sum
+
+      - name: Set up Android SDK & NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;27.2.12479018"
+
+      - name: Run WireGuard Go tests & build reproducible native libraries
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: |
+          (cd wireguard-core && go test -v ./...)
+          chmod +x wireguard-core/build-android.sh
+          ./wireguard-core/build-android.sh
+
+      - name: Configure release signing
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.OVERTONE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.OVERTONE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OVERTONE_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.OVERTONE_KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${RUNNER_TEMP}/overtone-release.jks"
+          if [[ -n "${KEYSTORE_B64}" && -n "${KEYSTORE_PASS}" && -n "${KEY_ALIAS}" && -n "${KEY_PASS}" ]]; then
+            echo "${KEYSTORE_B64}" | base64 --decode > "${KEYSTORE_FILE}"
+            echo "OVERTONE_KEYSTORE_PATH=${KEYSTORE_FILE}" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEYSTORE_PASSWORD=${KEYSTORE_PASS}" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEY_ALIAS=${KEY_ALIAS}" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEY_PASSWORD=${KEY_PASS}" >> "$GITHUB_ENV"
+            echo "ephemeral=false" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ steps.tag.outputs.prerelease }}" == "true" ]]; then
+            echo "::warning::Release keystore secrets not set; generating ephemeral test signing key for pre-release."
+            keytool -genkeypair -v \
+              -keystore "${KEYSTORE_FILE}" \
+              -storepass "ephemeral-test-pass" \
+              -keypass "ephemeral-test-pass" \
+              -alias "overtone-test" \
+              -keyalg RSA -keysize 2048 -validity 30 \
+              -dname "CN=Overtone Test Release, O=Overtone, C=DE"
+            echo "OVERTONE_KEYSTORE_PATH=${KEYSTORE_FILE}" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEYSTORE_PASSWORD=ephemeral-test-pass" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEY_ALIAS=overtone-test" >> "$GITHUB_ENV"
+            echo "OVERTONE_KEY_PASSWORD=ephemeral-test-pass" >> "$GITHUB_ENV"
+            echo "ephemeral=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Missing signing secrets (OVERTONE_KEYSTORE_BASE64, OVERTONE_KEYSTORE_PASSWORD, OVERTONE_KEY_ALIAS, OVERTONE_KEY_PASSWORD) required for stable releases."
+            exit 1
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests & assemble release APK
+        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon
+
+      - name: Prepare release artifacts & checksums
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.value }}"
+          APK_SRC="app/build/outputs/apk/release/app-release.apk"
+          if [[ ! -f "${APK_SRC}" ]]; then
+            echo "::error::Expected signed release APK at ${APK_SRC}"
+            exit 1
+          fi
+          mkdir -p dist
+          cp "${APK_SRC}" "dist/Overtone-${TAG}.apk"
+          (cd dist && sha256sum "Overtone-${TAG}.apk" > "Overtone-${TAG}.apk.sha256")
+          ls -lh dist/
+
+          if [[ "${{ steps.signing.outputs.ephemeral }}" == "true" ]]; then
+            {
+              echo "> [!WARNING]"
+              echo "> This pre-release was signed with an ephemeral CI test key because production signing secrets are not yet configured."
+              echo ""
+              cat release-notes.md
+            } > release-notes-final.md
+          else
+            cp release-notes.md release-notes-final.md
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.value }}"
+          EXTRA_FLAGS=()
+          if [[ "${{ steps.tag.outputs.prerelease }}" == "true" ]]; then
+            EXTRA_FLAGS+=(--prerelease)
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "Overtone ${TAG}" --notes-file release-notes-final.md "${EXTRA_FLAGS[@]}"
+            gh release upload "${TAG}" "dist/Overtone-${TAG}.apk" "dist/Overtone-${TAG}.apk.sha256" --clobber
+          else
+            gh release create "${TAG}" \
+              "dist/Overtone-${TAG}.apk" \
+              "dist/Overtone-${TAG}.apk.sha256" \
+              --title "Overtone ${TAG}" \
+              --notes-file release-notes-final.md \
+              "${EXTRA_FLAGS[@]}"
+          fi
