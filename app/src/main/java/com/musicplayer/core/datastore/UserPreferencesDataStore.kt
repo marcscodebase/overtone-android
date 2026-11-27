@@ -51,6 +51,7 @@ class UserPreferencesDataStore @Inject constructor(
             wireGuardMode = WireGuardMode.fromNameOrDefault(prefs[KEY_WIREGUARD_MODE]),
             daylistRefreshSlotKey = prefs[KEY_DAYLIST_REFRESH_SLOT] ?: "",
             daylistRefreshNonce = prefs[KEY_DAYLIST_REFRESH_NONCE] ?: 0L,
+            pinnedLibraryKeys = decodePinnedKeys(prefs[KEY_PINNED_LIBRARY_KEYS]),
         )
     }
 
@@ -121,6 +122,25 @@ class UserPreferencesDataStore @Inject constructor(
         }
     }
 
+    suspend fun toggleLibraryPin(pinKey: String) {
+        if (pinKey.isBlank()) return
+        dataStore.edit { prefs ->
+            val current = decodePinnedKeys(prefs[KEY_PINNED_LIBRARY_KEYS])
+            val updated = if (pinKey in current) {
+                current.filterNot { it == pinKey }
+            } else {
+                current + pinKey
+            }
+            prefs[KEY_PINNED_LIBRARY_KEYS] = updated.joinToString("\n")
+        }
+    }
+
+    private fun decodePinnedKeys(raw: String?): List<String> {
+        if (raw == null) return UserPreferences.DEFAULT_PINNED_LIBRARY_KEYS
+        if (raw.isEmpty()) return emptyList()
+        return raw.split('\n').filter { it.isNotBlank() }.distinct()
+    }
+
     companion object {
         private val KEY_OFFLINE_MODE = booleanPreferencesKey("offline_mode_enabled")
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
@@ -138,5 +158,6 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_WIREGUARD_MODE = stringPreferencesKey("wireguard_mode")
         private val KEY_DAYLIST_REFRESH_SLOT = stringPreferencesKey("daylist_refresh_slot")
         private val KEY_DAYLIST_REFRESH_NONCE = longPreferencesKey("daylist_refresh_nonce")
+        private val KEY_PINNED_LIBRARY_KEYS = stringPreferencesKey("pinned_library_keys")
     }
 }

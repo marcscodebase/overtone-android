@@ -1,7 +1,10 @@
 package com.musicplayer.feature.library
 
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import com.musicplayer.core.common.AppResult
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
@@ -12,10 +15,8 @@ import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
-import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -27,18 +28,26 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModelTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -52,41 +61,50 @@ class LibraryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    @Test
-    fun togglesSortOrderAndFilterSelection() = runTest(testDispatcher) {
-        val albums = listOf(
-            Album("a1", "Zebra", null, "Artist A", 2020, 10, false, dateAdded = 200L, artworkUrl = null),
-            Album("a2", "Alpha", null, "Artist B", 2021, 8, false, dateAdded = 100L, artworkUrl = null),
+    private fun createPrefsStore(fileName: String, scope: TestScope): UserPreferencesDataStore {
+        val dataStore = PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = { tempFolder.newFile(fileName) },
         )
+        return UserPreferencesDataStore(dataStore)
+    }
+
+    @Test
+    fun togglesFiltersSortingAndPinningInUnifiedLibrary() = runTest(testDispatcher) {
+        val albums = listOf(
+            Album("a1", "Zebra", null, "Artist A", 2020, 10, isFavorite = true, dateAdded = 200L, artworkUrl = null),
+            Album("a2", "Alpha", null, "Artist B", 2021, 8, isFavorite = true, dateAdded = 100L, artworkUrl = null),
+        )
+        val prefsStore = createPrefsStore("lib_vm_1.preferences_pb", TestScope(UnconfinedTestDispatcher(testScheduler)))
         val viewModel = LibraryViewModel(
             libraryRepository = FakeLibraryRepository(albums),
             playlistRepository = FakePlaylistRepository(),
-            syncRepository = FakeSyncRepository(),
+            preferencesDataStore = prefsStore,
             playbackController = FakePlaybackController(),
             offlineStateProvider = FakeOfflineStateProvider(),
         )
 
         viewModel.uiState.test {
             skipItems(1) // initial empty state
-            val initial = awaitItem()
-            assertEquals(LibraryFilter.ALBUMS, initial.selectedFilter)
-            assertEquals(listOf("Alpha", "Zebra"), initial.albums.map { it.title })
+            val unified = awaitItem()
+            assertNull(unified.selectedFilter)
+            assertTrue(unified.items.any { it.pinKey == LibraryListItem.albumPinKey("a1") })
 
-            viewModel.onToggleSort()
-            val byRecent = awaitItem()
-            assertEquals(LibrarySort.RECENTLY_ADDED, byRecent.selectedSort)
-            assertEquals(listOf("Zebra", "Alpha"), byRecent.albums.map { it.title })
+            viewModel.onFilterSelected(LibraryFilter.ALBUMS)
+            val albumsAlpha = awaitItem()
+            assertEquals(LibraryFilter.ALBUMS, albumsAlpha.selectedFilter)
+            assertEquals(listOf("Alpha", "Zebra"), albumsAlpha.items.map { it.title })
 
-            viewModel.onFilterSelected(LibraryFilter.DOWNLOADED)
-            val downloaded = awaitItem()
-            assertEquals(LibraryFilter.DOWNLOADED, downloaded.selectedFilter)
+            viewModel.onSortSelected(LibrarySort.RECENTLY_ADDED)
+            val albumsRecent = awaitItem()
+            assertEquals(listOf("Zebra", "Alpha"), albumsRecent.items.map { it.title })
 
-            viewModel.onFilterSelected(LibraryFilter.FAVORITES)
-            val favorites = awaitItem()
-            assertEquals(LibraryFilter.FAVORITES, favorites.selectedFilter)
+            // Tapping active chip again clears filter back to unified view
+            viewModel.onFilterSelected(LibraryFilter.ALBUMS)
+            val backToUnified = awaitItem()
+            assertNull(backToUnified.selectedFilter)
             cancelAndIgnoreRemainingEvents()
         }
-        // Wait for viewModelScope (including flowOn(Dispatchers.Default) producers) to fully cancel before resetMain()
         viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
         advanceUntilIdle()
     }
@@ -95,17 +113,19 @@ class LibraryViewModelTest {
     fun shuffleLibraryDelegatesToRollingShuffleWithCorrectScope() = runTest(testDispatcher) {
         val fakePlayer = FakePlaybackController()
         val offlineProvider = FakeOfflineStateProvider()
+        val prefsStore = createPrefsStore("lib_vm_2.preferences_pb", TestScope(UnconfinedTestDispatcher(testScheduler)))
         val viewModel = LibraryViewModel(
             libraryRepository = FakeLibraryRepository(emptyList()),
             playlistRepository = FakePlaylistRepository(),
-            syncRepository = FakeSyncRepository(),
+            preferencesDataStore = prefsStore,
             playbackController = fakePlayer,
             offlineStateProvider = offlineProvider,
         )
 
         viewModel.uiState.test {
-            val initial = awaitItem() // default ALBUMS filter
-            assertEquals(LibraryFilter.ALBUMS, initial.selectedFilter)
+            skipItems(1) // initial empty state
+            val initial = awaitItem()
+            assertNull(initial.selectedFilter)
 
             viewModel.onShuffleLibrary()
             assertEquals(listOf(false), fakePlayer.libraryShuffleCalls)
@@ -172,18 +192,6 @@ class LibraryViewModelTest {
         override suspend fun moveTrackInPlaylist(playlistId: String, playlistItemId: String, fromIndex: Int, toIndex: Int): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun setAutoSyncDownloaded(playlistId: String, enabled: Boolean) = Unit
         override fun triggerPlaylistDownloadSync(playlistId: String) = Unit
-    }
-
-    private class FakeSyncRepository : SyncRepository {
-        override fun observePendingSyncCount(): Flow<Int> = flowOf(0)
-        override suspend fun reportPlaybackStart(trackId: String, positionMs: Long, isTranscoded: Boolean) = Unit
-        override suspend fun reportPlaybackProgress(trackId: String, positionMs: Long, isPaused: Boolean, isTranscoded: Boolean) = Unit
-        override suspend fun reportPlaybackStopped(trackId: String, positionMs: Long) = Unit
-        override suspend fun setTrackFavorite(trackId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
-        override suspend fun setAlbumFavorite(albumId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
-        override suspend fun setArtistFavorite(artistId: String, isFavorite: Boolean): AppResult<Unit> = AppResult.Success(Unit)
-        override suspend fun enqueuePlaylistMutation(payload: com.musicplayer.data.repository.PlaylistMutationPayload) = Unit
-        override suspend fun flushPendingSyncActions(): Int = 0
     }
 
     private class FakePlaybackController : PlaybackController {

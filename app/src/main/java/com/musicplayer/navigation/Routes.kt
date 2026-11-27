@@ -15,6 +15,9 @@ data object DaylistDestination
 data class HomeCollectionDestination(val section: String)
 
 @Serializable
+data class LibraryCollectionDestination(val section: String)
+
+@Serializable
 data class AlbumDetailDestination(val albumId: String)
 
 @Serializable

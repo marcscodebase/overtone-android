@@ -2,61 +2,36 @@ package com.musicplayer.feature.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Artist
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistFolderCodec
 import com.musicplayer.core.model.PlaylistFolderGroup
-import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
-import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class LibraryFilter {
-    DOWNLOADED,
-    FAVORITES,
-    PLAYLISTS,
-    ALBUMS,
-    ARTISTS,
-    SONGS,
-}
-
-enum class LibrarySort {
-    ALPHABETICAL,
-    RECENTLY_ADDED,
-}
-
 data class LibraryUiState(
-    val selectedFilter: LibraryFilter = LibraryFilter.ALBUMS,
+    val selectedFilter: LibraryFilter? = null,
     val selectedSort: LibrarySort = LibrarySort.ALPHABETICAL,
     val selectedPlaylistFolder: String? = null,
-    val downloadedTracks: List<Track> = emptyList(),
-    val favoriteTracks: List<Track> = emptyList(),
-    val playlists: List<Playlist> = emptyList(),
+    val items: List<LibraryListItem> = emptyList(),
     val playlistFolders: List<PlaylistFolderGroup> = emptyList(),
-    val rootPlaylists: List<Playlist> = emptyList(),
-    val albums: List<Album> = emptyList(),
-    val artists: List<Artist> = emptyList(),
-    val tracks: List<Track> = emptyList(),
-    val activeTrackId: String? = null,
     val offlineStatus: OfflineStatus = OfflineStatus(),
 ) {
     val isOffline: Boolean get() = offlineStatus.isOffline
@@ -67,12 +42,11 @@ data class LibraryUiState(
         }
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val libraryRepository: LibraryRepository,
+    libraryRepository: LibraryRepository,
     private val playlistRepository: PlaylistRepository,
-    private val syncRepository: SyncRepository,
+    private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
     private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
@@ -88,98 +62,109 @@ class LibraryViewModel @Inject constructor(
             initialValue = emptyList(),
         )
 
-    private val selectedFilter = MutableStateFlow(LibraryFilter.ALBUMS)
+    private val selectedFilter = MutableStateFlow<LibraryFilter?>(null)
     private val selectedSort = MutableStateFlow(LibrarySort.ALPHABETICAL)
     private val selectedPlaylistFolder = MutableStateFlow<String?>(null)
 
-    private val activeTrackId = playbackController.playbackState
-        .map { it.currentTrack?.id }
+    private val pinnedKeysFlow = preferencesDataStore.userPreferences
+        .map { it.pinnedLibraryKeys }
         .distinctUntilChanged()
 
-    private val activeCollectionState: Flow<LibraryUiState> =
-        combine(selectedFilter, selectedSort) { filter, sort -> filter to sort }
-            .flatMapLatest { (filter, sort) ->
-                when (filter) {
-                    LibraryFilter.DOWNLOADED -> libraryRepository.observeDownloadedTracks().map { tracks ->
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            downloadedTracks = sortTracks(tracks, sort),
-                        )
-                    }
+    private val collectionCountsFlow = combine(
+        libraryRepository.observeFavoriteTracks().map { it.size }.distinctUntilChanged(),
+        libraryRepository.observeDownloadedTracks().map { tracks ->
+            tracks.size to tracks.mapNotNull { it.albumId }.toSet()
+        }.distinctUntilChanged(),
+    ) { favCount, (dlCount, dlAlbumIds) ->
+        Triple(favCount, dlCount, dlAlbumIds)
+    }
 
-                    LibraryFilter.FAVORITES -> libraryRepository.observeFavoriteTracks().map { tracks ->
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            favoriteTracks = sortTracks(tracks, sort),
-                        )
-                    }
+    private val curatedSourcesFlow = combine(
+        collectionCountsFlow,
+        libraryRepository.observeAllPlaylists(),
+        libraryRepository.observeAllAlbums(),
+        libraryRepository.observeAllArtists(),
+    ) { counts, playlists, albums, artists ->
+        CuratedSources(
+            favoriteTrackCount = counts.first,
+            downloadedTrackCount = counts.second,
+            downloadedAlbumIds = counts.third,
+            playlists = playlists,
+            albums = albums,
+            artists = artists,
+        )
+    }
 
-                    LibraryFilter.PLAYLISTS -> libraryRepository.observeAllPlaylists().map { playlists ->
-                        val (folders, root) = PlaylistFolderCodec.groupPlaylists(playlists)
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            playlists = playlists,
-                            playlistFolders = folders,
-                            rootPlaylists = root,
-                        )
-                    }
-
-                    LibraryFilter.ALBUMS -> libraryRepository.observeAllAlbums().map { albums ->
-                        val sorted = when (sort) {
-                            LibrarySort.ALPHABETICAL -> albums.sortedBy { it.title.lowercase() }
-                            LibrarySort.RECENTLY_ADDED -> albums.sortedByDescending { it.dateAdded }
-                        }
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            albums = sorted,
-                        )
-                    }
-
-                    LibraryFilter.ARTISTS -> libraryRepository.observeAllArtists().map { artists ->
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            artists = artists,
-                        )
-                    }
-
-                    LibraryFilter.SONGS -> libraryRepository.observeAllTracks().map { tracks ->
-                        LibraryUiState(
-                            selectedFilter = filter,
-                            selectedSort = sort,
-                            tracks = sortTracks(tracks, sort),
-                        )
-                    }
-                }
-            }
-            .flowOn(Dispatchers.Default)
-
-    val uiState: StateFlow<LibraryUiState> = combine(
-        activeCollectionState,
+    private val controlsFlow = combine(
+        selectedFilter,
+        selectedSort,
         selectedPlaylistFolder,
-        activeTrackId,
+        pinnedKeysFlow,
         offlineStateProvider.offlineStatus,
-    ) { state, folder, activeId, offline ->
-        val resolvedFolder = folder?.takeIf { target ->
-            state.selectedFilter == LibraryFilter.PLAYLISTS &&
-                state.playlistFolders.any { it.name.equals(target, ignoreCase = true) }
-        }
-        state.copy(
-            selectedPlaylistFolder = resolvedFolder,
-            activeTrackId = activeId,
+    ) { filter, sort, folder, pinnedKeys, offline ->
+        LibraryControls(
+            filter = filter,
+            sort = sort,
+            folder = folder,
+            pinnedKeys = pinnedKeys,
             offlineStatus = offline,
         )
     }
+
+    val uiState: StateFlow<LibraryUiState> = combine(
+        curatedSourcesFlow,
+        controlsFlow,
+    ) { sources, controls ->
+        val (folders, rootPlaylists) = PlaylistFolderCodec.groupPlaylists(sources.playlists)
+        val builtItems = LibraryListBuilder.build(
+            favoriteTrackCount = sources.favoriteTrackCount,
+            downloadedTrackCount = sources.downloadedTrackCount,
+            downloadedAlbumIds = sources.downloadedAlbumIds,
+            playlistFolders = folders,
+            rootPlaylists = rootPlaylists,
+            allAlbums = sources.albums,
+            allArtists = sources.artists,
+            activeFilter = controls.filter,
+            sort = controls.sort,
+            pinnedKeys = controls.pinnedKeys,
+        )
+        val resolvedFolder = controls.folder?.takeIf { target ->
+            (controls.filter == null || controls.filter == LibraryFilter.PLAYLISTS) &&
+                folders.any { it.name.equals(target, ignoreCase = true) }
+        }
+        LibraryUiState(
+            selectedFilter = controls.filter,
+            selectedSort = controls.sort,
+            selectedPlaylistFolder = resolvedFolder,
+            items = builtItems,
+            playlistFolders = folders,
+            offlineStatus = controls.offlineStatus,
+        )
+    }
+        .flowOn(Dispatchers.Default)
         .distinctUntilChanged()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = LibraryUiState(),
         )
+
+    private data class CuratedSources(
+        val favoriteTrackCount: Int,
+        val downloadedTrackCount: Int,
+        val downloadedAlbumIds: Set<String>,
+        val playlists: List<Playlist>,
+        val albums: List<Album>,
+        val artists: List<Artist>,
+    )
+
+    private data class LibraryControls(
+        val filter: LibraryFilter?,
+        val sort: LibrarySort,
+        val folder: String?,
+        val pinnedKeys: List<String>,
+        val offlineStatus: OfflineStatus,
+    )
 
     fun onToggleOfflineMode() {
         val target = !offlineStateProvider.offlineStatus.value.manualOfflineMode
@@ -198,11 +183,36 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    fun onFilterSelected(filter: LibraryFilter) {
-        if (filter != LibraryFilter.PLAYLISTS) {
+    /**
+     * Spotify-style toggleable filter chip: tapping an active filter clears it back to the
+     * unified list. Passing `forceSelect = true` (e.g., from Home -> Show all playlists) always
+     * selects the chip cleanly without toggling it off.
+     */
+    fun onFilterSelected(filter: LibraryFilter?, forceSelect: Boolean = false) {
+        val next = if (!forceSelect && filter != null && selectedFilter.value == filter) {
+            null
+        } else {
+            filter
+        }
+        if (next != null && next != LibraryFilter.PLAYLISTS) {
             selectedPlaylistFolder.value = null
         }
-        selectedFilter.value = filter
+        selectedFilter.value = next
+    }
+
+    fun onClearFilter() {
+        selectedFilter.value = null
+        selectedPlaylistFolder.value = null
+    }
+
+    fun onSortSelected(sort: LibrarySort) {
+        selectedSort.value = sort
+    }
+
+    fun onTogglePin(pinKey: String) {
+        viewModelScope.launch {
+            preferencesDataStore.toggleLibraryPin(pinKey)
+        }
     }
 
     fun onOpenPlaylistFolder(folderName: String) {
@@ -213,56 +223,10 @@ class LibraryViewModel @Inject constructor(
         selectedPlaylistFolder.value = null
     }
 
-    fun onToggleSort() {
-        selectedSort.value = when (selectedSort.value) {
-            LibrarySort.ALPHABETICAL -> LibrarySort.RECENTLY_ADDED
-            LibrarySort.RECENTLY_ADDED -> LibrarySort.ALPHABETICAL
-        }
-    }
-
-    fun onPlayTracks(tracks: List<Track>, startIndex: Int) {
-        val tapped = tracks.getOrNull(startIndex) ?: return
-        val isOffline = uiState.value.isOffline
-        if (isOffline && !tapped.isDownloaded) return
-        val playable = if (isOffline) tracks.filter { it.isDownloaded } else tracks
-        val resolvedIndex = playable.indexOfFirst { it.id == tapped.id }.coerceAtLeast(0)
-        if (playable.isNotEmpty()) {
-            playbackController.playTracks(tracks = playable, startIndex = resolvedIndex)
-        }
-    }
-
     fun onShuffleLibrary() {
         val state = uiState.value
-        if (state.selectedFilter == LibraryFilter.FAVORITES) {
-            val playable = if (state.isOffline) {
-                state.favoriteTracks.filter { it.isDownloaded }
-            } else {
-                state.favoriteTracks
-            }
-            if (playable.isNotEmpty()) {
-                playbackController.playTracks(
-                    tracks = playable,
-                    startIndex = 0,
-                    shuffle = true,
-                    contextLabel = "Favorites",
-                )
-            }
-            return
-        }
         val useDownloadedOnly = state.isOffline || state.selectedFilter == LibraryFilter.DOWNLOADED
         playbackController.playLibraryShuffle(downloadedOnly = useDownloadedOnly)
-    }
-
-    fun onPlayNext(track: Track) = playbackController.playNext(track)
-
-    fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
-
-    fun onToggleFavorite(track: Track) {
-        val target = !track.isFavorite
-        playbackController.updateTrackFavorite(track.id, target)
-        viewModelScope.launch {
-            syncRepository.setTrackFavorite(track.id, target)
-        }
     }
 
     fun onCreatePlaylist(name: String, folderName: String? = null) {
@@ -294,10 +258,5 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             playlistRepository.renameFolder(folderName, null)
         }
-    }
-
-    private fun sortTracks(tracks: List<Track>, sort: LibrarySort): List<Track> = when (sort) {
-        LibrarySort.ALPHABETICAL -> tracks.sortedBy { it.title.lowercase() }
-        LibrarySort.RECENTLY_ADDED -> tracks.sortedByDescending { it.lastPlayedAt ?: 0L }
     }
 }

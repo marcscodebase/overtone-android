@@ -52,4 +52,14 @@ data class UserPreferences(
     val wireGuardMode: WireGuardMode = WireGuardMode.OFF,
     val daylistRefreshSlotKey: String = "",
     val daylistRefreshNonce: Long = 0L,
-)
+    val pinnedLibraryKeys: List<String> = DEFAULT_PINNED_LIBRARY_KEYS,
+) {
+    companion object {
+        const val PIN_KEY_FAVORITES = "collection:favorites"
+        const val PIN_KEY_DOWNLOADED = "collection:downloaded"
+        val DEFAULT_PINNED_LIBRARY_KEYS: List<String> = listOf(
+            PIN_KEY_FAVORITES,
+            PIN_KEY_DOWNLOADED,
+        )
+    }
+}

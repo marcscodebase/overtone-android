@@ -25,7 +25,6 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
@@ -66,9 +65,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.model.Track
+import com.musicplayer.feature.catalog.CatalogContent
+import com.musicplayer.feature.catalog.CatalogViewModel
 import com.musicplayer.feature.home.HomeCollectionSection
 import com.musicplayer.feature.home.HomeContent
 import com.musicplayer.feature.home.HomeViewModel
+import com.musicplayer.feature.library.LibraryCollectionSection
 import com.musicplayer.feature.library.LibraryContent
 import com.musicplayer.feature.library.LibraryFilter
 import com.musicplayer.feature.library.LibraryViewModel
@@ -80,6 +82,7 @@ fun MainPagerRoute(
     onSearchClick: () -> Unit,
     onDaylistClick: () -> Unit,
     onOpenHomeCollection: (HomeCollectionSection) -> Unit,
+    onOpenLibraryCollection: (LibraryCollectionSection) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
@@ -89,8 +92,9 @@ fun MainPagerRoute(
     onSettingsClick: () -> Unit,
     homeViewModel: HomeViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
+    catalogViewModel: CatalogViewModel = hiltViewModel(),
 ) {
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     val currentPage by remember { derivedStateOf { pagerState.currentPage } }
     val offlineStatus by libraryViewModel.offlineStatus.collectAsStateWithLifecycle()
@@ -111,7 +115,6 @@ fun MainPagerRoute(
                     },
                     onRefreshClick = homeViewModel::refreshLibrary,
                     onToggleOfflineMode = libraryViewModel::onToggleOfflineMode,
-                    onToggleSortClick = libraryViewModel::onToggleSort,
                     onSettingsClick = onSettingsClick,
                 )
                 OfflineStatusBanner(
@@ -130,26 +133,35 @@ fun MainPagerRoute(
                     enter = fadeIn() + scaleIn(initialScale = 0.8f) + expandVertically(expandFrom = Alignment.Bottom),
                     exit = fadeOut() + scaleOut(targetScale = 0.8f) + shrinkVertically(shrinkTowards = Alignment.Bottom),
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    SmallFloatingActionButton(
+                        onClick = { showCreatePlaylistDialog = true },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     ) {
-                        SmallFloatingActionButton(
-                            onClick = { showCreatePlaylistDialog = true },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = stringResource(R.string.playlist_create_new),
-                            )
-                        }
-                        FloatingActionButton(onClick = libraryViewModel::onShuffleLibrary) {
-                            Icon(
-                                imageVector = Icons.Rounded.Shuffle,
-                                contentDescription = stringResource(R.string.library_shuffle_all),
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = stringResource(R.string.playlist_create_new),
+                        )
+                    }
+                }
+                AnimatedVisibility(
+                    visible = currentPage == 1 || currentPage == 2,
+                    enter = fadeIn() + scaleIn(initialScale = 0.8f) + expandVertically(expandFrom = Alignment.Bottom),
+                    exit = fadeOut() + scaleOut(targetScale = 0.8f) + shrinkVertically(shrinkTowards = Alignment.Bottom),
+                ) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (currentPage == 1) {
+                                libraryViewModel.onShuffleLibrary()
+                            } else {
+                                catalogViewModel.onShuffleCatalog()
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shuffle,
+                            contentDescription = stringResource(R.string.library_shuffle_all),
+                        )
                     }
                 }
                 FloatingActionButton(onClick = onSearchClick) {
@@ -180,13 +192,10 @@ fun MainPagerRoute(
                     onShowAllRecentlyAdded = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_ADDED) },
                     onShowAllPlaylists = {
                         libraryViewModel.onClosePlaylistFolder()
-                        libraryViewModel.onFilterSelected(LibraryFilter.PLAYLISTS)
+                        libraryViewModel.onFilterSelected(LibraryFilter.PLAYLISTS, forceSelect = true)
                         coroutineScope.launch { pagerState.animateScrollToPage(1) }
                     },
-                    onShowAllFavorites = {
-                        libraryViewModel.onFilterSelected(LibraryFilter.FAVORITES)
-                        coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                    },
+                    onShowAllFavorites = { onOpenLibraryCollection(LibraryCollectionSection.FAVORITES) },
                     onShowAllRecentlyPlayed = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_PLAYED) },
                     onAlbumClick = onAlbumClick,
                     onGoToTrackArtist = onGoToTrackArtist,
@@ -197,10 +206,17 @@ fun MainPagerRoute(
 
                 1 -> LibraryPagerPage(
                     viewModel = libraryViewModel,
+                    onOpenCollection = onOpenLibraryCollection,
+                    onAlbumClick = onAlbumClick,
+                    onArtistClick = onArtistClick,
+                    onPlaylistClick = onPlaylistClick,
+                )
+
+                2 -> CatalogPagerPage(
+                    viewModel = catalogViewModel,
                     onAlbumClick = onAlbumClick,
                     onArtistClick = onArtistClick,
                     onGoToTrackArtist = onGoToTrackArtist,
-                    onPlaylistClick = onPlaylistClick,
                     onAddToPlaylist = onAddToPlaylist,
                     onToggleTrackDownload = onToggleTrackDownload,
                 )
@@ -270,19 +286,21 @@ private fun HomePagerPage(
 @Composable
 private fun LibraryPagerPage(
     viewModel: LibraryViewModel,
+    onOpenCollection: (LibraryCollectionSection) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
-    onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
-    onAddToPlaylist: (Track) -> Unit,
-    onToggleTrackDownload: (Track) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val existingFolders by viewModel.existingPlaylistFolders.collectAsStateWithLifecycle()
     LibraryContent(
         state = state,
         existingFolders = existingFolders,
-        onFilterSelected = viewModel::onFilterSelected,
+        onFilterSelected = { filter -> viewModel.onFilterSelected(filter) },
+        onClearFilter = viewModel::onClearFilter,
+        onSortSelected = viewModel::onSortSelected,
+        onTogglePin = viewModel::onTogglePin,
+        onOpenCollection = onOpenCollection,
         onOpenPlaylistFolder = viewModel::onOpenPlaylistFolder,
         onClosePlaylistFolder = viewModel::onClosePlaylistFolder,
         onMovePlaylistToFolder = viewModel::onMovePlaylistToFolder,
@@ -291,6 +309,25 @@ private fun LibraryPagerPage(
         onAlbumClick = onAlbumClick,
         onArtistClick = onArtistClick,
         onPlaylistClick = onPlaylistClick,
+    )
+}
+
+@Composable
+private fun CatalogPagerPage(
+    viewModel: CatalogViewModel,
+    onAlbumClick: (String) -> Unit,
+    onArtistClick: (String) -> Unit,
+    onGoToTrackArtist: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onToggleTrackDownload: (Track) -> Unit,
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    CatalogContent(
+        state = state,
+        onTabSelected = viewModel::onTabSelected,
+        onSortSelected = viewModel::onSortSelected,
+        onAlbumClick = onAlbumClick,
+        onArtistClick = onArtistClick,
         onTrackClick = viewModel::onPlayTracks,
         onAddToQueue = viewModel::onAddToQueue,
         onAddToPlaylist = onAddToPlaylist,
@@ -306,7 +343,6 @@ private fun CompactTopTabBar(
     onSelectPage: (Int) -> Unit,
     onRefreshClick: () -> Unit,
     onToggleOfflineMode: () -> Unit,
-    onToggleSortClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
     Surface(
@@ -317,9 +353,9 @@ private fun CompactTopTabBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 6.dp),
+                .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             TopTabPill(
                 label = stringResource(R.string.nav_home),
@@ -330,6 +366,11 @@ private fun CompactTopTabBar(
                 label = stringResource(R.string.nav_library),
                 selected = selectedPage == 1,
                 onClick = { onSelectPage(1) },
+            )
+            TopTabPill(
+                label = stringResource(R.string.nav_catalog),
+                selected = selectedPage == 2,
+                onClick = { onSelectPage(2) },
             )
             Spacer(modifier = Modifier.weight(1f))
             if (selectedPage == 0) {
@@ -347,12 +388,6 @@ private fun CompactTopTabBar(
                     Icon(
                         imageVector = if (manualOfflineMode) Icons.Rounded.CloudOff else Icons.Rounded.CloudDone,
                         contentDescription = stringResource(R.string.offline_toggle_desc),
-                    )
-                }
-                IconButton(onClick = onToggleSortClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.Sort,
-                        contentDescription = stringResource(R.string.library_sort),
                     )
                 }
             }
@@ -384,12 +419,12 @@ private fun TopTabPill(
             .clickable(onClick = onClick),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 color = if (selected) {
                     MaterialTheme.colorScheme.onSecondaryContainer

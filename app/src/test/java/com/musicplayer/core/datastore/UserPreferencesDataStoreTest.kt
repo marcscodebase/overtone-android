@@ -85,5 +85,10 @@ class UserPreferencesDataStoreTest {
         val afterNextSlot = store.userPreferences.first()
         assertEquals("2026-11-27_AFTERNOON", afterNextSlot.daylistRefreshSlotKey)
         assertEquals(1L, afterNextSlot.daylistRefreshNonce)
+
+        store.toggleLibraryPin("playlist:p1")
+        assertTrue("playlist:p1" in store.userPreferences.first().pinnedLibraryKeys)
+        store.toggleLibraryPin("playlist:p1")
+        assertFalse("playlist:p1" in store.userPreferences.first().pinnedLibraryKeys)
     }
 }

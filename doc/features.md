@@ -34,14 +34,15 @@ A complete, code-verified overview of all features currently implemented in **an
 
 ## 3. Pure Material You UI & Gesture Navigation
 - **Strict Pure Material You Theming:** Uses `dynamicDarkColorScheme` / `dynamicLightColorScheme` derived strictly from the system wallpaper and Light/Dark mode with zero hardcoded UI hex colors, edge-to-edge rendering, animated shimmer loading placeholders, retry/empty states, and Coil 3 artwork caching (20 % RAM + 150 MB disk cache).
-- **Swipeable 2-Tab Navigation:** Single-row top bar (`Home` | `Library`) backed by a smooth `HorizontalPager` with no bottom navigation bar.
+- **Swipeable 3-Tab Navigation:** Single-row top bar (`Home` | `Library` | `Catalog`) backed by a smooth 3-page `HorizontalPager` with no bottom navigation bar.
 - **Contextual Floating Action Buttons:**
   - **Home:** Floating **Search** FAB.
-  - **Library:** Stacked **Search** FAB, context-aware **Shuffle Library** FAB above it (shuffles *Downloaded* when on the `Downloaded` filter or offline, and all tracks otherwise), and a smaller **Create Playlist (`+`)** FAB on top.
+  - **Library:** Stacked **Search** FAB, **Shuffle Library** FAB above it, and a smaller **Create Playlist (`+`)** FAB on top.
+  - **Catalog:** Stacked **Search** FAB and **Shuffle Catalog** FAB above it.
 - **Persistent Floating Mini-Player:** Floats above the system navigation bar on browse and detail screens (hidden on Settings, Storage, and WireGuard screens) with album art, title/artist, quick `+`/`✓` save button, play/pause with buffering indicator, thin progress bar, horizontal swipe to skip tracks, and tap to expand.
 - **Natural Touch Gestures:**
-  - **Pull down to dismiss** detail screens (*Album*, *Artist*, *Artist Collections*, *Playlist*, *Daylist*) smoothly from the top of the list or top bar (automatically disabled during Playlist Reorder Mode).
-  - **Swipe right on playable song rows** for instant Spotify-style *Add to Queue* with haptic feedback (disabled on unavailable offline rows, Last Played, and Playlist Reorder Mode).
+  - **Pull down to dismiss** detail screens (*Album*, *Artist*, *Artist Collections*, *Playlist*, *Daylist*, *Favorites*, *Downloaded*, *Recently Added*, *Recently Played*) smoothly from the top of the list or top bar (automatically disabled during Playlist Reorder Mode).
+  - **Swipe right on playable song rows** on Home and detail screens for instant Spotify-style *Add to Queue* with haptic feedback (disabled on unavailable offline rows, Catalog Songs, Last Played, and Playlist Reorder Mode so tab swiping never collides with row actions).
   - **Swipe left / right in Now Playing** to skip to the next or previous track with animated cover-art tracking.
 
 ---
@@ -50,13 +51,17 @@ A complete, code-verified overview of all features currently implemented in **an
 - **Daylist (50-Track Auto-Refreshing Mix):**
   - Prominent Home card with a 2×2 cover mosaic, **Late Night Mix** (`00:00–06:00`), **Morning Mix** (`06:00–12:00`), **Afternoon Mix** (`12:00–18:00`), and **Evening Mix** (`18:00–00:00`) indicator, next refresh time, and one-tap **Play** & **Shuffle** buttons.
   - Deterministically generates **50 shuffled songs** from your library 4 times daily (`00:00`, `06:00`, `12:00`, `18:00`), auto-checks for rollover on app resume, includes a **Refresh now** button in the Daylist detail view to roll a brand-new 50-song mix on demand, and degrades gracefully offline by playing/shuffling downloaded Daylist tracks.
-- **Home Feed:** Daylist, Recently Added (5 albums with **Show all** header shortcut to a full chronological Recently Added list view), Your Playlists (5 playlists with **Show all** header shortcut to Library → Playlists), Favorites (5 songs with bottom **Show all** button jumping to Library → Favorites), and Recently Played (5 songs with bottom **Show all** button opening the full Recently Played list view with Play/Shuffle), plus pull-to-refresh, top-bar Refresh (which also reconciles offline downloads), and an Offline status banner with a one-tap **Go online** action.
+- **Home Feed:** Daylist, Recently Added (5 albums with **Show all** header shortcut to a full chronological Recently Added list view), Your Playlists (5 playlists with **Show all** header shortcut to Library → Playlists), Favorites (5 songs with bottom **Show all** button opening the full Favorites collection view), and Recently Played (5 songs with bottom **Show all** button opening the full Recently Played list view with Play/Shuffle), plus pull-to-refresh, top-bar Refresh (which also reconciles offline downloads), and an Offline status banner with a one-tap **Go online** action.
 - **Unified Online & Offline Search:** Auto-focused, 300 ms debounced live Jellyfin search across songs, albums, artists, and playlists, automatically falling back to cached local Room search when offline with a visible local-results indicator banner.
 
 ---
 
-## 5. Library, Playlists, Folders & Artist Discography
-- **Library Filters & Quick Controls:** Filter chips for `Downloaded` (placed first for quick offline access), `Favorites`, `Playlists`, `Albums`, `Artists`, and `Songs`, paired with a quick Offline Mode toggle (toggling manual Offline Mode on automatically switches to `Downloaded`) and a Sort toggle (Alphabetical vs. Recently Added for Albums / Recently Played for Downloaded, Favorites & Songs).
+## 5. Personal Library, Full Server Catalog, Playlists & Artist Discography
+- **Spotify-Style Personal `Library` Tab:**
+  - Unified collection list containing **Pinned items** at the top (long-press or `⋮` menu → *Pin to top* / *Unpin*, persisted across restarts), built-in **Favorites** & **Downloaded** collection rows (opening dedicated detail screens with Play, Shuffle, Sort, and pull-down-to-dismiss), your **Playlist Folders & Playlists**, and **curated Albums & Artists** (favorited, downloaded, or pinned).
+  - Toggleable filter chips (`Playlists`, `Albums`, `Artists`, `Downloaded` — tap again or `✕` to return to the unified view), inline **Sort picker** (*Alphabetical*, *Recently Added*, *Creator*), and quick Offline Mode toggle in the top bar (which auto-filters to `Downloaded`).
+- **Full-Server `Catalog` Tab:**
+  - Dedicated 3rd tab browsing everything on your Jellyfin server (`Albums`, `Artists`, `Songs`) with per-tab sorting (*Alphabetical*, *Recently Added* / *Recently Played* / *Most Albums*, *Artist*) and total counts, keeping personal Library uncluttered even on huge servers.
 - **Playlist Folders:** Organize playlists into drill-down folders via `<Folder> / <Playlist>` naming and best-effort Jellyfin `folder:<Folder>` tags, with quick-pick existing-folder chips, pre-filled folder when creating from inside a folder, move between folders, rename folders, and ungroup.
 - **Playlist Management & Reorder Mode:** Top-bar Download/Remove, toggleable **Reorder Mode** (move up/down arrows and inline delete), overflow actions (*Move to folder*, *Rename playlist*, *Delete playlist*), *Remove from playlist* track action, and an inline **Sync downloads** button inside the Auto-Sync card.
 - **Quick Save & Playlist Picker (`+` / `✓`):** Available on the Mini-Player, Full-Screen Player, and every track row (`✓` reflects favorited or in any playlist). Tapping `+` on an unfavorited track immediately saves it to **Favorites** and opens the multi-playlist sheet, which also includes an inline **New Playlist** creator.
