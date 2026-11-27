@@ -3,6 +3,7 @@ package com.musicplayer.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicplayer.core.common.AppResult
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Album
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.Track
@@ -47,6 +48,7 @@ class HomeViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val downloadRepository: DownloadRepository,
     private val syncRepository: SyncRepository,
+    private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
     private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
@@ -59,21 +61,31 @@ class HomeViewModel @Inject constructor(
         .map { it.currentTrack?.id }
         .distinctUntilChanged()
 
+    private val daylistRefreshPrefs = preferencesDataStore.userPreferences
+        .map { it.daylistRefreshSlotKey to it.daylistRefreshNonce }
+        .distinctUntilChanged()
+
     private val daylistFlow = combine(
         libraryRepository.observeAllTracks(),
         daylistSlot,
-    ) { allTracks, slot ->
+        daylistRefreshPrefs,
+    ) { allTracks, slot, (savedSlotKey, savedNonce) ->
         if (allTracks.isNotEmpty()) {
-            DaylistGenerator.generate(allTracks = allTracks, slot = slot)
+            val effectiveNonce = if (savedSlotKey == slot.slotKey) savedNonce else 0L
+            DaylistGenerator.generate(
+                allTracks = allTracks,
+                slot = slot,
+                refreshNonce = effectiveNonce,
+            )
         } else {
             null
         }
     }
 
     private val trackFeeds = combine(
-        libraryRepository.observeRecentlyPlayedTracks(limit = 10),
+        libraryRepository.observeRecentlyPlayedTracks(limit = HOME_PREVIEW_LIMIT),
         libraryRepository.observeFavoriteTracks(),
-    ) { recent, favorites -> recent to favorites.take(10) }
+    ) { recent, favorites -> recent to favorites.take(HOME_PREVIEW_LIMIT) }
 
     private val statusBundle = combine(
         activeTrackId,
@@ -86,9 +98,9 @@ class HomeViewModel @Inject constructor(
 
     val uiState: StateFlow<HomeUiState> = combine(
         daylistFlow,
-        libraryRepository.observeRecentlyAddedAlbums(limit = 16),
+        libraryRepository.observeRecentlyAddedAlbums(limit = HOME_PREVIEW_LIMIT),
         trackFeeds,
-        libraryRepository.observeAllPlaylists(),
+        libraryRepository.observeAllPlaylists().map { it.take(HOME_PREVIEW_LIMIT) },
         statusBundle,
     ) { daylist, albums, (recentTracks, favorites), playlists, status ->
         HomeUiState(
@@ -194,5 +206,9 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             syncRepository.setTrackFavorite(track.id, target)
         }
+    }
+
+    companion object {
+        internal const val HOME_PREVIEW_LIMIT = 5
     }
 }

@@ -74,5 +74,16 @@ class UserPreferencesDataStoreTest {
         assertEquals(ReplayGainMode.ALBUM, prefs.replayGainMode)
         assertEquals(12f, prefs.replayGainPreampDb, 0.001f)
         assertEquals(setOf("lib-1", "lib-2"), prefs.selectedMusicLibraryIds)
+
+        store.bumpDaylistRefresh("2026-11-27_MORNING")
+        store.bumpDaylistRefresh("2026-11-27_MORNING")
+        val afterTwoBumps = store.userPreferences.first()
+        assertEquals("2026-11-27_MORNING", afterTwoBumps.daylistRefreshSlotKey)
+        assertEquals(2L, afterTwoBumps.daylistRefreshNonce)
+
+        store.bumpDaylistRefresh("2026-11-27_AFTERNOON")
+        val afterNextSlot = store.userPreferences.first()
+        assertEquals("2026-11-27_AFTERNOON", afterNextSlot.daylistRefreshSlotKey)
+        assertEquals(1L, afterNextSlot.daylistRefreshNonce)
     }
 }

@@ -80,6 +80,10 @@ class LibraryViewModelTest {
             viewModel.onFilterSelected(LibraryFilter.DOWNLOADED)
             val downloaded = awaitItem()
             assertEquals(LibraryFilter.DOWNLOADED, downloaded.selectedFilter)
+
+            viewModel.onFilterSelected(LibraryFilter.FAVORITES)
+            val favorites = awaitItem()
+            assertEquals(LibraryFilter.FAVORITES, favorites.selectedFilter)
             cancelAndIgnoreRemainingEvents()
         }
         // Wait for viewModelScope (including flowOn(Dispatchers.Default) producers) to fully cancel before resetMain()

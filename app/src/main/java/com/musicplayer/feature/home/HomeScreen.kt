@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -29,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,6 +57,10 @@ fun HomeContent(
     onDaylistClick: () -> Unit,
     onPlayDaylist: () -> Unit,
     onShuffleDaylist: () -> Unit,
+    onShowAllRecentlyAdded: () -> Unit,
+    onShowAllPlaylists: () -> Unit,
+    onShowAllFavorites: () -> Unit,
+    onShowAllRecentlyPlayed: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onTrackClick: (List<Track>, Int) -> Unit,
@@ -130,7 +136,11 @@ fun HomeContent(
 
                     if (state.recentlyAddedAlbums.isNotEmpty()) {
                         item(key = "section_recent_albums") {
-                            SectionHeader(title = stringResource(R.string.home_recently_added))
+                            SectionHeader(
+                                title = stringResource(R.string.home_recently_added),
+                                actionLabel = stringResource(R.string.action_show_all),
+                                onActionClick = onShowAllRecentlyAdded,
+                            )
                         }
                         item(key = "row_recent_albums") {
                             LazyRow(
@@ -154,7 +164,11 @@ fun HomeContent(
 
                     if (state.playlists.isNotEmpty()) {
                         item(key = "section_playlists") {
-                            SectionHeader(title = stringResource(R.string.home_playlists))
+                            SectionHeader(
+                                title = stringResource(R.string.home_playlists),
+                                actionLabel = stringResource(R.string.action_show_all),
+                                onActionClick = onShowAllPlaylists,
+                            )
                         }
                         item(key = "row_playlists") {
                             LazyRow(
@@ -196,7 +210,8 @@ fun HomeContent(
                                 onGoToArtist = { onGoToArtist(track) },
                             )
                         }
-                        item(key = "spacer_favorites") {
+                        item(key = "show_all_favorites") {
+                            ShowAllListFooterButton(onClick = onShowAllFavorites)
                             Spacer(modifier = Modifier.height(12.dp))
                         }
                     }
@@ -221,9 +236,38 @@ fun HomeContent(
                                 onGoToArtist = { onGoToArtist(track) },
                             )
                         }
+                        item(key = "show_all_recently_played") {
+                            ShowAllListFooterButton(onClick = onShowAllRecentlyPlayed)
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ShowAllListFooterButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        TextButton(onClick = onClick) {
+            Text(
+                text = stringResource(R.string.action_show_all),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -237,13 +281,7 @@ private fun DaylistHomeCard(
     onShuffleClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val periodLabel = stringResource(
-        if (daylist.slot.period == DaylistPeriod.MORNING) {
-            R.string.daylist_period_morning
-        } else {
-            R.string.daylist_period_evening
-        },
-    )
+    val periodLabel = daylistPeriodLabel(daylist.slot.period)
     val countLabel = if (daylist.tracks.size == 1) "1 song" else "${daylist.tracks.size} songs"
     val updatesLabel = stringResource(R.string.daylist_updates_at, daylist.slot.nextRefreshTimeLabel)
 

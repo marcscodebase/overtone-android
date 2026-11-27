@@ -42,12 +42,15 @@
 
     <string name="library_sort">Sort library</string>
     <string name="library_filter_downloaded">Downloaded</string>
+    <string name="library_filter_favorites">Favorites</string>
     <string name="library_filter_playlists">Playlists</string>
     <string name="library_filter_albums">Albums</string>
     <string name="library_filter_artists">Artists</string>
     <string name="library_filter_songs">Songs</string>
     <string name="library_downloaded_empty_title">No downloaded tracks yet</string>
     <string name="library_downloaded_empty_subtitle">Downloaded lossless and MP3 tracks will appear here for offline playback.</string>
+    <string name="library_favorites_empty_title">No favorite songs yet</string>
+    <string name="library_favorites_empty_subtitle">Favorite songs will appear here for quick access.</string>
     <string name="library_playlists_empty_subtitle">Playlists from your Jellyfin server will show up here.</string>
     <string name="library_empty_title">Nothing here yet</string>
     <string name="library_empty_subtitle">Sync your Jellyfin server from Home or Settings to populate your library.</string>
@@ -206,6 +209,7 @@
     <string name="artist_all_songs">All Songs</string>
     <string name="artist_all_albums">All Albums</string>
     <string name="action_view_all">View all</string>
+    <string name="action_show_all">Show all</string>
     <string name="sort_newest_first">Newest first</string>
     <string name="sort_oldest_first">Oldest first</string>
     <string name="sort_toggle_chronological">Switch chronological order</string>
@@ -215,9 +219,14 @@
     <string name="queue_reshuffle">Reshuffle queue</string>
     <string name="library_shuffle_all">Shuffle library</string>
     <string name="daylist_title">Daylist</string>
+    <string name="daylist_period_late_night">Late Night Mix</string>
     <string name="daylist_period_morning">Morning Mix</string>
+    <string name="daylist_period_afternoon">Afternoon Mix</string>
     <string name="daylist_period_evening">Evening Mix</string>
     <string name="daylist_updates_at">Updates at %1$s</string>
+    <string name="daylist_refresh_now">Refresh now</string>
+    <string name="home_recently_played_empty_title">No recently played songs</string>
+    <string name="home_recently_played_empty_subtitle">Songs you play will appear here.</string>
     <string name="wireguard_title">Home Network (WireGuard)</string>
     <string name="wireguard_settings_subtitle_unconfigured">Connect only music-player to your home network without a system VPN</string>
     <string name="wireguard_auth_button">Configure WireGuard tunnel</string>

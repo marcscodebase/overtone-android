@@ -32,6 +32,7 @@ import javax.inject.Inject
 
 enum class LibraryFilter {
     DOWNLOADED,
+    FAVORITES,
     PLAYLISTS,
     ALBUMS,
     ARTISTS,
@@ -48,6 +49,7 @@ data class LibraryUiState(
     val selectedSort: LibrarySort = LibrarySort.ALPHABETICAL,
     val selectedPlaylistFolder: String? = null,
     val downloadedTracks: List<Track> = emptyList(),
+    val favoriteTracks: List<Track> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val playlistFolders: List<PlaylistFolderGroup> = emptyList(),
     val rootPlaylists: List<Playlist> = emptyList(),
@@ -103,6 +105,14 @@ class LibraryViewModel @Inject constructor(
                             selectedFilter = filter,
                             selectedSort = sort,
                             downloadedTracks = sortTracks(tracks, sort),
+                        )
+                    }
+
+                    LibraryFilter.FAVORITES -> libraryRepository.observeFavoriteTracks().map { tracks ->
+                        LibraryUiState(
+                            selectedFilter = filter,
+                            selectedSort = sort,
+                            favoriteTracks = sortTracks(tracks, sort),
                         )
                     }
 
@@ -223,6 +233,22 @@ class LibraryViewModel @Inject constructor(
 
     fun onShuffleLibrary() {
         val state = uiState.value
+        if (state.selectedFilter == LibraryFilter.FAVORITES) {
+            val playable = if (state.isOffline) {
+                state.favoriteTracks.filter { it.isDownloaded }
+            } else {
+                state.favoriteTracks
+            }
+            if (playable.isNotEmpty()) {
+                playbackController.playTracks(
+                    tracks = playable,
+                    startIndex = 0,
+                    shuffle = true,
+                    contextLabel = "Favorites",
+                )
+            }
+            return
+        }
         val useDownloadedOnly = state.isOffline || state.selectedFilter == LibraryFilter.DOWNLOADED
         playbackController.playLibraryShuffle(downloadedOnly = useDownloadedOnly)
     }

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -84,6 +86,7 @@ fun DaylistRoute(
     DaylistScreen(
         state = state,
         onBackClick = onBackClick,
+        onRefreshNow = viewModel::onRefreshNow,
         onAlbumClick = onAlbumClick,
         onGoToTrackArtist = onGoToTrackArtist,
         onPlayAll = viewModel::onPlayAll,
@@ -100,6 +103,7 @@ fun DaylistRoute(
 fun DaylistScreen(
     state: DaylistUiState,
     onBackClick: () -> Unit,
+    onRefreshNow: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
     onPlayAll: () -> Unit,
@@ -129,6 +133,19 @@ fun DaylistScreen(
                         )
                     }
                 },
+                actions = {
+                    if (state.daylist?.tracks?.isNotEmpty() == true) {
+                        TextButton(onClick = onRefreshNow) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(stringResource(R.string.daylist_refresh_now))
+                        }
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -143,13 +160,7 @@ fun DaylistScreen(
                     .padding(innerPadding),
             )
         } else {
-            val periodLabel = stringResource(
-                if (daylist.slot.period == DaylistPeriod.MORNING) {
-                    R.string.daylist_period_morning
-                } else {
-                    R.string.daylist_period_evening
-                },
-            )
+            val periodLabel = daylistPeriodLabel(daylist.slot.period)
             val totalDurationMs = daylist.tracks.sumOf { it.durationMs }
             val metadata = listOfNotNull(
                 if (daylist.tracks.size == 1) "1 song" else "${daylist.tracks.size} songs",
@@ -255,6 +266,16 @@ fun DaylistScreen(
     }
     }
 }
+
+@Composable
+fun daylistPeriodLabel(period: DaylistPeriod): String = stringResource(
+    when (period) {
+        DaylistPeriod.LATE_NIGHT -> R.string.daylist_period_late_night
+        DaylistPeriod.MORNING -> R.string.daylist_period_morning
+        DaylistPeriod.AFTERNOON -> R.string.daylist_period_afternoon
+        DaylistPeriod.EVENING -> R.string.daylist_period_evening
+    },
+)
 
 @Composable
 fun DaylistMosaicArtwork(

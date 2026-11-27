@@ -50,4 +50,6 @@ data class UserPreferences(
     val replayGainPreampDb: Float = 0f,
     val selectedMusicLibraryIds: Set<String> = emptySet(),
     val wireGuardMode: WireGuardMode = WireGuardMode.OFF,
+    val daylistRefreshSlotKey: String = "",
+    val daylistRefreshNonce: Long = 0L,
 )

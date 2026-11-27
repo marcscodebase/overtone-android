@@ -2,6 +2,7 @@ package com.musicplayer.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DaylistUiState(
@@ -33,20 +35,31 @@ data class DaylistUiState(
 @HiltViewModel
 class DaylistViewModel @Inject constructor(
     libraryRepository: LibraryRepository,
+    private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
     private val offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     private val currentSlot = MutableStateFlow(DaylistSlot.current())
 
+    private val refreshPrefs = preferencesDataStore.userPreferences
+        .map { it.daylistRefreshSlotKey to it.daylistRefreshNonce }
+        .distinctUntilChanged()
+
     val uiState: StateFlow<DaylistUiState> = combine(
         libraryRepository.observeAllTracks(),
         currentSlot,
+        refreshPrefs,
         playbackController.playbackState.map { it.currentTrack?.id }.distinctUntilChanged(),
         offlineStateProvider.offlineStatus,
-    ) { allTracks, slot, activeId, offline ->
+    ) { allTracks, slot, (savedSlotKey, savedNonce), activeId, offline ->
+        val effectiveNonce = if (savedSlotKey == slot.slotKey) savedNonce else 0L
         val daylist = if (allTracks.isNotEmpty()) {
-            DaylistGenerator.generate(allTracks = allTracks, slot = slot)
+            DaylistGenerator.generate(
+                allTracks = allTracks,
+                slot = slot,
+                refreshNonce = effectiveNonce,
+            )
         } else {
             null
         }
@@ -67,6 +80,14 @@ class DaylistViewModel @Inject constructor(
         val nowSlot = DaylistSlot.current()
         if (currentSlot.value != nowSlot) {
             currentSlot.value = nowSlot
+        }
+    }
+
+    fun onRefreshNow() {
+        val nowSlot = DaylistSlot.current()
+        currentSlot.value = nowSlot
+        viewModelScope.launch {
+            preferencesDataStore.bumpDaylistRefresh(nowSlot.slotKey)
         }
     }
 

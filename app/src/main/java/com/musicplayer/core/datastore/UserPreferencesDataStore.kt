@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.musicplayer.core.model.CellularBitrateCap
@@ -48,6 +49,8 @@ class UserPreferencesDataStore @Inject constructor(
             replayGainPreampDb = prefs[KEY_REPLAY_GAIN_PREAMP_DB] ?: 0f,
             selectedMusicLibraryIds = prefs[KEY_SELECTED_LIBRARIES] ?: emptySet(),
             wireGuardMode = WireGuardMode.fromNameOrDefault(prefs[KEY_WIREGUARD_MODE]),
+            daylistRefreshSlotKey = prefs[KEY_DAYLIST_REFRESH_SLOT] ?: "",
+            daylistRefreshNonce = prefs[KEY_DAYLIST_REFRESH_NONCE] ?: 0L,
         )
     }
 
@@ -109,6 +112,15 @@ class UserPreferencesDataStore @Inject constructor(
         dataStore.edit { it[KEY_WIREGUARD_MODE] = mode.name }
     }
 
+    suspend fun bumpDaylistRefresh(slotKey: String) {
+        dataStore.edit { prefs ->
+            val currentSlot = prefs[KEY_DAYLIST_REFRESH_SLOT] ?: ""
+            val currentNonce = if (currentSlot == slotKey) (prefs[KEY_DAYLIST_REFRESH_NONCE] ?: 0L) else 0L
+            prefs[KEY_DAYLIST_REFRESH_SLOT] = slotKey
+            prefs[KEY_DAYLIST_REFRESH_NONCE] = currentNonce + 1L
+        }
+    }
+
     companion object {
         private val KEY_OFFLINE_MODE = booleanPreferencesKey("offline_mode_enabled")
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
@@ -124,5 +136,7 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_REPLAY_GAIN_PREAMP_DB = floatPreferencesKey("replay_gain_preamp_db")
         private val KEY_SELECTED_LIBRARIES = stringSetPreferencesKey("selected_music_library_ids")
         private val KEY_WIREGUARD_MODE = stringPreferencesKey("wireguard_mode")
+        private val KEY_DAYLIST_REFRESH_SLOT = stringPreferencesKey("daylist_refresh_slot")
+        private val KEY_DAYLIST_REFRESH_NONCE = longPreferencesKey("daylist_refresh_nonce")
     }
 }

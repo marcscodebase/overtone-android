@@ -66,9 +66,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.model.Track
+import com.musicplayer.feature.home.HomeCollectionSection
 import com.musicplayer.feature.home.HomeContent
 import com.musicplayer.feature.home.HomeViewModel
 import com.musicplayer.feature.library.LibraryContent
+import com.musicplayer.feature.library.LibraryFilter
 import com.musicplayer.feature.library.LibraryViewModel
 import com.musicplayer.feature.library.playlist.CreatePlaylistDialog
 import kotlinx.coroutines.launch
@@ -77,6 +79,7 @@ import kotlinx.coroutines.launch
 fun MainPagerRoute(
     onSearchClick: () -> Unit,
     onDaylistClick: () -> Unit,
+    onOpenHomeCollection: (HomeCollectionSection) -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
@@ -174,6 +177,17 @@ fun MainPagerRoute(
                 0 -> HomePagerPage(
                     viewModel = homeViewModel,
                     onDaylistClick = onDaylistClick,
+                    onShowAllRecentlyAdded = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_ADDED) },
+                    onShowAllPlaylists = {
+                        libraryViewModel.onClosePlaylistFolder()
+                        libraryViewModel.onFilterSelected(LibraryFilter.PLAYLISTS)
+                        coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                    },
+                    onShowAllFavorites = {
+                        libraryViewModel.onFilterSelected(LibraryFilter.FAVORITES)
+                        coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                    },
+                    onShowAllRecentlyPlayed = { onOpenHomeCollection(HomeCollectionSection.RECENTLY_PLAYED) },
                     onAlbumClick = onAlbumClick,
                     onGoToTrackArtist = onGoToTrackArtist,
                     onPlaylistClick = onPlaylistClick,
@@ -211,6 +225,10 @@ fun MainPagerRoute(
 private fun HomePagerPage(
     viewModel: HomeViewModel,
     onDaylistClick: () -> Unit,
+    onShowAllRecentlyAdded: () -> Unit,
+    onShowAllPlaylists: () -> Unit,
+    onShowAllFavorites: () -> Unit,
+    onShowAllRecentlyPlayed: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onGoToTrackArtist: (Track) -> Unit,
     onPlaylistClick: (String) -> Unit,
@@ -235,6 +253,10 @@ private fun HomePagerPage(
         onDaylistClick = onDaylistClick,
         onPlayDaylist = viewModel::onPlayDaylist,
         onShuffleDaylist = viewModel::onShuffleDaylist,
+        onShowAllRecentlyAdded = onShowAllRecentlyAdded,
+        onShowAllPlaylists = onShowAllPlaylists,
+        onShowAllFavorites = onShowAllFavorites,
+        onShowAllRecentlyPlayed = onShowAllRecentlyPlayed,
         onAlbumClick = onAlbumClick,
         onPlaylistClick = onPlaylistClick,
         onTrackClick = viewModel::onTrackClick,

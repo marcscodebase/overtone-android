@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.FolderOpen
@@ -102,25 +103,29 @@ fun LibraryContent(
             ) { filter ->
                 val labelRes = when (filter) {
                     LibraryFilter.DOWNLOADED -> R.string.library_filter_downloaded
+                    LibraryFilter.FAVORITES -> R.string.library_filter_favorites
                     LibraryFilter.PLAYLISTS -> R.string.library_filter_playlists
                     LibraryFilter.ALBUMS -> R.string.library_filter_albums
                     LibraryFilter.ARTISTS -> R.string.library_filter_artists
                     LibraryFilter.SONGS -> R.string.library_filter_songs
                 }
+                val leadingIconVector = when (filter) {
+                    LibraryFilter.DOWNLOADED -> Icons.Rounded.DownloadDone
+                    LibraryFilter.FAVORITES -> Icons.Rounded.Favorite
+                    else -> null
+                }
                 FilterChip(
                     selected = state.selectedFilter == filter,
                     onClick = { onFilterSelected(filter) },
                     label = { Text(stringResource(labelRes)) },
-                    leadingIcon = if (filter == LibraryFilter.DOWNLOADED) {
+                    leadingIcon = leadingIconVector?.let { iconVector ->
                         {
                             Icon(
-                                imageVector = Icons.Rounded.DownloadDone,
+                                imageVector = iconVector,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
-                    } else {
-                        null
                     },
                 )
             }
@@ -149,6 +154,40 @@ fun LibraryContent(
                                 track = track,
                                 isPlaying = track.id == state.activeTrackId,
                                 onClick = { onTrackClick(state.downloadedTracks, index) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToTrackArtist(track) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            LibraryFilter.FAVORITES -> {
+                if (state.favoriteTracks.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.library_favorites_empty_title),
+                        subtitle = stringResource(R.string.library_favorites_empty_subtitle),
+                        icon = Icons.Rounded.Favorite,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 210.dp),
+                    ) {
+                        itemsIndexed(
+                            items = state.favoriteTracks,
+                            key = { _, track -> "fav_${track.id}" },
+                            contentType = { _, _ -> "track" },
+                        ) { index, track ->
+                            TrackRow(
+                                track = track,
+                                isPlaying = track.id == state.activeTrackId,
+                                enabled = !state.isOffline || track.isDownloaded,
+                                onClick = { onTrackClick(state.favoriteTracks, index) },
                                 onAddToQueue = { onAddToQueue(track) },
                                 onAddToPlaylist = { onAddToPlaylist(track) },
                                 onToggleDownload = { onToggleTrackDownload(track) },
