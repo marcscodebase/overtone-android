@@ -105,4 +105,42 @@ class EncryptedAuthSessionStoreTest {
 
         assertNull(store.getSession())
     }
+
+    @Test
+    fun cachesDecryptedSessionInMemoryAcrossRepeatedReads() = runTest {
+        val dataStore = PreferenceDataStoreFactory.create(
+            scope = TestScope(UnconfinedTestDispatcher(testScheduler)),
+            produceFile = { tempFolder.newFile("auth_cache.preferences_pb") },
+        )
+        val baseCipher = createJvmAesGcmCipher()
+        var decryptCount = 0
+        val countingCipher = object : CryptoCipher {
+            override fun encrypt(plaintext: ByteArray): ByteArray = baseCipher.encrypt(plaintext)
+            override fun decrypt(ciphertext: ByteArray): ByteArray {
+                decryptCount++
+                return baseCipher.decrypt(ciphertext)
+            }
+        }
+        val expected = AuthSession(
+            serverUrl = "https://music.example.com",
+            serverId = "srv-1",
+            serverName = "Home",
+            userId = "usr-1",
+            username = "marc",
+            accessToken = "tok-123",
+        )
+
+        val writerStore = EncryptedAuthSessionStore(dataStore, countingCipher, json)
+        writerStore.saveSession(expected)
+        repeat(20) { assertEquals(expected, writerStore.getSession()) }
+        assertEquals("saveSession should warm cache with zero decryptions", 0, decryptCount)
+
+        // Fresh store simulates cold app start: decrypts once, then serves from RAM cache
+        val coldStore = EncryptedAuthSessionStore(dataStore, countingCipher, json)
+        repeat(50) { assertEquals(expected, coldStore.getSession()) }
+        assertEquals("Cold store should only decrypt once across 50 reads", 1, decryptCount)
+
+        coldStore.clearSession()
+        assertNull(coldStore.getSession())
+    }
 }

@@ -36,6 +36,23 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id = :trackId")
     suspend fun getById(trackId: String): TrackEntity?
 
+    @Query("SELECT * FROM tracks WHERE id IN (:trackIds)")
+    suspend fun getByIds(trackIds: List<String>): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks ORDER BY RANDOM() LIMIT :limit")
+    suspend fun getRandomTracks(limit: Int): List<TrackEntity>
+
+    @Query(
+        """
+        SELECT t.* FROM tracks t
+        INNER JOIN download_records d ON t.id = d.trackId
+        WHERE d.status = 'COMPLETED' AND d.mediaStoreUri IS NOT NULL AND d.mediaStoreUri != ''
+        ORDER BY RANDOM()
+        LIMIT :limit
+        """,
+    )
+    suspend fun getRandomDownloadedTracks(limit: Int): List<TrackEntity>
+
     @Query("SELECT * FROM tracks WHERE title LIKE '%' || :query || '%' OR artistName LIKE '%' || :query || '%' OR albumName LIKE '%' || :query || '%' ORDER BY title COLLATE NOCASE ASC LIMIT :limit")
     fun search(query: String, limit: Int = 50): Flow<List<TrackEntity>>
 

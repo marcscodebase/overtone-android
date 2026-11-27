@@ -61,6 +61,12 @@ interface LibraryRepository {
     fun observePlaylist(playlistId: String): Flow<Playlist?>
     fun observePlaylistTracks(playlistId: String): Flow<List<Track>>
 
+    suspend fun getRandomTracks(
+        limit: Int,
+        downloadedOnly: Boolean = false,
+        excludeTrackIds: Set<String> = emptySet(),
+    ): List<Track>
+
     suspend fun syncLibrary(): AppResult<Unit>
     suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit>
     suspend fun search(query: String): AppResult<SearchResults>
@@ -244,6 +250,39 @@ class JellyfinLibraryRepository @Inject constructor(
                 )
             }
         }
+
+    override suspend fun getRandomTracks(
+        limit: Int,
+        downloadedOnly: Boolean,
+        excludeTrackIds: Set<String>,
+    ): List<Track> = withContext(ioDispatcher) {
+        if (limit <= 0) return@withContext emptyList()
+        val fetchLimit = (limit + excludeTrackIds.size.coerceAtMost(MAX_EXCLUDE_OVERSAMPLE))
+            .coerceAtLeast(limit)
+        val rawEntities = if (downloadedOnly) {
+            trackDao.getRandomDownloadedTracks(fetchLimit)
+        } else {
+            trackDao.getRandomTracks(fetchLimit)
+        }
+        val filtered = if (excludeTrackIds.isEmpty()) {
+            rawEntities.take(limit)
+        } else {
+            rawEntities.filterNot { it.id in excludeTrackIds }.take(limit)
+        }
+        if (filtered.isEmpty()) return@withContext emptyList()
+
+        val completedDownloads = downloadDao.getCompletedRecords().associateBy { it.trackId }
+        filtered.map { entity ->
+            entity.toDomain(
+                artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(
+                    trackId = entity.id,
+                    albumId = entity.albumId,
+                    imageTag = entity.primaryImageTag,
+                ),
+                downloadRecord = completedDownloads[entity.id],
+            )
+        }
+    }
 
     override suspend fun syncLibrary(): AppResult<Unit> = withContext(ioDispatcher) {
         val prefs = preferencesDataStore.userPreferences.first()
@@ -565,5 +604,6 @@ class JellyfinLibraryRepository @Inject constructor(
     companion object {
         private const val PAGE_SIZE = 500
         private const val SEARCH_LIMIT = 60
+        private const val MAX_EXCLUDE_OVERSAMPLE = 1_500
     }
 }

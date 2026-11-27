@@ -76,9 +76,15 @@ class QueuePersistenceManager @Inject constructor(
         val queueRows = playbackQueueDao.getQueueSnapshot()
         if (queueRows.isEmpty()) return@withContext null
 
-        val downloads = downloadDao.observeAllRecords().first().associateBy { it.trackId }
+        val distinctTrackIds = queueRows.map { it.trackId }.distinct()
+        val entitiesById = distinctTrackIds
+            .chunked(SQLITE_BIND_CHUNK_SIZE)
+            .flatMap { chunk -> trackDao.getByIds(chunk) }
+            .associateBy { it.id }
+
+        val downloads = downloadDao.getAllRecordsSnapshot().associateBy { it.trackId }
         val tracks = queueRows.mapNotNull { row ->
-            val entity = trackDao.getById(row.trackId) ?: return@mapNotNull null
+            val entity = entitiesById[row.trackId] ?: return@mapNotNull null
             entity.toDomain(
                 artworkUrl = artworkUrlBuilder.buildTrackArtworkUrl(
                     trackId = entity.id,
@@ -102,6 +108,7 @@ class QueuePersistenceManager @Inject constructor(
     }
 
     companion object {
+        private const val SQLITE_BIND_CHUNK_SIZE = 500
         private val KEY_QUEUE_INDEX = intPreferencesKey("persisted_queue_index")
         private val KEY_QUEUE_POSITION_MS = longPreferencesKey("persisted_queue_position_ms")
     }

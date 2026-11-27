@@ -17,6 +17,7 @@ import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.NetworkMonitor
+import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.engine.AudioOutputMonitor
 import com.musicplayer.player.engine.ResolvedAudioSource
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,6 +61,7 @@ interface PlaybackController {
         shuffle: Boolean = false,
         contextLabel: String? = null,
     )
+    fun playLibraryShuffle(downloadedOnly: Boolean = false)
     fun playNext(track: Track)
     fun addToQueue(track: Track)
     fun addToQueue(tracks: List<Track>)
@@ -87,11 +90,17 @@ class MediaControllerPlaybackController @Inject constructor(
     @param:Dispatcher(AppDispatcher.Main) private val mainDispatcher: CoroutineDispatcher,
     private val streamUrlResolver: StreamUrlResolver,
     private val queuePersistenceManager: QueuePersistenceManager,
+    private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
     private val networkMonitor: NetworkMonitor,
     private val audioOutputMonitor: AudioOutputMonitor,
     private val preferencesDataStore: UserPreferencesDataStore,
 ) : PlaybackController {
+
+    private data class RollingShuffleState(
+        val downloadedOnly: Boolean,
+        val seenTrackIds: LinkedHashSet<String>,
+    )
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     override val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -103,6 +112,10 @@ class MediaControllerPlaybackController @Inject constructor(
     private val qualityUpdateMutex = Mutex()
     private var controller: MediaController? = null
     private var positionTickerJob: Job? = null
+    private var backgroundHydrationJob: Job? = null
+    private var rollingShuffleRefillJob: Job? = null
+    private var queueLoadGeneration: Long = 0L
+    private var rollingShuffleState: RollingShuffleState? = null
     private var hasRestoredQueue = false
     private var needsPrepareOnPlay = false
     private var pendingRestoreIndex = 0
@@ -201,6 +214,7 @@ class MediaControllerPlaybackController @Inject constructor(
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             syncFromPlayer()
             persistPositionAsync()
+            maybeRefillRollingShuffle()
             val state = _playbackState.value
             val newTrack = state.currentTrack
             if (newTrack != null && newTrack.id != lastReportedTrackId) {
@@ -267,11 +281,8 @@ class MediaControllerPlaybackController @Inject constructor(
     ) {
         if (tracks.isEmpty()) return
         appScope.launch(mainDispatcher) {
-            val mediaController = ensureConnected() ?: return@launch
-            needsPrepareOnPlay = false
-
-            unshuffledContextTrackIds = tracks.map { it.id }
-            isShuffleActive = shuffle
+            val generation = beginNewQueueLoad()
+            rollingShuffleState = null
 
             val previousActiveId = _playbackState.value.currentTrack?.id
             val orderedInput = if (shuffle) {
@@ -283,12 +294,21 @@ class MediaControllerPlaybackController @Inject constructor(
                 tracks
             }
 
-            val mediaItems = mutableListOf<MediaItem>()
-            val resolvedTracks = mutableListOf<Track>()
-            val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
+            val resolvedMap = streamUrlResolver.resolveBatch(
+                tracks = orderedInput,
+                qualitySelection = sessionQualitySelection,
+            )
+            if (generation != queueLoadGeneration) return@launch
 
-            orderedInput.forEach { track ->
-                val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
+            val mediaController = ensureConnected() ?: return@launch
+            if (generation != queueLoadGeneration) return@launch
+
+            val mediaItems = ArrayList<MediaItem>(orderedInput.size)
+            val resolvedTracks = ArrayList<Track>(orderedInput.size)
+            val newResolvedSources = LinkedHashMap<String, ResolvedAudioSource>(orderedInput.size)
+
+            for (track in orderedInput) {
+                val resolved = resolvedMap[track.id] ?: continue
                 resolvedTracks += track
                 newResolvedSources[track.id] = resolved
                 mediaItems += track.toMediaItem(
@@ -306,6 +326,9 @@ class MediaControllerPlaybackController @Inject constructor(
                 return@launch
             }
 
+            needsPrepareOnPlay = false
+            unshuffledContextTrackIds = tracks.map { it.id }
+            isShuffleActive = shuffle
             resolvedSourcesByTrackId.clear()
             resolvedSourcesByTrackId.putAll(newResolvedSources)
 
@@ -313,12 +336,14 @@ class MediaControllerPlaybackController @Inject constructor(
             val activeTrack = resolvedTracks[safeIndex]
             val activeResolved = newResolvedSources[activeTrack.id]
 
-            // Keep ExoPlayer's internal shuffle off so MediaController timeline and QueueSheet
-            // always match the true shuffled track order 1:1.
-            mediaController.shuffleModeEnabled = false
-            mediaController.setMediaItems(mediaItems, safeIndex, 0L)
-            mediaController.prepare()
-            mediaController.play()
+            setMediaItemsAndHydrate(
+                mediaController = mediaController,
+                mediaItems = mediaItems,
+                safeIndex = safeIndex,
+                startPositionMs = 0L,
+                autoPlay = true,
+                generation = generation,
+            )
 
             val resolvedContextLabel = contextLabel?.takeIf { it.isNotBlank() }
                 ?: activeTrack.albumName.takeIf { name -> name.isNotBlank() }
@@ -344,6 +369,98 @@ class MediaControllerPlaybackController @Inject constructor(
         }
     }
 
+    override fun playLibraryShuffle(downloadedOnly: Boolean) {
+        appScope.launch(mainDispatcher) {
+            val generation = beginNewQueueLoad()
+            val previousActiveId = _playbackState.value.currentTrack?.id
+            val sampled = libraryRepository.getRandomTracks(
+                limit = SHUFFLE_WINDOW_SIZE,
+                downloadedOnly = downloadedOnly,
+            )
+            if (generation != queueLoadGeneration || sampled.isEmpty()) return@launch
+
+            val ordered = if (sampled.size > 1 && previousActiveId != null && sampled.first().id == previousActiveId) {
+                sampled.drop(1) + sampled.first()
+            } else {
+                sampled
+            }
+
+            val resolvedMap = streamUrlResolver.resolveBatch(
+                tracks = ordered,
+                qualitySelection = sessionQualitySelection,
+            )
+            if (generation != queueLoadGeneration) return@launch
+
+            val mediaController = ensureConnected() ?: return@launch
+            if (generation != queueLoadGeneration) return@launch
+
+            val mediaItems = ArrayList<MediaItem>(ordered.size)
+            val resolvedTracks = ArrayList<Track>(ordered.size)
+            val newResolvedSources = LinkedHashMap<String, ResolvedAudioSource>(ordered.size)
+
+            for (track in ordered) {
+                val resolved = resolvedMap[track.id] ?: continue
+                resolvedTracks += track
+                newResolvedSources[track.id] = resolved
+                mediaItems += track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                )
+            }
+
+            if (mediaItems.isEmpty()) {
+                _playbackState.update {
+                    it.copy(errorMessage = "Unable to resolve audio stream URL")
+                }
+                return@launch
+            }
+
+            needsPrepareOnPlay = false
+            isShuffleActive = true
+            unshuffledContextTrackIds = resolvedTracks.map { it.id }
+            rollingShuffleState = RollingShuffleState(
+                downloadedOnly = downloadedOnly,
+                seenTrackIds = resolvedTracks.mapTo(LinkedHashSet()) { it.id },
+            )
+            resolvedSourcesByTrackId.clear()
+            resolvedSourcesByTrackId.putAll(newResolvedSources)
+
+            val activeTrack = resolvedTracks.first()
+            val activeResolved = newResolvedSources[activeTrack.id]
+
+            setMediaItemsAndHydrate(
+                mediaController = mediaController,
+                mediaItems = mediaItems,
+                safeIndex = 0,
+                startPositionMs = 0L,
+                autoPlay = true,
+                generation = generation,
+            )
+
+            val contextLabel = if (downloadedOnly) "Downloaded" else "Your Library"
+            _playbackState.update {
+                it.copy(
+                    queue = resolvedTracks,
+                    currentIndex = 0,
+                    manualQueueCount = 0,
+                    queueContextLabel = contextLabel,
+                    currentTrack = activeTrack,
+                    isLocalPlayback = activeResolved?.isLocal == true,
+                    transcodedBitrateKbps = activeResolved?.transcodedBitrateKbps,
+                    streamQualitySelection = sessionQualitySelection,
+                    shuffleEnabled = true,
+                    positionMs = 0L,
+                    durationMs = activeTrack.durationMs,
+                    errorMessage = null,
+                )
+            }
+            syncFromPlayer()
+            persistQueueAsync()
+        }
+    }
+
     override fun playNext(track: Track) {
         appScope.launch(mainDispatcher) {
             val current = _playbackState.value
@@ -355,6 +472,7 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.join()
             val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@launch
             resolvedSourcesByTrackId[track.id] = resolved
 
@@ -404,11 +522,13 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.join()
 
+            val resolvedMap = streamUrlResolver.resolveBatch(tracks, sessionQualitySelection)
             val resolvedTracks = mutableListOf<Track>()
             val mediaItems = mutableListOf<MediaItem>()
             tracks.forEach { track ->
-                val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
+                val resolved = resolvedMap[track.id] ?: return@forEach
                 resolvedTracks += track
                 resolvedSourcesByTrackId[track.id] = resolved
                 mediaItems += track.toMediaItem(
@@ -420,15 +540,18 @@ class MediaControllerPlaybackController @Inject constructor(
             }
             if (mediaItems.isEmpty()) return@launch
 
-            val insertIndex = (current.currentIndex + 1 + current.manualQueueCount)
-                .coerceIn(0, current.queue.size)
+            val latestState = _playbackState.value
+            val insertIndex = (latestState.currentIndex + 1 + latestState.manualQueueCount)
+                .coerceIn(0, latestState.queue.size)
             val mutated = QueueOrderHelper.enqueueManual(
-                queue = current.queue,
-                currentIndex = current.currentIndex,
-                manualQueueCount = current.manualQueueCount,
+                queue = latestState.queue,
+                currentIndex = latestState.currentIndex,
+                manualQueueCount = latestState.manualQueueCount,
                 tracks = resolvedTracks,
             )
-            mediaController.addMediaItems(insertIndex, mediaItems)
+            mediaItems.chunked(MEDIA_CONTROLLER_CHUNK_SIZE).forEachIndexed { chunkIdx, chunk ->
+                mediaController.addMediaItems(insertIndex + chunkIdx * MEDIA_CONTROLLER_CHUNK_SIZE, chunk)
+            }
             _playbackState.update {
                 it.copy(
                     queue = mutated.queue,
@@ -454,6 +577,9 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            if (index >= mediaController.mediaItemCount) {
+                backgroundHydrationJob?.join()
+            }
             val updatedManual = QueueOrderHelper.adjustManualCountOnIndexChange(
                 oldIndex = current.currentIndex,
                 newIndex = index,
@@ -465,6 +591,7 @@ class MediaControllerPlaybackController @Inject constructor(
             mediaController.play()
             syncFromPlayer()
             persistPositionAsync()
+            maybeRefillRollingShuffle()
         }
     }
 
@@ -476,6 +603,7 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.join()
 
             val mutated = QueueOrderHelper.removeAt(
                 queue = current.queue,
@@ -496,6 +624,7 @@ class MediaControllerPlaybackController @Inject constructor(
             }
             syncFromPlayer()
             persistQueueAsync()
+            maybeRefillRollingShuffle()
         }
     }
 
@@ -511,6 +640,7 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.join()
 
             val mutated = QueueOrderHelper.move(
                 queue = current.queue,
@@ -543,6 +673,7 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.join()
 
             val start = activeIndex + 1
             val end = (start + current.manualQueueCount).coerceAtMost(mediaController.mediaItemCount)
@@ -574,6 +705,11 @@ class MediaControllerPlaybackController @Inject constructor(
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
+            backgroundHydrationJob?.cancel()
+            backgroundHydrationJob = null
+            rollingShuffleRefillJob?.cancel()
+            rollingShuffleRefillJob = null
+            rollingShuffleState = null
 
             val removeStart = activeIndex + 1
             if (removeStart < mediaController.mediaItemCount) {
@@ -719,11 +855,42 @@ class MediaControllerPlaybackController @Inject constructor(
             }
             isShuffleActive = true
 
-            val mutated = QueueOrderHelper.reshuffleUpcoming(
-                queue = current.queue,
-                currentIndex = current.currentIndex,
-                manualQueueCount = current.manualQueueCount,
-            )
+            val rolling = rollingShuffleState
+            val mutated = if (rolling != null) {
+                val safeManual = current.manualQueueCount.coerceIn(0, upcomingCount)
+                val pinnedEnd = current.currentIndex + 1 + safeManual
+                val prefixAndManual = current.queue.subList(0, pinnedEnd)
+                val pinnedIds = prefixAndManual.mapTo(LinkedHashSet()) { it.id }
+                val freshContext = libraryRepository.getRandomTracks(
+                    limit = (SHUFFLE_WINDOW_SIZE - 1).coerceAtLeast(1),
+                    downloadedOnly = rolling.downloadedOnly,
+                    excludeTrackIds = pinnedIds,
+                )
+                if (freshContext.size >= 2) {
+                    rolling.seenTrackIds.clear()
+                    rolling.seenTrackIds.addAll(pinnedIds)
+                    rolling.seenTrackIds.addAll(freshContext.map { it.id })
+                    val combined = prefixAndManual + freshContext
+                    unshuffledContextTrackIds = combined.map { it.id }
+                    com.musicplayer.player.queue.QueueMutationResult(
+                        queue = combined,
+                        currentIndex = current.currentIndex,
+                        manualQueueCount = safeManual,
+                    )
+                } else {
+                    QueueOrderHelper.reshuffleUpcoming(
+                        queue = current.queue,
+                        currentIndex = current.currentIndex,
+                        manualQueueCount = current.manualQueueCount,
+                    )
+                }
+            } else {
+                QueueOrderHelper.reshuffleUpcoming(
+                    queue = current.queue,
+                    currentIndex = current.currentIndex,
+                    manualQueueCount = current.manualQueueCount,
+                )
+            }
 
             applyUpcomingQueueMutation(
                 mutated = mutated,
@@ -737,21 +904,25 @@ class MediaControllerPlaybackController @Inject constructor(
         mutated: com.musicplayer.player.queue.QueueMutationResult,
         shuffleEnabled: Boolean,
     ) {
+        val generation = beginNewQueueLoad()
         val replaceStart = (mutated.currentIndex + 1).coerceAtMost(mutated.queue.size)
+        val upcomingTracks = mutated.queue.subList(replaceStart, mutated.queue.size)
+        val missingTracks = upcomingTracks.filter { it.id !in resolvedSourcesByTrackId }
+        if (missingTracks.isNotEmpty()) {
+            val resolvedMissing = streamUrlResolver.resolveBatch(missingTracks, sessionQualitySelection)
+            if (generation != queueLoadGeneration) return
+            resolvedSourcesByTrackId.putAll(resolvedMissing)
+        }
+
         if (!needsPrepareOnPlay) {
             val mediaController = ensureConnected()
-            if (mediaController != null) {
+            if (mediaController != null && generation == queueLoadGeneration) {
                 mediaController.shuffleModeEnabled = false
                 if (replaceStart < mediaController.mediaItemCount) {
                     mediaController.removeMediaItems(replaceStart, mediaController.mediaItemCount)
                 }
-                val upcomingTracks = mutated.queue.subList(replaceStart, mutated.queue.size)
                 val newMediaItems = upcomingTracks.mapNotNull { track ->
-                    val resolved = resolvedSourcesByTrackId[track.id]
-                        ?: streamUrlResolver.resolve(track, sessionQualitySelection)?.also {
-                            resolvedSourcesByTrackId[track.id] = it
-                        }
-                        ?: return@mapNotNull null
+                    val resolved = resolvedSourcesByTrackId[track.id] ?: return@mapNotNull null
                     track.toMediaItem(
                         uri = resolved.uri,
                         isLocal = resolved.isLocal,
@@ -760,7 +931,20 @@ class MediaControllerPlaybackController @Inject constructor(
                     )
                 }
                 if (newMediaItems.isNotEmpty()) {
-                    mediaController.addMediaItems(replaceStart, newMediaItems)
+                    val insertPos = replaceStart.coerceAtMost(mediaController.mediaItemCount)
+                    val initialEnd = minOf(newMediaItems.size, MEDIA_CONTROLLER_INITIAL_BATCH_SIZE)
+                    mediaController.addMediaItems(insertPos, newMediaItems.subList(0, initialEnd))
+                    if (initialEnd < newMediaItems.size) {
+                        backgroundHydrationJob = appScope.launch(mainDispatcher) {
+                            newMediaItems.subList(initialEnd, newMediaItems.size)
+                                .chunked(MEDIA_CONTROLLER_CHUNK_SIZE)
+                                .forEach { chunk ->
+                                    yield()
+                                    if (generation != queueLoadGeneration || !mediaController.isConnected) return@launch
+                                    mediaController.addMediaItems(mediaController.mediaItemCount, chunk)
+                                }
+                        }
+                    }
                 }
             }
         }
@@ -829,14 +1013,15 @@ class MediaControllerPlaybackController @Inject constructor(
             val activeTrack = queue[currentIndex]
             val previousActiveResolved = resolvedSourcesByTrackId[activeTrack.id]
 
-            val newItems = mutableListOf<MediaItem>()
-            val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
-            for (track in queue) {
-                val resolved = streamUrlResolver.resolve(track, selection)
-                    ?: streamUrlResolver.resolve(track, StreamQualitySelection.AUTO)
-                    ?: return@withLock
-                newResolvedSources[track.id] = resolved
-                newItems += track.toMediaItem(
+            val newResolvedSources = streamUrlResolver.resolveBatch(
+                tracks = queue,
+                qualitySelection = selection,
+                fallbackToAuto = true,
+            )
+            if (newResolvedSources.size < queue.size) return@withLock
+            val newItems = queue.map { track ->
+                val resolved = newResolvedSources[track.id] ?: return@withLock
+                track.toMediaItem(
                     uri = resolved.uri,
                     isLocal = resolved.isLocal,
                     transcodedBitrateKbps = resolved.transcodedBitrateKbps,
@@ -864,13 +1049,18 @@ class MediaControllerPlaybackController @Inject constructor(
 
             val savedPositionMs = mediaController.currentPosition.coerceAtLeast(0L)
             val wasPlaying = mediaController.playWhenReady
+            val generation = beginNewQueueLoad()
 
             // Seamlessly swap media items while preserving exact playback position & play state
-            mediaController.setMediaItems(newItems, currentIndex, savedPositionMs)
-            mediaController.prepare()
-            if (wasPlaying) {
-                mediaController.play()
-            } else {
+            setMediaItemsAndHydrate(
+                mediaController = mediaController,
+                mediaItems = newItems,
+                safeIndex = currentIndex,
+                startPositionMs = savedPositionMs,
+                autoPlay = wasPlaying,
+                generation = generation,
+            )
+            if (!wasPlaying) {
                 mediaController.pause()
             }
 
@@ -905,6 +1095,8 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun stopAndClear() {
         appScope.launch(mainDispatcher) {
+            beginNewQueueLoad()
+            rollingShuffleState = null
             reportStoppedForLastTrack()
             stopPositionTicker()
             needsPrepareOnPlay = false
@@ -926,12 +1118,15 @@ class MediaControllerPlaybackController @Inject constructor(
         mediaController: MediaController,
         autoPlay: Boolean,
     ) {
+        val generation = beginNewQueueLoad()
         val state = _playbackState.value
-        val items = mutableListOf<MediaItem>()
-        val newResolvedSources = mutableMapOf<String, ResolvedAudioSource>()
+        val newResolvedSources = streamUrlResolver.resolveBatch(
+            tracks = state.queue,
+            qualitySelection = sessionQualitySelection,
+        )
+        val items = ArrayList<MediaItem>(state.queue.size)
         state.queue.forEach { track ->
-            val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@forEach
-            newResolvedSources[track.id] = resolved
+            val resolved = newResolvedSources[track.id] ?: return@forEach
             items += track.toMediaItem(
                 uri = resolved.uri,
                 isLocal = resolved.isLocal,
@@ -947,11 +1142,14 @@ class MediaControllerPlaybackController @Inject constructor(
 
         val safeIndex = pendingRestoreIndex.coerceIn(0, items.lastIndex)
         val activeResolved = state.queue.getOrNull(safeIndex)?.id?.let { newResolvedSources[it] }
-        mediaController.setMediaItems(items, safeIndex, pendingRestorePositionMs)
-        mediaController.prepare()
-        if (autoPlay) {
-            mediaController.play()
-        }
+        setMediaItemsAndHydrate(
+            mediaController = mediaController,
+            mediaItems = items,
+            safeIndex = safeIndex,
+            startPositionMs = pendingRestorePositionMs,
+            autoPlay = autoPlay,
+            generation = generation,
+        )
         _playbackState.update {
             it.copy(
                 isLocalPlayback = activeResolved?.isLocal ?: it.isLocalPlayback,
@@ -960,6 +1158,142 @@ class MediaControllerPlaybackController @Inject constructor(
             )
         }
         syncFromPlayer()
+    }
+
+    private fun beginNewQueueLoad(): Long {
+        backgroundHydrationJob?.cancel()
+        backgroundHydrationJob = null
+        rollingShuffleRefillJob?.cancel()
+        rollingShuffleRefillJob = null
+        queueLoadGeneration += 1L
+        return queueLoadGeneration
+    }
+
+    private fun setMediaItemsAndHydrate(
+        mediaController: MediaController,
+        mediaItems: List<MediaItem>,
+        safeIndex: Int,
+        startPositionMs: Long,
+        autoPlay: Boolean,
+        generation: Long,
+    ) {
+        // Keep ExoPlayer's internal shuffle off so MediaController timeline and QueueSheet
+        // always match the true shuffled track order 1:1.
+        mediaController.shuffleModeEnabled = false
+
+        if (mediaItems.size <= MEDIA_CONTROLLER_INITIAL_BATCH_SIZE) {
+            mediaController.setMediaItems(mediaItems, safeIndex, startPositionMs)
+            mediaController.prepare()
+            if (autoPlay) mediaController.play()
+            return
+        }
+
+        if (safeIndex < MEDIA_CONTROLLER_CHUNK_SIZE) {
+            val initialEnd = minOf(
+                mediaItems.size,
+                maxOf(MEDIA_CONTROLLER_INITIAL_BATCH_SIZE, safeIndex + 20),
+            )
+            mediaController.setMediaItems(mediaItems.subList(0, initialEnd), safeIndex, startPositionMs)
+            mediaController.prepare()
+            if (autoPlay) mediaController.play()
+
+            if (initialEnd < mediaItems.size) {
+                backgroundHydrationJob = appScope.launch(mainDispatcher) {
+                    mediaItems.subList(initialEnd, mediaItems.size)
+                        .chunked(MEDIA_CONTROLLER_CHUNK_SIZE)
+                        .forEach { chunk ->
+                            yield()
+                            if (generation != queueLoadGeneration || !mediaController.isConnected) return@launch
+                            mediaController.addMediaItems(mediaController.mediaItemCount, chunk)
+                        }
+                }
+            }
+            return
+        }
+
+        // Large non-shuffled queue starting deep inside the list: populate in binder-safe chunks
+        val chunks = mediaItems.chunked(MEDIA_CONTROLLER_CHUNK_SIZE)
+        mediaController.setMediaItems(chunks.first(), 0, 0L)
+        for (i in 1 until chunks.size) {
+            mediaController.addMediaItems(mediaController.mediaItemCount, chunks[i])
+        }
+        mediaController.seekTo(safeIndex, startPositionMs)
+        mediaController.prepare()
+        if (autoPlay) mediaController.play()
+    }
+
+    private fun maybeRefillRollingShuffle() {
+        val rolling = rollingShuffleState ?: return
+        if (!isShuffleActive || needsPrepareOnPlay) return
+        if (rollingShuffleRefillJob?.isActive == true) return
+        val state = _playbackState.value
+        if (state.queue.isEmpty() || state.currentIndex !in state.queue.indices) return
+        val remaining = state.queue.size - 1 - state.currentIndex
+        if (remaining > SHUFFLE_REFILL_THRESHOLD) return
+
+        val generation = queueLoadGeneration
+        rollingShuffleRefillJob = appScope.launch(mainDispatcher) {
+            val excludeIds = rolling.seenTrackIds.toSet()
+            var freshTracks = libraryRepository.getRandomTracks(
+                limit = SHUFFLE_REFILL_BATCH_SIZE,
+                downloadedOnly = rolling.downloadedOnly,
+                excludeTrackIds = excludeIds,
+            )
+            if (freshTracks.isEmpty() && excludeIds.size > _playbackState.value.queue.size) {
+                val currentIds = _playbackState.value.queue.mapTo(LinkedHashSet()) { it.id }
+                rolling.seenTrackIds.clear()
+                rolling.seenTrackIds.addAll(currentIds)
+                freshTracks = libraryRepository.getRandomTracks(
+                    limit = SHUFFLE_REFILL_BATCH_SIZE,
+                    downloadedOnly = rolling.downloadedOnly,
+                    excludeTrackIds = currentIds,
+                )
+            }
+            if (generation != queueLoadGeneration || rollingShuffleState !== rolling || freshTracks.isEmpty()) {
+                return@launch
+            }
+
+            val resolvedMap = streamUrlResolver.resolveBatch(
+                tracks = freshTracks,
+                qualitySelection = sessionQualitySelection,
+            )
+            if (generation != queueLoadGeneration || rollingShuffleState !== rolling) return@launch
+
+            val mediaController = ensureConnected() ?: return@launch
+            backgroundHydrationJob?.join()
+            if (generation != queueLoadGeneration || rollingShuffleState !== rolling) return@launch
+
+            val existingIds = _playbackState.value.queue.mapTo(HashSet()) { it.id }
+            val appendedTracks = ArrayList<Track>(freshTracks.size)
+            val appendedItems = ArrayList<MediaItem>(freshTracks.size)
+            for (track in freshTracks) {
+                if (track.id in existingIds) continue
+                val resolved = resolvedMap[track.id] ?: continue
+                resolvedSourcesByTrackId[track.id] = resolved
+                appendedTracks += track
+                appendedItems += track.toMediaItem(
+                    uri = resolved.uri,
+                    isLocal = resolved.isLocal,
+                    transcodedBitrateKbps = resolved.transcodedBitrateKbps,
+                    mimeType = resolved.mimeType,
+                )
+            }
+            if (appendedItems.isEmpty()) return@launch
+
+            appendedItems.chunked(MEDIA_CONTROLLER_CHUNK_SIZE).forEach { chunk ->
+                if (generation != queueLoadGeneration || !mediaController.isConnected) return@launch
+                mediaController.addMediaItems(mediaController.mediaItemCount, chunk)
+                yield()
+            }
+            if (generation != queueLoadGeneration) return@launch
+
+            rolling.seenTrackIds.addAll(appendedTracks.map { it.id })
+            unshuffledContextTrackIds = unshuffledContextTrackIds + appendedTracks.map { it.id }
+            _playbackState.update { current ->
+                current.copy(queue = current.queue + appendedTracks)
+            }
+            persistQueueAsync()
+        }
     }
 
     private suspend fun ensureConnected(): MediaController? = connectMutex.withLock {
@@ -1169,5 +1503,10 @@ class MediaControllerPlaybackController @Inject constructor(
         private const val POSITION_POLL_INTERVAL_MS = 250L
         private const val PROGRESS_REPORT_INTERVAL_MS = 15_000L
         private const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
+        internal const val SHUFFLE_WINDOW_SIZE = 300
+        internal const val SHUFFLE_REFILL_THRESHOLD = 25
+        internal const val SHUFFLE_REFILL_BATCH_SIZE = 150
+        private const val MEDIA_CONTROLLER_INITIAL_BATCH_SIZE = 25
+        private const val MEDIA_CONTROLLER_CHUNK_SIZE = 100
     }
 }

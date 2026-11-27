@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -223,25 +222,9 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onShuffleLibrary() {
-        viewModelScope.launch {
-            val state = uiState.value
-            val useDownloadedOnly = state.isOffline || state.selectedFilter == LibraryFilter.DOWNLOADED
-            val tracks = if (useDownloadedOnly) {
-                libraryRepository.observeDownloadedTracks().first()
-            } else {
-                libraryRepository.observeAllTracks().first()
-            }
-            val playable = if (state.isOffline) tracks.filter { it.isDownloaded } else tracks
-            if (playable.isNotEmpty()) {
-                val contextLabel = if (useDownloadedOnly) "Downloaded" else "Your Library"
-                playbackController.playTracks(
-                    tracks = playable,
-                    startIndex = 0,
-                    shuffle = true,
-                    contextLabel = contextLabel,
-                )
-            }
-        }
+        val state = uiState.value
+        val useDownloadedOnly = state.isOffline || state.selectedFilter == LibraryFilter.DOWNLOADED
+        playbackController.playLibraryShuffle(downloadedOnly = useDownloadedOnly)
     }
 
     fun onPlayNext(track: Track) = playbackController.playNext(track)

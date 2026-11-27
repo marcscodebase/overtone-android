@@ -28,8 +28,19 @@ class EncryptedAuthSessionStore @Inject constructor(
     private val json: Json,
 ) : AuthSessionStore {
 
+    @Volatile
+    private var cachedEncoded: String? = null
+
+    @Volatile
+    private var cachedSession: AuthSession? = null
+
     override val session: Flow<AuthSession?> = dataStore.data.map { prefs ->
-        val encoded = prefs[KEY_ENCRYPTED_SESSION] ?: return@map null
+        val encoded = prefs[KEY_ENCRYPTED_SESSION]
+        if (encoded == null) {
+            cachedEncoded = null
+            cachedSession = null
+            return@map null
+        }
         decodeSession(encoded)
     }
 
@@ -39,23 +50,33 @@ class EncryptedAuthSessionStore @Inject constructor(
         val plaintext = json.encodeToString(session).toByteArray(Charsets.UTF_8)
         val encrypted = cryptoCipher.encrypt(plaintext)
         val encoded = Base64.getEncoder().encodeToString(encrypted)
+        cachedEncoded = encoded
+        cachedSession = session
         dataStore.edit { prefs ->
             prefs[KEY_ENCRYPTED_SESSION] = encoded
         }
     }
 
     override suspend fun clearSession() {
+        cachedEncoded = null
+        cachedSession = null
         dataStore.edit { prefs ->
             prefs.remove(KEY_ENCRYPTED_SESSION)
         }
     }
 
     private fun decodeSession(encoded: String): AuthSession? {
-        return runCatching {
+        if (cachedEncoded == encoded) {
+            return cachedSession
+        }
+        val decoded = runCatching {
             val encrypted = Base64.getDecoder().decode(encoded)
             val plaintext = cryptoCipher.decrypt(encrypted).toString(Charsets.UTF_8)
             json.decodeFromString<AuthSession>(plaintext)
         }.getOrNull()
+        cachedEncoded = encoded
+        cachedSession = decoded
+        return decoded
     }
 
     companion object {

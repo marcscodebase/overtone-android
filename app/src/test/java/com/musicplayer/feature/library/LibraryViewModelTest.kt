@@ -87,6 +87,42 @@ class LibraryViewModelTest {
         advanceUntilIdle()
     }
 
+    @Test
+    fun shuffleLibraryDelegatesToRollingShuffleWithCorrectScope() = runTest(testDispatcher) {
+        val fakePlayer = FakePlaybackController()
+        val offlineProvider = FakeOfflineStateProvider()
+        val viewModel = LibraryViewModel(
+            libraryRepository = FakeLibraryRepository(emptyList()),
+            playlistRepository = FakePlaylistRepository(),
+            syncRepository = FakeSyncRepository(),
+            playbackController = fakePlayer,
+            offlineStateProvider = offlineProvider,
+        )
+
+        viewModel.uiState.test {
+            val initial = awaitItem() // default ALBUMS filter
+            assertEquals(LibraryFilter.ALBUMS, initial.selectedFilter)
+
+            viewModel.onShuffleLibrary()
+            assertEquals(listOf(false), fakePlayer.libraryShuffleCalls)
+
+            viewModel.onFilterSelected(LibraryFilter.DOWNLOADED)
+            awaitItem()
+            viewModel.onShuffleLibrary()
+            assertEquals(listOf(false, true), fakePlayer.libraryShuffleCalls)
+
+            viewModel.onFilterSelected(LibraryFilter.ARTISTS)
+            awaitItem()
+            offlineProvider.setManualOfflineMode(true)
+            awaitItem()
+            viewModel.onShuffleLibrary()
+            assertEquals(listOf(false, true, true), fakePlayer.libraryShuffleCalls)
+            cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+        advanceUntilIdle()
+    }
+
     private class FakeLibraryRepository(
         private val albums: List<Album>,
     ) : LibraryRepository {
@@ -105,6 +141,11 @@ class LibraryViewModelTest {
         override fun observeArtistTracks(artistId: String): Flow<List<Track>> = flowOf(emptyList())
         override fun observePlaylist(playlistId: String): Flow<Playlist?> = flowOf(null)
         override fun observePlaylistTracks(playlistId: String): Flow<List<Track>> = flowOf(emptyList())
+        override suspend fun getRandomTracks(
+            limit: Int,
+            downloadedOnly: Boolean,
+            excludeTrackIds: Set<String>,
+        ): List<Track> = emptyList()
         override suspend fun syncLibrary(): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun syncPlaylistTracks(playlistId: String): AppResult<Unit> = AppResult.Success(Unit)
         override suspend fun search(query: String): AppResult<SearchResults> = AppResult.Success(SearchResults())
@@ -142,6 +183,7 @@ class LibraryViewModelTest {
     }
 
     private class FakePlaybackController : PlaybackController {
+        val libraryShuffleCalls = mutableListOf<Boolean>()
         override val playbackState: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState())
         override val feedbackMessages: SharedFlow<String> = MutableSharedFlow()
         override fun restorePersistedQueue() = Unit
@@ -151,6 +193,9 @@ class LibraryViewModelTest {
             shuffle: Boolean,
             contextLabel: String?,
         ) = Unit
+        override fun playLibraryShuffle(downloadedOnly: Boolean) {
+            libraryShuffleCalls += downloadedOnly
+        }
         override fun playNext(track: Track) = Unit
         override fun addToQueue(track: Track) = Unit
         override fun addToQueue(tracks: List<Track>) = Unit

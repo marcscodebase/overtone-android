@@ -83,8 +83,9 @@ A complete, code-verified overview of all features currently implemented in **an
 ---
 
 ## 7. Queue Management, True Shuffle & Synced Lyrics
-- **True Physical Shuffle & Instant Re-Shuffle:**
+- **True Physical Shuffle, Instant Large-Library Shuffle & Re-Shuffle:**
   - Shuffling any album, playlist, artist, daylist, or library genuinely randomizes the queue order so playback never starts stuck on track #1 and the Queue view always shows the real upcoming tracks.
+  - **Library Shuffle** starts instantly even on massive libraries via direct SQLite random sampling (300-track rolling shuffle window with single-pass batch URL resolution, progressive chunked Media3 hydration, and automatic background refill of fresh unplayed tracks as you approach the end of the queue).
   - Tapping Shuffle again immediately starts a different random track with a freshly shuffled queue; turning Shuffle off in the player restores the original context order without interrupting the playing song.
 - **Spotify-Style Queue & Last Played Sheet:**
   - Swipeable 2-tab sheet (**Queue** | **Last Played** — up to 50 recent tracks with tap-to-play, Save `+`/`✓`, and overflow menu) with automatic scroll-to-top reset when switching tabs.
