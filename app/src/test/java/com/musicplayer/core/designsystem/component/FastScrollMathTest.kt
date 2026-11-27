@@ -35,4 +35,49 @@ class FastScrollMathTest {
         assertEquals(0.5f, FastScrollMath.scrollProgressFraction(47, headerItemCount = 2, itemCount = 100, visibleItemCount = 10), 0.001f)
         assertEquals(1f, FastScrollMath.scrollProgressFraction(92, headerItemCount = 2, itemCount = 100, visibleItemCount = 10), 0.001f)
     }
+
+    @Test
+    fun `builds contiguous ordered sections and resolves active section index`() {
+        val titles = listOf("Alpha", "Apex", "Beta", "Charlie", "Cyber", "Zulu")
+        val sections = FastScrollMath.buildSections(titles.size) { idx ->
+            FastScrollMath.sectionLetter(titles[idx])
+        }
+
+        assertEquals(
+            listOf(
+                FastScrollSection("A", firstIndex = 0, lastIndex = 1),
+                FastScrollSection("B", firstIndex = 2, lastIndex = 2),
+                FastScrollSection("C", firstIndex = 3, lastIndex = 4),
+                FastScrollSection("Z", firstIndex = 5, lastIndex = 5),
+            ),
+            sections,
+        )
+        assertEquals(0, FastScrollMath.activeSectionIndex(sections, 0))
+        assertEquals(0, FastScrollMath.activeSectionIndex(sections, 1))
+        assertEquals(1, FastScrollMath.activeSectionIndex(sections, 2))
+        assertEquals(2, FastScrollMath.activeSectionIndex(sections, 4))
+        assertEquals(3, FastScrollMath.activeSectionIndex(sections, 5))
+    }
+
+    @Test
+    fun `downsamples large section counts evenly while keeping first and last`() {
+        val years = (2025 downTo 1976).map { it.toString() } // 50 unique years
+        val sections = FastScrollMath.buildSections(
+            itemCount = years.size,
+            maxSections = 10,
+        ) { idx -> years[idx] }
+
+        assertEquals(10, sections.size)
+        assertEquals("2025", sections.first().label)
+        assertEquals("1976", sections.last().label)
+        assertEquals(0, FastScrollMath.activeSectionIndex(sections, 0))
+        assertEquals(9, FastScrollMath.activeSectionIndex(sections, 49))
+    }
+
+    @Test
+    fun `computes uniform section center fractions`() {
+        assertEquals(0.5f, FastScrollMath.sectionCenterFraction(0, 1), 0.001f)
+        assertEquals(0.125f, FastScrollMath.sectionCenterFraction(0, 4), 0.001f)
+        assertEquals(0.875f, FastScrollMath.sectionCenterFraction(3, 4), 0.001f)
+    }
 }
