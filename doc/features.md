@@ -60,7 +60,7 @@ A complete, code-verified overview of all features currently implemented in **an
 
 ## 5. Personal Library, Full Server Catalog, Playlists & Artist Discography
 - **Spotify-Style Personal `Library` Tab:**
-  - Unified collection list containing **Pinned items** at the top (long-press or `⋮` menu → *Pin to top* / *Unpin*, persisted across restarts), built-in **Favorites** & **Downloaded** collection rows (opening dedicated detail screens with Play, Shuffle, Sort, and pull-down-to-dismiss), your **Playlist Folders & Playlists**, and **curated Albums & Artists** (favorited, downloaded, or pinned).
+  - Unified collection list containing **Pinned items** at the top (long-press or `⋮` menu → *Pin to top* / *Unpin*, persisted across restarts), built-in **Favorite Songs** & **Downloaded Songs** collection rows (sorting naturally into the alphabetical list when unpinned, opening dedicated detail screens with Play, Shuffle, Sort, and pull-down-to-dismiss), your **Playlist Folders & Playlists**, and **curated Albums & Artists** (favorited, downloaded, or pinned).
   - Toggleable filter chips (`Playlists`, `Albums`, `Artists`, `Downloaded` — tap again or `✕` to return to the unified view), inline **Sort picker** (*Alphabetical*, *Recently Added*, *Creator*), and quick Offline Mode toggle in the top bar (which auto-filters to `Downloaded`).
 - **Full-Server `Catalog` Tab:**
   - Dedicated 3rd tab browsing everything on your Jellyfin server (`Albums`, `Artists`, `Songs`) with per-tab sorting (*Alphabetical*, *Recently Added* / *Recently Played* / *Most Albums*, *Artist*) and total counts, keeping personal Library uncluttered even on huge servers.

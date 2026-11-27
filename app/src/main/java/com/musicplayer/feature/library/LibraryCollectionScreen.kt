@@ -97,7 +97,11 @@ fun LibraryCollectionScreen(
 ) {
     val listState = rememberLazyListState()
     val isFavorites = state.section == LibraryCollectionSection.FAVORITES
-    val titleRes = if (isFavorites) R.string.library_filter_favorites else R.string.library_filter_downloaded
+    val titleRes = if (isFavorites) {
+        R.string.library_collection_favorite_songs
+    } else {
+        R.string.library_collection_downloaded_songs
+    }
     val icon = if (isFavorites) Icons.Rounded.Favorite else Icons.Rounded.DownloadDone
 
     SwipeDownToDismissContainer(

@@ -44,6 +44,8 @@
     <string name="library_sort">Sort library</string>
     <string name="library_filter_downloaded">Downloaded</string>
     <string name="library_filter_favorites">Favorites</string>
+    <string name="library_collection_downloaded_songs">Downloaded Songs</string>
+    <string name="library_collection_favorite_songs">Favorite Songs</string>
     <string name="library_filter_playlists">Playlists</string>
     <string name="library_filter_albums">Albums</string>
     <string name="library_filter_artists">Artists</string>

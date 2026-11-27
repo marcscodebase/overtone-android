@@ -131,7 +131,7 @@ class LibraryCollectionViewModel @Inject constructor(
     fun onAddToQueue(track: Track) = playbackController.addToQueue(track)
 
     private fun contextLabel(): String = when (section) {
-        LibraryCollectionSection.FAVORITES -> "Favorites"
-        LibraryCollectionSection.DOWNLOADED -> "Downloaded"
+        LibraryCollectionSection.FAVORITES -> "Favorite Songs"
+        LibraryCollectionSection.DOWNLOADED -> "Downloaded Songs"
     }
 }

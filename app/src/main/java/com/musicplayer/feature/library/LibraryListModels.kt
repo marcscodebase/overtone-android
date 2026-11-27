@@ -49,7 +49,7 @@ sealed interface LibraryListItem {
             LibraryCollectionSection.DOWNLOADED -> UserPreferences.PIN_KEY_DOWNLOADED
         }
         override val creator: String = ""
-        override val dateAdded: Long = Long.MAX_VALUE
+        override val dateAdded: Long = 0L
         override val hasDownloadedContent: Boolean = section == LibraryCollectionSection.DOWNLOADED
     }
 
@@ -123,8 +123,8 @@ object LibraryListBuilder {
         activeFilter: LibraryFilter?,
         sort: LibrarySort,
         pinnedKeys: List<String>,
-        favoritesTitle: String = "Favorites",
-        downloadedTitle: String = "Downloaded",
+        favoritesTitle: String = "Favorite Songs",
+        downloadedTitle: String = "Downloaded Songs",
     ): List<LibraryListItem> {
         val pinOrder = pinnedKeys.withIndex().associate { (idx, key) -> key to idx }
         val candidates = mutableListOf<LibraryListItem>()
@@ -209,20 +209,15 @@ object LibraryListBuilder {
         val (pinned, unpinned) = candidates.partition { it.isPinned }
         val sortedPinned = pinned.sortedBy { pinOrder[it.pinKey] ?: Int.MAX_VALUE }
         val sortedUnpinned = when (sort) {
-            LibrarySort.ALPHABETICAL -> unpinned.sortedWith(
-                compareBy<LibraryListItem> { it !is LibraryListItem.BuiltInCollection }
-                    .thenBy { it.title.lowercase() },
-            )
+            LibrarySort.ALPHABETICAL -> unpinned.sortedBy { it.title.lowercase() }
 
             LibrarySort.RECENTLY_ADDED -> unpinned.sortedWith(
-                compareBy<LibraryListItem> { it !is LibraryListItem.BuiltInCollection }
-                    .thenByDescending { it.dateAdded }
+                compareByDescending<LibraryListItem> { it.dateAdded }
                     .thenBy { it.title.lowercase() },
             )
 
             LibrarySort.CREATOR -> unpinned.sortedWith(
-                compareBy<LibraryListItem> { it !is LibraryListItem.BuiltInCollection }
-                    .thenBy { it.creator.ifBlank { it.title }.lowercase() }
+                compareBy<LibraryListItem> { it.creator.ifBlank { it.title }.lowercase() }
                     .thenBy { it.title.lowercase() },
             )
         }

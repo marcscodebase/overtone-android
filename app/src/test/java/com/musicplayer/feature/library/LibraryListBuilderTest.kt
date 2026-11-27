@@ -155,4 +155,29 @@ class LibraryListBuilderTest {
         )
         assertEquals(listOf("Zeta", "Alpha"), byCreator.map { it.title })
     }
+
+    @Test
+    fun `sorts unpinned favorite songs and downloaded songs alphabetically among other items`() {
+        val items = LibraryListBuilder.build(
+            favoriteTrackCount = 10,
+            downloadedTrackCount = 5,
+            downloadedAlbumIds = emptySet(),
+            playlistFolders = emptyList(),
+            rootPlaylists = listOf(
+                playlist("p-a", "Ambient"),
+                playlist("p-e", "Electronic"),
+                playlist("p-z", "Zen"),
+            ),
+            allAlbums = emptyList(),
+            allArtists = emptyList(),
+            activeFilter = null,
+            sort = LibrarySort.ALPHABETICAL,
+            pinnedKeys = emptyList(),
+        )
+
+        assertEquals(
+            listOf("Ambient", "Downloaded Songs", "Electronic", "Favorite Songs", "Zen"),
+            items.map { it.title },
+        )
+    }
 }

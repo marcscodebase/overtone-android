@@ -434,7 +434,11 @@ private fun BuiltInCollectionRow(
     val isFavorites = item.section == LibraryCollectionSection.FAVORITES
     val icon = if (isFavorites) Icons.Rounded.Favorite else Icons.Rounded.DownloadDone
     val title = stringResource(
-        if (isFavorites) R.string.library_filter_favorites else R.string.library_filter_downloaded,
+        if (isFavorites) {
+            R.string.library_collection_favorite_songs
+        } else {
+            R.string.library_collection_downloaded_songs
+        },
     )
     val countText = if (item.trackCount == 1) "1 song" else "${item.trackCount} songs"
 
