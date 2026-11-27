@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
@@ -72,6 +73,18 @@ import kotlin.math.roundToInt
  * optimized for right-handed one-handed use).
  */
 val LocalLeftHandedMode = compositionLocalOf { false }
+
+/**
+ * Safe horizontal inset provided by [LazyColumnFastScroller] when visible so row trailing actions
+ * (such as `⋮` overflow menus) stay completely clear of the edge fast-scroller touch lane while
+ * keeping centered screen headers symmetrically aligned.
+ */
+data class FastScrollerSafePadding(
+    val start: Dp = 0.dp,
+    val end: Dp = 0.dp,
+)
+
+val LocalFastScrollerSafePadding = compositionLocalOf { FastScrollerSafePadding() }
 
 /**
  * Represents a contiguous section on the opposite-side visual index rail (e.g., `"A"`, `"★"`, `"2024"`).
@@ -283,33 +296,44 @@ fun LazyColumnFastScroller(
     val thumbAlpha by animateFloatAsState(
         targetValue = when {
             isDragging -> 1f
-            recentlyScrolled -> 0.92f
-            else -> 0.42f
+            recentlyScrolled -> 0.94f
+            else -> 0.52f
         },
         label = "fast_scroll_alpha",
     )
     val thumbWidth by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 5.dp,
+        targetValue = if (isDragging) 8.dp else 6.dp,
         label = "fast_scroll_width",
     )
 
+    val safePadding = when {
+        !canScroll -> FastScrollerSafePadding()
+        leftSide -> FastScrollerSafePadding(start = 12.dp)
+        else -> FastScrollerSafePadding(end = 20.dp)
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
-        content()
+        CompositionLocalProvider(LocalFastScrollerSafePadding provides safePadding) {
+            content()
+        }
 
         if (canScroll || isDragging) {
-            // Draggable edge thumb & gesture track
+            // Dedicated compact edge thumb & gesture track (0..22.dp) kept clear of row ⋮ menus
             BoxWithConstraints(
                 modifier = Modifier
                     .align(if (leftSide) Alignment.CenterStart else Alignment.CenterEnd)
                     .fillMaxHeight()
                     .padding(top = topPadding, bottom = bottomPadding)
-                    .width(34.dp),
+                    .width(22.dp),
             ) {
                 val trackHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
-                val thumbHeightDp = 48.dp
+                val thumbHeightDp = 52.dp
                 val thumbHeightPx = with(density) { thumbHeightDp.toPx() }
+                val thumbGrabMarginPx = with(density) { 18.dp.toPx() }
+                val dragActivationSlopPx = with(density) { 8.dp.toPx() }
                 val usableTrackPx = (trackHeightPx - thumbHeightPx).coerceAtLeast(1f)
                 val thumbOffsetYPx = (displayedFraction * usableTrackPx).roundToInt()
+                val latestThumbOffsetYPx by rememberUpdatedState(thumbOffsetYPx)
 
                 fun scrubToY(yPx: Float) {
                     val count = latestItemCount
@@ -334,23 +358,45 @@ fun LazyColumnFastScroller(
                         .pointerInput(usableTrackPx, thumbHeightPx) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
-                                down.consume()
-                                isDragging = true
-                                scrubToY(down.position.y)
+                                val currentThumbTop = latestThumbOffsetYPx.toFloat()
+                                val startedOnThumb = down.position.y in
+                                    (currentThumbTop - thumbGrabMarginPx)..(currentThumbTop + thumbHeightPx + thumbGrabMarginPx)
+
+                                var engaged = false
+                                if (startedOnThumb) {
+                                    down.consume()
+                                    engaged = true
+                                    isDragging = true
+                                    scrubToY(down.position.y)
+                                }
+
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                     if (!change.pressed) {
-                                        change.consume()
+                                        if (engaged) change.consume()
                                         break
                                     }
-                                    if (change.positionChanged()) {
+                                    if (!engaged) {
+                                        // Outside the thumb handle, only engage on a deliberate vertical drag
+                                        // so stray edge taps never accidentally jump the list.
+                                        val dy = abs(change.position.y - down.position.y)
+                                        val dx = abs(change.position.x - down.position.x)
+                                        if (dy >= dragActivationSlopPx && dy > dx) {
+                                            engaged = true
+                                            isDragging = true
+                                            change.consume()
+                                            scrubToY(change.position.y)
+                                        }
+                                    } else if (change.positionChanged()) {
                                         change.consume()
                                         scrubToY(change.position.y)
                                     }
                                 }
-                                isDragging = false
-                                activeBubbleLabel = null
+                                if (engaged) {
+                                    isDragging = false
+                                    activeBubbleLabel = null
+                                }
                             }
                         },
                 ) {

@@ -197,6 +197,7 @@ private fun TrackRowContent(
     onExtraMenuAction: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val fastScrollPadding = LocalFastScrollerSafePadding.current
     val hasAlbumLink = onGoToAlbum != null && !track.albumId.isNullOrBlank()
     val hasArtistLink = onGoToArtist != null && track.resolvedArtists.isNotEmpty()
     val hasMenu = onAddToQueue != null ||
@@ -211,8 +212,8 @@ private fun TrackRowContent(
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.42f)
             .padding(
-                start = 16.dp,
-                end = if (hasMenu || onSaveOrAddToPlaylist != null) 4.dp else 16.dp,
+                start = 16.dp + fastScrollPadding.start,
+                end = (if (hasMenu || onSaveOrAddToPlaylist != null) 4.dp else 16.dp) + fastScrollPadding.end,
                 top = 8.dp,
                 bottom = 8.dp,
             ),

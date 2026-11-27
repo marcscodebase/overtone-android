@@ -67,6 +67,7 @@ import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
 import com.musicplayer.core.designsystem.component.FastScrollMath
 import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
+import com.musicplayer.core.designsystem.component.LocalFastScrollerSafePadding
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistFolderGroup
 import com.musicplayer.feature.library.playlist.MovePlaylistToFolderDialog
@@ -442,6 +443,7 @@ private fun BuiltInCollectionRow(
     )
     val countText = if (item.trackCount == 1) "1 song" else "${item.trackCount} songs"
 
+    val fastScrollPadding = LocalFastScrollerSafePadding.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -452,7 +454,12 @@ private fun BuiltInCollectionRow(
                     menuExpanded = true
                 },
             )
-            .padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .padding(
+                start = 16.dp + fastScrollPadding.start,
+                end = 4.dp + fastScrollPadding.end,
+                top = 10.dp,
+                bottom = 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -535,6 +542,7 @@ private fun CuratedCollectionRow(
     var menuExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
+    val fastScrollPadding = LocalFastScrollerSafePadding.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -545,7 +553,12 @@ private fun CuratedCollectionRow(
                     menuExpanded = true
                 },
             )
-            .padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .padding(
+                start = 16.dp + fastScrollPadding.start,
+                end = 4.dp + fastScrollPadding.end,
+                top = 10.dp,
+                bottom = 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
@@ -750,6 +763,7 @@ private fun PlaylistFolderRow(
     val haptic = LocalHapticFeedback.current
     val count = folder.playlists.size
 
+    val fastScrollPadding = LocalFastScrollerSafePadding.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -760,7 +774,12 @@ private fun PlaylistFolderRow(
                     menuExpanded = true
                 },
             )
-            .padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .padding(
+                start = 16.dp + fastScrollPadding.start,
+                end = 4.dp + fastScrollPadding.end,
+                top = 10.dp,
+                bottom = 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -851,6 +870,7 @@ private fun PlaylistLibraryRow(
     var menuExpanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
+    val fastScrollPadding = LocalFastScrollerSafePadding.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -861,7 +881,12 @@ private fun PlaylistLibraryRow(
                     menuExpanded = true
                 },
             )
-            .padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .padding(
+                start = 16.dp + fastScrollPadding.start,
+                end = 4.dp + fastScrollPadding.end,
+                top = 10.dp,
+                bottom = 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkCard(
