@@ -4,13 +4,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group
-        android:scaleX="0.5"
-        android:scaleY="0.5"
-        android:translateX="27"
-        android:translateY="27">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M54,18 L54,67.3 C50.5,65.2 46.4,64 42,64 C29.8,64 20,73.8 20,86 C20,98.2 29.8,108 42,108 C54.2,108 64,98.2 64,86 L64,34 L88,34 L88,18 Z" />
-    </group>
+    <!-- Outer fundamental ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F4F3FA"
+        android:strokeWidth="4.4"
+        android:pathData="M54,29 A25,25 0 1,0 54,79 A25,25 0 1,0 54,29 Z" />
+    <!-- Rising harmonic overtone ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#C4B5FD"
+        android:strokeWidth="4.0"
+        android:pathData="M54,36.3 A14.2,14.2 0 1,0 54,64.7 A14.2,14.2 0 1,0 54,36.3 Z" />
+    <!-- Pure core tone -->
+    <path
+        android:fillColor="#A78BFA"
+        android:pathData="M54,43.4 A4.6,4.6 0 1,0 54,52.6 A4.6,4.6 0 1,0 54,43.4 Z" />
 </vector>

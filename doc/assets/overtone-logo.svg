@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E1D2B"/>
+      <stop offset="100%" stop-color="#13131A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DDD6FE"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <!-- Outer fundamental ring -->
+  <circle cx="256" cy="256" r="144" fill="none" stroke="#F4F3FA" stroke-width="26"/>
+  <!-- Rising harmonic overtone ring -->
+  <circle cx="256" cy="236" r="82" fill="none" stroke="url(#accent)" stroke-width="23"/>
+  <!-- Pure core tone -->
+  <circle cx="256" cy="221" r="27" fill="#A78BFA"/>
+</svg>

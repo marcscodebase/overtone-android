@@ -5,14 +5,14 @@ Categories:
   - Multimedia
 License: GPL-3.0-or-later
 AuthorName: Marc Saier
-SourceCode: https://github.com/marcscodebase/android-music-player
-IssueTracker: https://github.com/marcscodebase/android-music-player/issues
-Changelog: https://github.com/marcscodebase/android-music-player/releases
+SourceCode: https://github.com/marcscodebase/overtone-android
+IssueTracker: https://github.com/marcscodebase/overtone-android/issues
+Changelog: https://github.com/marcscodebase/overtone-android/releases
 
 AutoName: Overtone
 
 RepoType: git
-Repo: https://github.com/marcscodebase/android-music-player.git
+Repo: https://github.com/marcscodebase/overtone-android.git
 
 Builds:
   - versionName: '0.1.0'

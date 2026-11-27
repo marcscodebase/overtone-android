@@ -1,4 +1,4 @@
-module github.com/marcscodebase/android-music-player/wireguard-core
+module github.com/marcscodebase/overtone-android/wireguard-core
 
 go 1.24
 
