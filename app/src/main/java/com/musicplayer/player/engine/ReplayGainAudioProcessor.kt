@@ -70,6 +70,9 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
     @Volatile
     private var targetGain: Float = 1f
 
+    @Volatile
+    private var bypassAll: Boolean = false
+
     private var smoothedGain: Float = 1f
 
     fun setTargetGain(linearGain: Float) {
@@ -78,9 +81,16 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
 
     fun getTargetGain(): Float = targetGain
 
+    fun setBypass(bypass: Boolean) {
+        bypassAll = bypass
+    }
+
     override fun onConfigure(
         inputAudioFormat: AudioProcessor.AudioFormat,
     ): AudioProcessor.AudioFormat {
+        if (bypassAll) {
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
         val encoding = inputAudioFormat.encoding
         if (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT) {
             return AudioProcessor.AudioFormat.NOT_SET

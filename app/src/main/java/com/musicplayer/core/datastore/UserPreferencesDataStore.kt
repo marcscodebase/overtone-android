@@ -36,6 +36,7 @@ class UserPreferencesDataStore @Inject constructor(
             cellularBitrateCap = CellularBitrateCap.fromNameOrDefault(prefs[KEY_CELLULAR_BITRATE_CAP]),
             lowQualityBitrate = lowQualityBitrate,
             autoMatchOutputQuality = prefs[KEY_AUTO_MATCH_OUTPUT_QUALITY] ?: false,
+            bitPerfectUsbAudio = prefs[KEY_BIT_PERFECT_USB_AUDIO] ?: false,
             hiResBluetoothDevices = prefs[KEY_HIRES_BT_DEVICES] ?: emptySet(),
             defaultDownloadQuality = DownloadQuality(
                 mode = qualityMode,
@@ -64,6 +65,10 @@ class UserPreferencesDataStore @Inject constructor(
 
     suspend fun setAutoMatchOutputQuality(enabled: Boolean) {
         dataStore.edit { it[KEY_AUTO_MATCH_OUTPUT_QUALITY] = enabled }
+    }
+
+    suspend fun setBitPerfectUsbAudio(enabled: Boolean) {
+        dataStore.edit { it[KEY_BIT_PERFECT_USB_AUDIO] = enabled }
     }
 
     suspend fun setBluetoothDeviceHiRes(deviceKey: String, isHiRes: Boolean) {
@@ -109,6 +114,7 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_CELLULAR_BITRATE_CAP = stringPreferencesKey("cellular_bitrate_cap")
         private val KEY_LOW_QUALITY_BITRATE = intPreferencesKey("low_quality_bitrate_kbps")
         private val KEY_AUTO_MATCH_OUTPUT_QUALITY = booleanPreferencesKey("auto_match_output_quality")
+        private val KEY_BIT_PERFECT_USB_AUDIO = booleanPreferencesKey("bit_perfect_usb_audio")
         private val KEY_HIRES_BT_DEVICES = stringSetPreferencesKey("hires_bluetooth_devices")
         private val KEY_DOWNLOAD_QUALITY_MODE = stringPreferencesKey("download_quality_mode")
         private val KEY_DOWNLOAD_MP3_BITRATE = intPreferencesKey("download_mp3_bitrate_kbps")

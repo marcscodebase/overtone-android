@@ -78,6 +78,7 @@ fun SettingsRoute(
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onToggleAutoMatchOutputQuality = viewModel::onToggleAutoMatchOutputQuality,
+        onToggleBitPerfectUsbAudio = viewModel::onToggleBitPerfectUsbAudio,
         onSelectDefaultDownloadQuality = viewModel::onSelectDefaultDownloadQuality,
         onToggleWifiOnlyDownloads = viewModel::onToggleWifiOnlyDownloads,
         onToggleAskDownloadQuality = viewModel::onToggleAskDownloadQuality,
@@ -99,6 +100,7 @@ fun SettingsScreen(
     onToggleOfflineMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onToggleAutoMatchOutputQuality: (Boolean) -> Unit,
+    onToggleBitPerfectUsbAudio: (Boolean) -> Unit,
     onSelectDefaultDownloadQuality: (DownloadQuality) -> Unit,
     onToggleWifiOnlyDownloads: (Boolean) -> Unit,
     onToggleAskDownloadQuality: (Boolean) -> Unit,
@@ -307,6 +309,60 @@ fun SettingsScreen(
                         Switch(
                             checked = state.preferences.autoMatchOutputQuality,
                             onCheckedChange = onToggleAutoMatchOutputQuality,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val bp = state.bitPerfectStatus
+                        val bpSupported = bp.isSupportedByOs
+                        val bpSubtitle = when {
+                            !bpSupported -> stringResource(R.string.settings_bit_perfect_usb_unsupported)
+                            !state.preferences.bitPerfectUsbAudio ->
+                                stringResource(R.string.settings_bit_perfect_usb_subtitle)
+
+                            bp.isActive -> {
+                                val detail = listOfNotNull(
+                                    bp.deviceName,
+                                    bp.formatLabel,
+                                ).joinToString(" • ").ifEmpty { "USB DAC" }
+                                stringResource(R.string.settings_bit_perfect_usb_active, detail)
+                            }
+
+                            bp.pausedByReplayGain || state.preferences.replayGainMode != ReplayGainMode.OFF ->
+                                stringResource(R.string.settings_bit_perfect_usb_paused_replay_gain)
+
+                            else -> stringResource(R.string.settings_bit_perfect_usb_ready)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_bit_perfect_usb),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (bpSupported) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                            Text(
+                                text = bpSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (bp.isActive) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = bpSupported && state.preferences.bitPerfectUsbAudio,
+                            enabled = bpSupported,
+                            onCheckedChange = onToggleBitPerfectUsbAudio,
                         )
                     }
                     HorizontalDivider()

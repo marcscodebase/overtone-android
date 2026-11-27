@@ -41,6 +41,7 @@ data class UserPreferences(
     val cellularBitrateCap: CellularBitrateCap = CellularBitrateCap.ORIGINAL,
     val lowQualityBitrate: Mp3Bitrate = Mp3Bitrate.KBPS_128,
     val autoMatchOutputQuality: Boolean = false,
+    val bitPerfectUsbAudio: Boolean = false,
     val hiResBluetoothDevices: Set<String> = emptySet(),
     val defaultDownloadQuality: DownloadQuality = DownloadQuality(),
     val wifiOnlyDownloads: Boolean = true,

@@ -837,10 +837,28 @@ fun NowPlayingSheet(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        val bp = audioOutputState.bitPerfectStatus
+                        val isBitPerfectActive = activeOutput.type == com.musicplayer.core.model.AudioOutputType.USB_AUDIO &&
+                            bp.isActive
+                        val outputSubtitle = if (isBitPerfectActive) {
+                            val bpBadge = stringResource(R.string.audio_output_bit_perfect_badge)
+                            val fmt = bp.formatLabel
+                            if (fmt != null) {
+                                "${outputCaps.codecLabel} • $bpBadge ($fmt)"
+                            } else {
+                                "${outputCaps.codecLabel} • $bpBadge"
+                            }
+                        } else {
+                            "${outputCaps.codecLabel} • ${outputCaps.maxQualityLabel}"
+                        }
                         Text(
-                            text = "${outputCaps.codecLabel} • ${outputCaps.maxQualityLabel}",
+                            text = outputSubtitle,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isBitPerfectActive) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

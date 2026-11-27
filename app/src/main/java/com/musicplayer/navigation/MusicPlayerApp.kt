@@ -119,6 +119,7 @@ private fun AuthenticatedShell(
     val lyricsState by playerViewModel.lyricsState.collectAsStateWithLifecycle()
     val audioOutputState by playerViewModel.audioOutputState.collectAsStateWithLifecycle()
     val hiResBluetoothDevices by playerViewModel.hiResBluetoothDevices.collectAsStateWithLifecycle()
+    val bitPerfectUsbAudio by playerViewModel.bitPerfectUsbAudio.collectAsStateWithLifecycle()
     val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     val trackIdsInPlaylists by playlistPickerViewModel.trackIdsInAnyPlaylist.collectAsStateWithLifecycle()
@@ -445,7 +446,9 @@ private fun AuthenticatedShell(
         AudioOutputSheet(
             outputState = audioOutputState,
             hiResBluetoothDevices = hiResBluetoothDevices,
+            bitPerfectUsbAudio = bitPerfectUsbAudio,
             onToggleBluetoothHiRes = playerViewModel::onSetBluetoothDeviceHiRes,
+            onToggleBitPerfectUsbAudio = playerViewModel::onSetBitPerfectUsbAudio,
             onOpenSystemOutputSwitcher = { playerViewModel.onOpenSystemOutputSwitcher(context) },
             onDismiss = { showAudioOutputSheet = false },
         )

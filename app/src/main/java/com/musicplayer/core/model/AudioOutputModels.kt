@@ -36,6 +36,31 @@ data class AudioOutputCapabilities(
     val isLosslessCapable: Boolean,
 )
 
+data class BitPerfectStatus(
+    val isSupportedByOs: Boolean = false,
+    val isEnabled: Boolean = false,
+    val isActive: Boolean = false,
+    val deviceName: String? = null,
+    val sampleRateHz: Int? = null,
+    val bitDepth: Int? = null,
+    val pausedByReplayGain: Boolean = false,
+) {
+    val formatLabel: String?
+        get() {
+            if (!isActive) return null
+            val depth = bitDepth?.takeIf { it > 0 }?.let { "$it-bit" }
+            val rate = sampleRateHz?.takeIf { it > 0 }?.let { hz ->
+                val khz = hz / 1000.0
+                if (khz % 1.0 == 0.0) {
+                    "${khz.toInt()} kHz"
+                } else {
+                    String.format(Locale.US, "%.1f kHz", khz)
+                }
+            }
+            return listOfNotNull(depth, rate).joinToString("/").ifEmpty { null }
+        }
+}
+
 data class AudioOutputState(
     val activeDevice: AudioOutputDevice = AudioOutputDevice(
         id = 0,
@@ -51,6 +76,7 @@ data class AudioOutputState(
             isActive = true,
         ),
     ),
+    val bitPerfectStatus: BitPerfectStatus = BitPerfectStatus(),
 ) {
     val hasMultipleDevices: Boolean
         get() = availableDevices.size > 1

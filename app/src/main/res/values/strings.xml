@@ -188,6 +188,13 @@
     <string name="audio_output_active">Active</string>
     <string name="settings_auto_match_output_quality">Match quality to output device</string>
     <string name="settings_auto_match_output_quality_subtitle">Stream Lossless on wired/USB/speaker; cap standard Bluetooth to 320 kbps MP3</string>
+    <string name="settings_bit_perfect_usb">Bit-Perfect USB Audio</string>
+    <string name="settings_bit_perfect_usb_subtitle">Bypass Android\'s mixer for native bit-perfect output on USB DACs (Android 14+)</string>
+    <string name="settings_bit_perfect_usb_unsupported">Requires Android 14 or newer</string>
+    <string name="settings_bit_perfect_usb_ready">Ready — connect a USB DAC with ReplayGain set to Off</string>
+    <string name="settings_bit_perfect_usb_paused_replay_gain">Paused while ReplayGain is enabled — set ReplayGain to Off</string>
+    <string name="settings_bit_perfect_usb_active">Active • %1$s</string>
+    <string name="audio_output_bit_perfect_badge">Bit-Perfect</string>
     <string name="queue_last_played">Last Played</string>
     <string name="queue_last_played_empty_title">No recently played songs</string>
     <string name="queue_last_played_empty_subtitle">Songs you listen to will show up here.</string>

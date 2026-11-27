@@ -22,10 +22,13 @@ import androidx.media3.session.MediaSession
 import com.musicplayer.MainActivity
 import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.datastore.UserPreferencesDataStore
+import com.musicplayer.core.model.AudioOutputType
 import com.musicplayer.core.model.ReplayGainMode
 import com.musicplayer.player.PlaybackOkHttpClient
+import com.musicplayer.player.engine.AudioOutputMonitor
 import com.musicplayer.player.engine.ReplayGainAudioProcessor
 import com.musicplayer.player.engine.ReplayGainMath
+import com.musicplayer.player.engine.UsbBitPerfectController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +53,12 @@ class MusicPlaybackService : MediaLibraryService() {
 
     @Inject
     lateinit var replayGainAudioProcessor: ReplayGainAudioProcessor
+
+    @Inject
+    lateinit var usbBitPerfectController: UsbBitPerfectController
+
+    @Inject
+    lateinit var audioOutputMonitor: AudioOutputMonitor
 
     @Inject
     lateinit var trackDao: TrackDao
@@ -79,9 +88,24 @@ class MusicPlaybackService : MediaLibraryService() {
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
+                    // Preserve full 24-bit Hi-Res PCM precision instead of downsampling to 16-bit
+                    .setEnableFloatOutput(true)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(arrayOf(replayGainAudioProcessor))
+                    .setAudioTrackProvider { config, audioAttributes, audioSessionId ->
+                        // Configure Android 14+ MIXER_BEHAVIOR_BIT_PERFECT synchronously right
+                        // before AudioTrack creation so the very first sample uses the direct path.
+                        usbBitPerfectController.configureForAudioTrack(
+                            sampleRateHz = config.sampleRate,
+                            channelConfig = config.channelConfig,
+                            encoding = config.encoding,
+                        )
+                        DefaultAudioSink.AudioTrackProvider.DEFAULT.getAudioTrack(
+                            config,
+                            audioAttributes,
+                            audioSessionId,
+                        )
+                    }
                     .build()
             }
         }
@@ -109,11 +133,14 @@ class MusicPlaybackService : MediaLibraryService() {
                     if (id != null && currentMediaId.value != id) {
                         currentMediaId.value = id
                     }
+                    if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
+                        usbBitPerfectController.clear()
+                    }
                 }
             },
         )
 
-        observeReplayGainUpdates()
+        observeReplayGainAndBitPerfectUpdates()
 
         val sessionActivityIntent = PendingIntent.getActivity(
             this,
@@ -133,30 +160,75 @@ class MusicPlaybackService : MediaLibraryService() {
             .build()
     }
 
-    private fun observeReplayGainUpdates() {
+    private fun observeReplayGainAndBitPerfectUpdates() {
         serviceScope.launch {
-            val replayGainPrefs = preferencesDataStore.userPreferences
-                .map { it.replayGainMode to it.replayGainPreampDb }
+            var lastEffectiveBitPerfect: Boolean? = null
+            val audioPrefs = preferencesDataStore.userPreferences
+                .map { Triple(it.replayGainMode, it.replayGainPreampDb, it.bitPerfectUsbAudio) }
                 .distinctUntilChanged()
 
-            combine(currentMediaId, replayGainPrefs) { trackId, (mode, preampDb) ->
-                Triple(trackId, mode, preampDb)
-            }.collect { (trackId, mode, preampDb) ->
-                if (mode == ReplayGainMode.OFF || trackId.isNullOrBlank()) {
+            combine(currentMediaId, audioPrefs) { trackId, (mode, preampDb, bitPerfectUsb) ->
+                AudioProcessingConfig(
+                    trackId = trackId,
+                    replayGainMode = mode,
+                    preampDb = preampDb,
+                    bitPerfectUsbAudio = bitPerfectUsb,
+                )
+            }.collect { cfg ->
+                val replayGainActive = cfg.replayGainMode != ReplayGainMode.OFF
+                val effectiveBitPerfect = cfg.bitPerfectUsbAudio && !replayGainActive
+                replayGainAudioProcessor.setBypass(effectiveBitPerfect)
+                usbBitPerfectController.updateSettings(
+                    bitPerfectEnabled = cfg.bitPerfectUsbAudio,
+                    isReplayGainActive = replayGainActive,
+                )
+
+                val bitPerfectStateChanged = lastEffectiveBitPerfect != null &&
+                    lastEffectiveBitPerfect != effectiveBitPerfect
+                lastEffectiveBitPerfect = effectiveBitPerfect
+
+                if (bitPerfectStateChanged &&
+                    audioOutputMonitor.outputState.value.activeDevice.type == AudioOutputType.USB_AUDIO
+                ) {
+                    recreateAudioTrackForActiveItem()
+                }
+
+                if (!replayGainActive || cfg.trackId.isNullOrBlank()) {
                     replayGainAudioProcessor.setTargetGain(1f)
                 } else {
-                    val entity = withContext(Dispatchers.IO) { trackDao.getById(trackId) }
+                    val entity = withContext(Dispatchers.IO) { trackDao.getById(cfg.trackId) }
                     val gain = ReplayGainMath.computeLinearGain(
-                        mode = mode,
+                        mode = cfg.replayGainMode,
                         trackGainDb = entity?.replayGainTrack,
                         albumGainDb = entity?.replayGainAlbum,
-                        preampDb = preampDb,
+                        preampDb = cfg.preampDb,
                     )
                     replayGainAudioProcessor.setTargetGain(gain)
                 }
             }
         }
     }
+
+    private fun recreateAudioTrackForActiveItem() {
+        val player = exoPlayer ?: return
+        if (player.mediaItemCount == 0 || player.playbackState == Player.STATE_IDLE) return
+        val index = player.currentMediaItemIndex
+        val positionMs = player.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = player.playWhenReady
+        player.stop()
+        player.prepare()
+        if (index in 0 until player.mediaItemCount) {
+            player.seekTo(index, positionMs)
+        }
+        player.playWhenReady = wasPlaying
+    }
+
+    private data class AudioProcessingConfig(
+        val trackId: String?,
+        val replayGainMode: ReplayGainMode,
+        val preampDb: Float,
+        val bitPerfectUsbAudio: Boolean,
+    )
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return mediaLibrarySession
@@ -172,6 +244,7 @@ class MusicPlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        usbBitPerfectController.clear()
         serviceScope.cancel()
         mediaLibrarySession?.run {
             player.release()

@@ -35,6 +35,7 @@ class UserPreferencesDataStoreTest {
         val prefs = store.userPreferences.first()
         assertFalse(prefs.offlineModeEnabled)
         assertEquals(CellularBitrateCap.ORIGINAL, prefs.cellularBitrateCap)
+        assertFalse(prefs.bitPerfectUsbAudio)
         assertEquals(DownloadQualityMode.LOSSLESS, prefs.defaultDownloadQuality.mode)
         assertEquals(Mp3Bitrate.KBPS_320, prefs.defaultDownloadQuality.mp3Bitrate)
         assertTrue(prefs.wifiOnlyDownloads)
@@ -54,6 +55,7 @@ class UserPreferencesDataStoreTest {
 
         store.setOfflineModeEnabled(true)
         store.setCellularBitrateCap(CellularBitrateCap.KBPS_256)
+        store.setBitPerfectUsbAudio(true)
         store.setDefaultDownloadQuality(DownloadQuality(DownloadQualityMode.MP3, Mp3Bitrate.KBPS_192))
         store.setWifiOnlyDownloads(false)
         store.setAskDownloadQualityEachTime(true)
@@ -64,6 +66,7 @@ class UserPreferencesDataStoreTest {
         val prefs = store.userPreferences.first()
         assertTrue(prefs.offlineModeEnabled)
         assertEquals(CellularBitrateCap.KBPS_256, prefs.cellularBitrateCap)
+        assertTrue(prefs.bitPerfectUsbAudio)
         assertEquals(DownloadQualityMode.MP3, prefs.defaultDownloadQuality.mode)
         assertEquals(Mp3Bitrate.KBPS_192, prefs.defaultDownloadQuality.mp3Bitrate)
         assertFalse(prefs.wifiOnlyDownloads)

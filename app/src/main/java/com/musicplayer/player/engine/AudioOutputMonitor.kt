@@ -31,6 +31,7 @@ import javax.inject.Singleton
 @Singleton
 class AudioOutputMonitor @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val usbBitPerfectController: UsbBitPerfectController,
 ) {
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mediaRouter2: MediaRouter2? = runCatching { MediaRouter2.getInstance(context) }.getOrNull()
@@ -130,7 +131,9 @@ class AudioOutputMonitor @Inject constructor(
         _outputState.value = AudioOutputState(
             activeDevice = activeDevice.copy(isActive = true),
             availableDevices = marked,
+            bitPerfectStatus = usbBitPerfectController.status.value,
         )
+        usbBitPerfectController.refreshForActiveDevice()
     }
 
     /**

@@ -14,6 +14,7 @@ import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackState
 import com.musicplayer.player.engine.AudioOutputMonitor
+import com.musicplayer.player.engine.UsbBitPerfectController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -34,13 +36,34 @@ class PlayerViewModel @Inject constructor(
     private val syncRepository: SyncRepository,
     private val lyricsRepository: LyricsRepository,
     private val audioOutputMonitor: AudioOutputMonitor,
+    usbBitPerfectController: UsbBitPerfectController,
     private val preferencesDataStore: UserPreferencesDataStore,
     offlineStateProvider: OfflineStateProvider,
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val feedbackMessages: SharedFlow<String> = playbackController.feedbackMessages
-    val audioOutputState: StateFlow<AudioOutputState> = audioOutputMonitor.outputState
+    val audioOutputState: StateFlow<AudioOutputState> = combine(
+        audioOutputMonitor.outputState,
+        usbBitPerfectController.status,
+    ) { output, bitPerfect ->
+        output.copy(bitPerfectStatus = bitPerfect)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = audioOutputMonitor.outputState.value.copy(
+            bitPerfectStatus = usbBitPerfectController.status.value,
+        ),
+    )
+
+    val bitPerfectUsbAudio: StateFlow<Boolean> = preferencesDataStore.userPreferences
+        .map { it.bitPerfectUsbAudio }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false,
+        )
 
     val recentlyPlayedTracks: StateFlow<List<Track>> = libraryRepository
         .observeRecentlyPlayedTracks(limit = 50)
@@ -133,6 +156,12 @@ class PlayerViewModel @Inject constructor(
     fun onSetBluetoothDeviceHiRes(deviceKey: String, isHiRes: Boolean) {
         viewModelScope.launch {
             preferencesDataStore.setBluetoothDeviceHiRes(deviceKey, isHiRes)
+        }
+    }
+
+    fun onSetBitPerfectUsbAudio(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setBitPerfectUsbAudio(enabled)
         }
     }
 

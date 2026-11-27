@@ -192,7 +192,9 @@ private fun NavigationSheetRow(
 fun AudioOutputSheet(
     outputState: AudioOutputState,
     hiResBluetoothDevices: Set<String>,
+    bitPerfectUsbAudio: Boolean,
     onToggleBluetoothHiRes: (deviceKey: String, isHiRes: Boolean) -> Unit,
+    onToggleBitPerfectUsbAudio: (Boolean) -> Unit,
     onOpenSystemOutputSwitcher: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -272,6 +274,57 @@ fun AudioOutputSheet(
                             contentDescription = stringResource(R.string.audio_output_active),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+
+            if (active.type == AudioOutputType.USB_AUDIO) {
+                val bp = outputState.bitPerfectStatus
+                val bpSubtitle = when {
+                    !bp.isSupportedByOs -> stringResource(R.string.settings_bit_perfect_usb_unsupported)
+                    !bitPerfectUsbAudio -> stringResource(R.string.settings_bit_perfect_usb_subtitle)
+                    bp.isActive -> {
+                        val detail = bp.formatLabel ?: active.name
+                        stringResource(R.string.settings_bit_perfect_usb_active, detail)
+                    }
+
+                    bp.pausedByReplayGain -> stringResource(R.string.settings_bit_perfect_usb_paused_replay_gain)
+                    else -> stringResource(R.string.settings_bit_perfect_usb_ready)
+                }
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_bit_perfect_usb),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = bpSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (bp.isActive) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = bp.isSupportedByOs && bitPerfectUsbAudio,
+                            enabled = bp.isSupportedByOs,
+                            onCheckedChange = onToggleBitPerfectUsbAudio,
                         )
                     }
                 }
