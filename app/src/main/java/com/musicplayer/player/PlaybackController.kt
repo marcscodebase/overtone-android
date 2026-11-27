@@ -17,6 +17,7 @@ import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.StreamQualitySelection
 import com.musicplayer.core.model.Track
 import com.musicplayer.core.network.NetworkMonitor
+import com.musicplayer.core.network.wireguard.WireGuardTunnelManager
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.SyncRepository
 import com.musicplayer.player.engine.AudioOutputMonitor
@@ -93,6 +94,7 @@ class MediaControllerPlaybackController @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val syncRepository: SyncRepository,
     private val networkMonitor: NetworkMonitor,
+    private val wireGuardTunnelManager: WireGuardTunnelManager,
     private val audioOutputMonitor: AudioOutputMonitor,
     private val preferencesDataStore: UserPreferencesDataStore,
 ) : PlaybackController {
@@ -126,6 +128,10 @@ class MediaControllerPlaybackController @Inject constructor(
     private var sessionQualitySelection: StreamQualitySelection = StreamQualitySelection.AUTO
     private var isShuffleActive: Boolean = false
     private var unshuffledContextTrackIds: List<String> = emptyList()
+    private var pendingAutoResumeAfterRouteDrop: Boolean = false
+    private var routeDropTimestampMs: Long = 0L
+    private var lastKnownRemotePositionMs: Long = 0L
+    private var lastPlayWhenReadyForRemote: Boolean = false
 
     private val resolvedSourcesByTrackId = mutableMapOf<String, ResolvedAudioSource>()
 
@@ -159,7 +165,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 }
         }
         // Whenever the active network (Wi-Fi <-> Mobile Data) or audio output device changes,
-        // automatically re-sync the stream when in Auto quality mode.
+        // wait for WireGuard routing to settle and automatically re-sync the stream in Auto mode.
         appScope.launch {
             combine(
                 networkMonitor.networkState,
@@ -169,13 +175,24 @@ class MediaControllerPlaybackController @Inject constructor(
             }
                 .distinctUntilChanged()
                 .drop(1)
-                .collect {
-                    if (sessionQualitySelection == StreamQualitySelection.AUTO) {
+                .collect { (isConnected, _, _) ->
+                    if (isConnected && sessionQualitySelection == StreamQualitySelection.AUTO) {
+                        wireGuardTunnelManager.awaitRoutingSettled()
                         applyStreamQuality(
                             selection = StreamQualitySelection.AUTO,
                             showFeedback = false,
                         )
                     }
+                }
+        }
+        // Whenever WireGuard / direct-LAN routing completes a transition or recovers after a
+        // Wi-Fi <-> Cellular handoff, seamlessly rebind active remote playback onto the new route
+        // so ExoPlayer never stays stuck buffering or stopped on a dead socket.
+        appScope.launch {
+            wireGuardTunnelManager.routingReadyGeneration
+                .drop(1)
+                .collect {
+                    recoverPlaybackForRouteChange()
                 }
         }
     }
@@ -186,6 +203,11 @@ class MediaControllerPlaybackController @Inject constructor(
             val state = _playbackState.value
             val active = state.currentTrack
             if (isPlaying) {
+                pendingAutoResumeAfterRouteDrop = false
+                if (!state.isLocalPlayback) {
+                    lastPlayWhenReadyForRemote = true
+                    lastKnownRemotePositionMs = state.positionMs
+                }
                 startPositionTicker()
                 if (active != null) {
                     if (lastReportedTrackId != active.id) {
@@ -231,6 +253,21 @@ class MediaControllerPlaybackController @Inject constructor(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            val state = _playbackState.value
+            val player = controller
+            val wasTryingToPlayRemote = !state.isLocalPlayback &&
+                state.currentTrack != null &&
+                (player?.playWhenReady == true || state.isPlaying || state.isBuffering || lastPlayWhenReadyForRemote)
+            if (wasTryingToPlayRemote) {
+                val bestPos = maxOf(
+                    player?.currentPosition?.coerceAtLeast(0L) ?: 0L,
+                    state.positionMs.coerceAtLeast(0L),
+                    lastKnownRemotePositionMs,
+                )
+                lastKnownRemotePositionMs = bestPos
+                pendingAutoResumeAfterRouteDrop = true
+                routeDropTimestampMs = System.currentTimeMillis()
+            }
             _playbackState.update {
                 it.copy(
                     isPlaying = false,
@@ -745,12 +782,27 @@ class MediaControllerPlaybackController @Inject constructor(
         appScope.launch(mainDispatcher) {
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay && _playbackState.value.queue.isNotEmpty()) {
+                pendingAutoResumeAfterRouteDrop = false
                 hydrateControllerFromState(mediaController, autoPlay = true)
                 return@launch
             }
-            if (mediaController.isPlaying) {
+            if (mediaController.isPlaying || mediaController.playWhenReady) {
+                pendingAutoResumeAfterRouteDrop = false
+                lastPlayWhenReadyForRemote = false
                 mediaController.pause()
             } else {
+                pendingAutoResumeAfterRouteDrop = false
+                if (mediaController.playbackState == Player.STATE_IDLE && mediaController.mediaItemCount > 0) {
+                    val resumePos = maxOf(
+                        mediaController.currentPosition.coerceAtLeast(0L),
+                        _playbackState.value.positionMs.coerceAtLeast(0L),
+                    )
+                    val idx = mediaController.currentMediaItemIndex
+                    if (idx in 0 until mediaController.mediaItemCount && resumePos > 0L) {
+                        mediaController.seekTo(idx, resumePos)
+                    }
+                    mediaController.prepare()
+                }
                 mediaController.play()
             }
         }
@@ -979,9 +1031,44 @@ class MediaControllerPlaybackController @Inject constructor(
         }
     }
 
+    private suspend fun recoverPlaybackForRouteChange() = withContext(mainDispatcher) {
+        val state = _playbackState.value
+        if (needsPrepareOnPlay || state.queue.isEmpty() || state.currentIndex !in state.queue.indices) {
+            return@withContext
+        }
+        val activeTrack = state.queue[state.currentIndex]
+        val activeResolved = resolvedSourcesByTrackId[activeTrack.id]
+        // Never interrupt locally downloaded playback during network switches
+        if (state.isLocalPlayback || activeResolved?.isLocal == true) {
+            pendingAutoResumeAfterRouteDrop = false
+            return@withContext
+        }
+
+        val mediaController = ensureConnected() ?: return@withContext
+        val recentErrorAutoResume = pendingAutoResumeAfterRouteDrop &&
+            (System.currentTimeMillis() - routeDropTimestampMs) <= AUTO_RESUME_WINDOW_MS
+        val isActivelyStreaming = mediaController.isPlaying ||
+            mediaController.playWhenReady ||
+            state.isBuffering
+
+        if (!isActivelyStreaming && !recentErrorAutoResume) {
+            return@withContext
+        }
+
+        pendingAutoResumeAfterRouteDrop = false
+        applyStreamQuality(
+            selection = sessionQualitySelection,
+            showFeedback = false,
+            forceReload = true,
+            forceAutoPlay = true,
+        )
+    }
+
     private suspend fun applyStreamQuality(
         selection: StreamQualitySelection,
         showFeedback: Boolean,
+        forceReload: Boolean = false,
+        forceAutoPlay: Boolean = false,
     ) = withContext(mainDispatcher) {
         qualityUpdateMutex.withLock {
             sessionQualitySelection = selection
@@ -1036,7 +1123,8 @@ class MediaControllerPlaybackController @Inject constructor(
             resolvedSourcesByTrackId.putAll(newResolvedSources)
 
             // Skip reloading ExoPlayer during automatic background syncs if the active stream didn't change
-            if (!showFeedback && previousActiveResolved == activeResolved) {
+            // (unless forceReload is requested after a network/WireGuard route handoff).
+            if (!showFeedback && !forceReload && previousActiveResolved == activeResolved) {
                 _playbackState.update {
                     it.copy(
                         isLocalPlayback = activeResolved.isLocal,
@@ -1047,8 +1135,13 @@ class MediaControllerPlaybackController @Inject constructor(
                 return@withLock
             }
 
-            val savedPositionMs = mediaController.currentPosition.coerceAtLeast(0L)
-            val wasPlaying = mediaController.playWhenReady
+            val controllerPos = mediaController.currentPosition.coerceAtLeast(0L)
+            val savedPositionMs = when {
+                controllerPos > 0L -> controllerPos
+                forceReload && lastKnownRemotePositionMs > 0L -> lastKnownRemotePositionMs
+                else -> state.positionMs.coerceAtLeast(0L)
+            }
+            val wasPlaying = forceAutoPlay || mediaController.playWhenReady
             val generation = beginNewQueueLoad()
 
             // Seamlessly swap media items while preserving exact playback position & play state
@@ -1097,6 +1190,9 @@ class MediaControllerPlaybackController @Inject constructor(
         appScope.launch(mainDispatcher) {
             beginNewQueueLoad()
             rollingShuffleState = null
+            pendingAutoResumeAfterRouteDrop = false
+            lastPlayWhenReadyForRemote = false
+            lastKnownRemotePositionMs = 0L
             reportStoppedForLastTrack()
             stopPositionTicker()
             needsPrepareOnPlay = false
@@ -1375,6 +1471,10 @@ class MediaControllerPlaybackController @Inject constructor(
                 if (player != null && player.isPlaying) {
                     val pos = player.currentPosition.coerceAtLeast(0L)
                     lastReportedPositionMs = pos
+                    if (!_playbackState.value.isLocalPlayback) {
+                        lastKnownRemotePositionMs = pos
+                        lastPlayWhenReadyForRemote = true
+                    }
                     _playbackState.update { current ->
                         current.copy(
                             positionMs = pos,
@@ -1508,5 +1608,6 @@ class MediaControllerPlaybackController @Inject constructor(
         internal const val SHUFFLE_REFILL_BATCH_SIZE = 150
         private const val MEDIA_CONTROLLER_INITIAL_BATCH_SIZE = 25
         private const val MEDIA_CONTROLLER_CHUNK_SIZE = 100
+        private const val AUTO_RESUME_WINDOW_MS = 120_000L
     }
 }

@@ -15,6 +15,8 @@ import com.musicplayer.core.network.NetworkMonitor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +36,7 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.Socket
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -83,9 +86,18 @@ class WireGuardTunnelManager @Inject constructor(
 ) {
     private val lifecycleMutex = Mutex()
     private val connectionEvictors = CopyOnWriteArrayList<() -> Unit>()
+    private val lastResolvedIpsByHost = ConcurrentHashMap<String, String>()
 
     private val _status = MutableStateFlow(WireGuardRuntimeStatus())
     val status: StateFlow<WireGuardRuntimeStatus> = _status.asStateFlow()
+
+    /**
+     * Monotonically increments whenever active routing settles onto a new or recovered network
+     * path (`CONNECTED` or `DIRECT_LOCAL`), allowing active playback streams to rebind cleanly
+     * without hanging on a dead socket from the previous interface.
+     */
+    private val _routingReadyGeneration = MutableStateFlow(0L)
+    val routingReadyGeneration: StateFlow<Long> = _routingReadyGeneration.asStateFlow()
 
     @Volatile
     private var activeProxy: ActiveWireGuardProxy? = null
@@ -97,13 +109,20 @@ class WireGuardTunnelManager @Inject constructor(
     private var activeResolvedEndpoint: String? = null
 
     @Volatile
+    private var activeNetworkHandle: Long = 0L
+
+    @Volatile
     private var inFlightSync: CompletableDeferred<Unit>? = null
 
     @Volatile
     private var pendingTargetServerUrl: String? = null
 
+    private var errorRetryJob: Job? = null
+
     init {
         appScope.launch(ioDispatcher) {
+            var previousNetworkHandle: Long? = null
+            var previousConfig: WireGuardConfig? = null
             combine(
                 configStore.config,
                 preferencesDataStore.userPreferences.map { it.wireGuardMode }.distinctUntilChanged(),
@@ -115,19 +134,33 @@ class WireGuardTunnelManager @Inject constructor(
                     mode = mode,
                     isConnected = netState.isConnected,
                     isMetered = netState.isMetered,
+                    isValidated = netState.isValidated,
                     networkHandle = netState.networkHandle,
                     serverUrl = serverUrl,
                 )
             }
                 .distinctUntilChanged()
                 .collect { trigger ->
+                    val networkChanged = previousNetworkHandle != null &&
+                        previousNetworkHandle != trigger.networkHandle
+                    val configChanged = previousConfig != null && previousConfig != trigger.config
+                    previousNetworkHandle = trigger.networkHandle
+                    previousConfig = trigger.config
+
+                    // Force a tunnel restart whenever the underlying OS network interface changed
+                    // (e.g., Wi-Fi -> Cellular or Wi-Fi A -> Wi-Fi B) so UDP sockets rebind cleanly,
+                    // but do NOT restart an already-connected healthy tunnel solely because
+                    // NET_CAPABILITY_VALIDATED flipped from false -> true on the same interface.
+                    val forceRestart = networkChanged || configChanged
+
                     syncRoutingInternal(
                         config = trigger.config,
                         mode = trigger.mode,
                         isNetworkConnected = trigger.isConnected,
                         isMetered = trigger.isMetered,
+                        networkHandle = trigger.networkHandle,
                         serverUrl = trigger.serverUrl ?: pendingTargetServerUrl,
-                        forceRestart = true,
+                        forceRestart = forceRestart,
                     )
                 }
         }
@@ -138,6 +171,7 @@ class WireGuardTunnelManager @Inject constructor(
         val mode: WireGuardMode,
         val isConnected: Boolean,
         val isMetered: Boolean,
+        val isValidated: Boolean,
         val networkHandle: Long,
         val serverUrl: String?,
     )
@@ -149,18 +183,30 @@ class WireGuardTunnelManager @Inject constructor(
     fun activeProxyEndpoint(): ActiveWireGuardProxy? = activeProxy
 
     /**
+     * Suspends briefly if a network / WireGuard transition is currently in progress so callers
+     * (such as stream quality/recovery updates) run against the settled route.
+     */
+    suspend fun awaitRoutingSettled(timeoutMs: Long = STARTUP_AWAIT_TIMEOUT_MS) {
+        val deferred = inFlightSync ?: return
+        withTimeoutOrNull(timeoutMs) {
+            deferred.await()
+        }
+    }
+
+    /**
      * Called on OkHttp IO threads right before choosing a proxy. If a tunnel transition is
      * currently in flight, waits briefly so the very first request after app launch or network
-     * switch uses the ready WireGuard tunnel instead of failing prematurely.
+     * switch uses the ready WireGuard tunnel instead of failing prematurely or leaking to a
+     * dead proxy port from the previous network interface.
      */
     fun awaitReadyProxyIfStarting(): ActiveWireGuardProxy? {
-        val current = activeProxy
-        if (current != null) return current
-        val deferred = inFlightSync ?: return null
-        runCatching {
-            runBlocking {
-                withTimeoutOrNull(STARTUP_AWAIT_TIMEOUT_MS) {
-                    deferred.await()
+        val deferred = inFlightSync
+        if (deferred != null && !deferred.isCompleted) {
+            runCatching {
+                runBlocking {
+                    withTimeoutOrNull(STARTUP_AWAIT_TIMEOUT_MS) {
+                        deferred.await()
+                    }
                 }
             }
         }
@@ -181,6 +227,7 @@ class WireGuardTunnelManager @Inject constructor(
             mode = mode,
             isNetworkConnected = net.isConnected,
             isMetered = net.isMetered,
+            networkHandle = net.networkHandle,
             serverUrl = serverUrl,
             forceRestart = false,
         )
@@ -196,6 +243,7 @@ class WireGuardTunnelManager @Inject constructor(
             mode = mode,
             isNetworkConnected = net.isConnected,
             isMetered = net.isMetered,
+            networkHandle = net.networkHandle,
             serverUrl = serverUrl,
             forceRestart = forceRestart,
         )
@@ -251,9 +299,15 @@ class WireGuardTunnelManager @Inject constructor(
             val shouldTearDownAfterTest = mode == WireGuardMode.OFF ||
                 (mode == WireGuardMode.AUTO && _status.value.state == WireGuardTunnelState.DIRECT_LOCAL)
 
+            var newlyStarted = false
             val startedOk = lifecycleMutex.withLock {
                 if (activeProxy == null) {
-                    startTunnelLocked(config = config, mode = mode)
+                    newlyStarted = true
+                    startTunnelLocked(
+                        config = config,
+                        mode = mode,
+                        networkHandle = net.networkHandle,
+                    )
                 } else {
                     true
                 }
@@ -265,6 +319,11 @@ class WireGuardTunnelManager @Inject constructor(
                     viaTunnel = true,
                     message = _status.value.errorMessage ?: "Failed to start WireGuard tunnel",
                 )
+            }
+
+            if (newlyStarted && !shouldTearDownAfterTest) {
+                cancelErrorRetry()
+                notifyRoutingReady()
             }
 
             val targetUrl = targetServerUrl ?: authSessionStore.getSession()?.serverUrl
@@ -323,19 +382,32 @@ class WireGuardTunnelManager @Inject constructor(
         mode: WireGuardMode,
         isNetworkConnected: Boolean,
         isMetered: Boolean,
+        networkHandle: Long,
         serverUrl: String?,
         forceRestart: Boolean,
     ) = withContext(ioDispatcher) {
         val deferred = CompletableDeferred<Unit>()
         inFlightSync = deferred
+        var routeBecameReady = false
+        var shouldScheduleErrorRetry = false
         try {
             lifecycleMutex.withLock {
+                val previousState = _status.value.state
+                val previousHandle = activeNetworkHandle
+
                 if (config == null || mode == WireGuardMode.OFF) {
+                    cancelErrorRetry()
+                    val wasRoutingTunnel = activeProxy != null
                     stopTunnelLocked(mode = mode, newState = WireGuardTunnelState.DISCONNECTED)
+                    activeNetworkHandle = networkHandle
+                    if (isNetworkConnected && (wasRoutingTunnel || (previousHandle != 0L && previousHandle != networkHandle))) {
+                        routeBecameReady = true
+                    }
                     return@withLock
                 }
 
                 if (!isNetworkConnected) {
+                    cancelErrorRetry()
                     stopTunnelLocked(mode = mode, newState = WireGuardTunnelState.DISCONNECTED)
                     return@withLock
                 }
@@ -348,7 +420,14 @@ class WireGuardTunnelManager @Inject constructor(
                             port = serverHostPort.second,
                         )
                         if (directOk) {
+                            cancelErrorRetry()
+                            val changedToDirect = previousState != WireGuardTunnelState.DIRECT_LOCAL ||
+                                (previousHandle != 0L && previousHandle != networkHandle)
                             stopTunnelLocked(mode = mode, newState = WireGuardTunnelState.DIRECT_LOCAL)
+                            activeNetworkHandle = networkHandle
+                            if (changedToDirect) {
+                                routeBecameReady = true
+                            }
                             return@withLock
                         }
                     }
@@ -357,17 +436,30 @@ class WireGuardTunnelManager @Inject constructor(
                 val fingerprint = computeConfigFingerprint(config)
                 val alreadyRunningSame = activeProxy != null &&
                     activeConfigFingerprint == fingerprint &&
+                    activeNetworkHandle == networkHandle &&
                     !forceRestart
                 if (alreadyRunningSame) {
+                    cancelErrorRetry()
                     _status.value = _status.value.copy(
                         mode = mode,
                         state = WireGuardTunnelState.CONNECTED,
                         isRoutingThroughTunnel = true,
+                        errorMessage = null,
                     )
                     return@withLock
                 }
 
-                startTunnelLocked(config = config, mode = mode)
+                val started = startTunnelLocked(
+                    config = config,
+                    mode = mode,
+                    networkHandle = networkHandle,
+                )
+                if (started) {
+                    cancelErrorRetry()
+                    routeBecameReady = true
+                } else {
+                    shouldScheduleErrorRetry = true
+                }
             }
         } finally {
             deferred.complete(Unit)
@@ -375,11 +467,18 @@ class WireGuardTunnelManager @Inject constructor(
                 inFlightSync = null
             }
         }
+
+        if (routeBecameReady) {
+            notifyRoutingReady()
+        } else if (shouldScheduleErrorRetry) {
+            scheduleErrorRecoveryRetry()
+        }
     }
 
-    private fun startTunnelLocked(
+    private suspend fun startTunnelLocked(
         config: WireGuardConfig,
         mode: WireGuardMode,
+        networkHandle: Long,
     ): Boolean {
         _status.value = _status.value.copy(
             mode = mode,
@@ -398,7 +497,7 @@ class WireGuardTunnelManager @Inject constructor(
         }
 
         val (endpointHost, endpointPort) = endpointParts
-        val resolvedIp = directProber.resolveEndpointIp(endpointHost)
+        val resolvedIp = resolveEndpointIpWithRetry(endpointHost)
         if (resolvedIp == null) {
             stopTunnelLocked(
                 mode = mode,
@@ -435,6 +534,7 @@ class WireGuardTunnelManager @Inject constructor(
         activeProxy = ActiveWireGuardProxy(port = startResult.port, token = startResult.token)
         activeConfigFingerprint = computeConfigFingerprint(config)
         activeResolvedEndpoint = numericEndpoint
+        activeNetworkHandle = networkHandle
         _status.value = WireGuardRuntimeStatus(
             state = WireGuardTunnelState.CONNECTED,
             mode = mode,
@@ -444,6 +544,55 @@ class WireGuardTunnelManager @Inject constructor(
         )
         evictConnections()
         return true
+    }
+
+    /**
+     * Resolves the WireGuard endpoint hostname with short cooperative retries to survive the
+     * brief Android Wi-Fi -> Cellular DNS stabilization window, falling back to the last
+     * successfully resolved IP for this host if DNS is still transiently unavailable.
+     */
+    private suspend fun resolveEndpointIpWithRetry(endpointHost: String): String? {
+        for (attemptIdx in DNS_RETRY_DELAYS_MS.indices) {
+            val waitMs = DNS_RETRY_DELAYS_MS[attemptIdx]
+            if (waitMs > 0L) {
+                delay(waitMs)
+                if (!networkMonitor.currentNetworkState().isConnected) {
+                    return null
+                }
+            }
+            val resolved = directProber.resolveEndpointIp(endpointHost)
+            if (!resolved.isNullOrBlank()) {
+                lastResolvedIpsByHost[endpointHost.lowercase()] = resolved
+                return resolved
+            }
+        }
+        return lastResolvedIpsByHost[endpointHost.lowercase()]
+    }
+
+    private fun scheduleErrorRecoveryRetry() {
+        if (errorRetryJob?.isActive == true) return
+        errorRetryJob = appScope.launch(ioDispatcher) {
+            for (delayMs in ERROR_RECOVERY_DELAYS_MS) {
+                delay(delayMs)
+                if (_status.value.state != WireGuardTunnelState.ERROR) return@launch
+                val net = networkMonitor.currentNetworkState()
+                if (!net.isConnected) return@launch
+                val mode = preferencesDataStore.userPreferences.first().wireGuardMode
+                val config = configStore.getConfig()
+                if (config == null || mode == WireGuardMode.OFF) return@launch
+                syncRoutingNow(forceRestart = true)
+                if (_status.value.state != WireGuardTunnelState.ERROR) return@launch
+            }
+        }
+    }
+
+    private fun cancelErrorRetry() {
+        errorRetryJob?.cancel()
+        errorRetryJob = null
+    }
+
+    private fun notifyRoutingReady() {
+        _routingReadyGeneration.value = _routingReadyGeneration.value + 1L
     }
 
     private fun stopTunnelLocked(
@@ -479,8 +628,10 @@ class WireGuardTunnelManager @Inject constructor(
         "${config.peerPublicKeyBase64}|${config.endpoint}|${config.addressesDisplay}|${config.dnsDisplay}|${config.allowedIpsDisplay}|${config.mtu}"
 
     companion object {
-        private const val STARTUP_AWAIT_TIMEOUT_MS = 4_000L
+        private const val STARTUP_AWAIT_TIMEOUT_MS = 6_000L
         private const val TEST_DIAL_TIMEOUT_MS = 6_000
+        private val DNS_RETRY_DELAYS_MS = longArrayOf(0L, 350L, 750L, 1_400L)
+        private val ERROR_RECOVERY_DELAYS_MS = longArrayOf(3_000L, 6_000L, 12_000L, 20_000L)
 
         /**
          * On Wi-Fi (unmetered), always try a fast direct TCP probe first so Home LAN works at full

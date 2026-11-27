@@ -1,5 +1,6 @@
 package com.musicplayer.player
 
+import com.musicplayer.core.network.wireguard.WireGuardTunnelManager
 import com.musicplayer.player.engine.JellyfinAuthHeaderInterceptor
 import com.musicplayer.player.transcoder.AndroidMediaCodecMp3Encoder
 import com.musicplayer.player.transcoder.AudioHttpFetcher
@@ -11,6 +12,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -28,9 +30,19 @@ object PlayerProvidersModule {
     fun providePlaybackOkHttpClient(
         baseOkHttpClient: OkHttpClient,
         authHeaderInterceptor: JellyfinAuthHeaderInterceptor,
-    ): OkHttpClient = baseOkHttpClient.newBuilder()
-        .addInterceptor(authHeaderInterceptor)
-        .build()
+        wireGuardTunnelManager: WireGuardTunnelManager,
+    ): OkHttpClient {
+        val client = baseOkHttpClient.newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(authHeaderInterceptor)
+            .build()
+        wireGuardTunnelManager.registerConnectionEvictor {
+            client.dispatcher.cancelAll()
+            client.connectionPool.evictAll()
+        }
+        return client
+    }
 }
 
 @Module

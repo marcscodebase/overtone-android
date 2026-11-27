@@ -137,6 +137,136 @@ class WireGuardTunnelManagerTest {
         assertTrue(WireGuardTunnelManager.shouldProbeDirectly("music.example.com", isMetered = true))
     }
 
+    @Test
+    fun `retries transient DNS failures during wifi to cellular handoff and bumps routing generation`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val appScope = CoroutineScope(SupervisorJob() + dispatcher)
+        try {
+            val prefsStore = UserPreferencesDataStore(
+                PreferenceDataStoreFactory.create(scope = appScope) {
+                    File(tempFolder.root, "wg_handoff_prefs.preferences_pb")
+                },
+            )
+            val configStore = FakeWireGuardConfigStore(sampleConfig)
+            val authStore = FakeAuthSessionStore("http://192.168.178.50:8096")
+            val networkMonitor = FakeNetworkMonitor(
+                NetworkState(isConnected = true, isUnmetered = true, networkHandle = 101L, isValidated = true),
+            )
+            // First 2 DNS lookups fail (simulating Android cellular handoff before DNS is ready), 3rd succeeds
+            val prober = FlakyDnsProber(
+                directReachable = true,
+                dnsResponses = ArrayDeque(listOf(null, null, "203.0.113.99")),
+            )
+            val nativeEngine = FakeNativeEngine()
+
+            val manager = WireGuardTunnelManager(
+                nativeEngine = nativeEngine,
+                configStore = configStore,
+                preferencesDataStore = prefsStore,
+                authSessionStore = authStore,
+                networkMonitor = networkMonitor,
+                directProber = prober,
+                appScope = appScope,
+                ioDispatcher = dispatcher,
+            )
+
+            prefsStore.setWireGuardMode(WireGuardMode.AUTO)
+            advanceUntilIdle()
+            assertEquals(WireGuardTunnelState.DIRECT_LOCAL, manager.status.value.state)
+            val genOnWifi = manager.routingReadyGeneration.value
+
+            // Leave home: Wi-Fi -> Cellular (initially unvalidated, DNS briefly fails twice then resolves)
+            prober.directReachable = false
+            networkMonitor.setNetwork(
+                NetworkState(isConnected = true, isUnmetered = false, networkHandle = 404L, isValidated = false),
+            )
+            advanceUntilIdle()
+
+            assertEquals(WireGuardTunnelState.CONNECTED, manager.status.value.state)
+            assertTrue(manager.status.value.isRoutingThroughTunnel)
+            assertTrue(manager.routingReadyGeneration.value > genOnWifi)
+            assertEquals(1, nativeEngine.startCount)
+
+            // When Android subsequently marks the SAME cellular handle as validated, healthy tunnel does NOT restart
+            networkMonitor.setNetwork(
+                NetworkState(isConnected = true, isUnmetered = false, networkHandle = 404L, isValidated = true),
+            )
+            advanceUntilIdle()
+            assertEquals(WireGuardTunnelState.CONNECTED, manager.status.value.state)
+            assertEquals(1, nativeEngine.startCount)
+
+            // Return home: Cellular -> Home Wi-Fi -> seamlessly returns to DIRECT_LOCAL and bumps routing generation
+            val genOnCellular = manager.routingReadyGeneration.value
+            prober.directReachable = true
+            networkMonitor.setNetwork(
+                NetworkState(isConnected = true, isUnmetered = true, networkHandle = 505L, isValidated = true),
+            )
+            advanceUntilIdle()
+            assertEquals(WireGuardTunnelState.DIRECT_LOCAL, manager.status.value.state)
+            assertFalse(manager.status.value.isRoutingThroughTunnel)
+            assertTrue(manager.routingReadyGeneration.value > genOnCellular)
+        } finally {
+            appScope.cancel()
+        }
+    }
+
+    @Test
+    fun `falls back to cached endpoint IP when DNS is transiently down on subsequent handoff`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val appScope = CoroutineScope(SupervisorJob() + dispatcher)
+        try {
+            val prefsStore = UserPreferencesDataStore(
+                PreferenceDataStoreFactory.create(scope = appScope) {
+                    File(tempFolder.root, "wg_cache_prefs.preferences_pb")
+                },
+            )
+            val configStore = FakeWireGuardConfigStore(sampleConfig)
+            val authStore = FakeAuthSessionStore("http://192.168.178.50:8096")
+            val networkMonitor = FakeNetworkMonitor(
+                NetworkState(isConnected = true, isUnmetered = false, networkHandle = 10L, isValidated = true),
+            )
+            val prober = FlakyDnsProber(
+                directReachable = false,
+                dnsResponses = ArrayDeque(listOf("203.0.113.42")),
+            )
+            val nativeEngine = FakeNativeEngine()
+
+            val manager = WireGuardTunnelManager(
+                nativeEngine = nativeEngine,
+                configStore = configStore,
+                preferencesDataStore = prefsStore,
+                authSessionStore = authStore,
+                networkMonitor = networkMonitor,
+                directProber = prober,
+                appScope = appScope,
+                ioDispatcher = dispatcher,
+            )
+
+            prefsStore.setWireGuardMode(WireGuardMode.AUTO)
+            advanceUntilIdle()
+            assertEquals(WireGuardTunnelState.CONNECTED, manager.status.value.state)
+
+            // Subsequent network switch while DNS returns null every time -> cached IP keeps tunnel connected!
+            networkMonitor.setNetwork(
+                NetworkState(isConnected = true, isUnmetered = false, networkHandle = 20L, isValidated = false),
+            )
+            advanceUntilIdle()
+            assertEquals(WireGuardTunnelState.CONNECTED, manager.status.value.state)
+            assertEquals(2, nativeEngine.startCount)
+        } finally {
+            appScope.cancel()
+        }
+    }
+
+    private class FlakyDnsProber(
+        var directReachable: Boolean,
+        private val dnsResponses: ArrayDeque<String?>,
+    ) : WireGuardDirectProber {
+        override fun isDirectlyReachable(host: String, port: Int, timeoutMs: Int): Boolean = directReachable
+        override fun resolveEndpointIp(host: String): String? =
+            if (dnsResponses.isNotEmpty()) dnsResponses.removeFirst() else null
+    }
+
     private class FakeWireGuardConfigStore(initial: WireGuardConfig?) : WireGuardConfigStore {
         private val flow = MutableStateFlow(initial)
         override val config: Flow<WireGuardConfig?> = flow

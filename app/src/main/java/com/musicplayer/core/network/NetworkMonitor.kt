@@ -20,6 +20,7 @@ data class NetworkState(
     val isConnected: Boolean,
     val isUnmetered: Boolean,
     val networkHandle: Long = 0L,
+    val isValidated: Boolean = true,
 ) {
     val isMetered: Boolean
         get() = isConnected && !isUnmetered
@@ -55,10 +56,12 @@ class ConnectivityManagerNetworkMonitor @Inject constructor(
         // (some 5G carriers mark cellular as NOT_METERED even though the user wants mobile-data caps).
         val isCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
         val isMetered = connectivityManager.isActiveNetworkMetered || isCellular
+        val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         return NetworkState(
             isConnected = true,
             isUnmetered = !isMetered,
             networkHandle = activeNetwork.networkHandle,
+            isValidated = isValidated,
         )
     }
 
