@@ -10,6 +10,7 @@ import com.musicplayer.BuildConfig
 import com.musicplayer.core.network.wireguard.DefaultWireGuardDirectProber
 import com.musicplayer.core.network.wireguard.JniWireGuardNativeEngine
 import com.musicplayer.core.network.wireguard.WireGuardDirectProber
+import com.musicplayer.core.network.wireguard.WireGuardFailClosedInterceptor
 import com.musicplayer.core.network.wireguard.WireGuardNativeEngine
 import com.musicplayer.core.network.wireguard.WireGuardProxyAuthenticator
 import com.musicplayer.core.network.wireguard.WireGuardProxySelector
@@ -53,6 +54,7 @@ object NetworkModule {
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .addInterceptor(WireGuardFailClosedInterceptor(wireGuardTunnelManager))
             .proxySelector(WireGuardProxySelector(wireGuardTunnelManager))
             .proxyAuthenticator(WireGuardProxyAuthenticator(wireGuardTunnelManager))
             .build()

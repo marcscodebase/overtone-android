@@ -1,6 +1,7 @@
 package com.musicplayer.player.engine
 
 import com.musicplayer.core.network.JellyfinClientProvider
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
@@ -9,7 +10,8 @@ import javax.inject.Singleton
 
 /**
  * Dynamically injects Jellyfin MediaBrowser Authorization & token headers onto playback
- * and download requests so access tokens never appear in query URLs or logs.
+ * and download requests whose exact origin (scheme, host, port) matches the configured
+ * Jellyfin server, and strips them on any cross-origin request or redirect.
  */
 @Singleton
 class JellyfinAuthHeaderInterceptor @Inject constructor(
@@ -19,9 +21,20 @@ class JellyfinAuthHeaderInterceptor @Inject constructor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         val api = clientProvider.getClient()
+        val baseUrl = api.baseUrl?.toHttpUrlOrNull()
         val token = api.accessToken
-        if (token.isNullOrBlank()) {
-            return chain.proceed(original)
+
+        val isSameOrigin = baseUrl != null &&
+            original.url.scheme.equals(baseUrl.scheme, ignoreCase = true) &&
+            original.url.host.equals(baseUrl.host, ignoreCase = true) &&
+            original.url.port == baseUrl.port
+
+        if (!isSameOrigin || token.isNullOrBlank()) {
+            val sanitized = original.newBuilder()
+                .removeHeader("Authorization")
+                .removeHeader("X-Emby-Token")
+                .build()
+            return chain.proceed(sanitized)
         }
 
         val authHeader = AuthorizationHeaderBuilder.buildHeader(

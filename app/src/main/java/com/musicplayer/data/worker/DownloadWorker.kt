@@ -18,6 +18,7 @@ import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.database.entity.DownloadRecordEntity
 import com.musicplayer.core.datastore.AuthSessionStore
+import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.DownloadQuality
 import com.musicplayer.core.model.DownloadQualityMode
 import com.musicplayer.core.model.DownloadStatus
@@ -36,6 +37,7 @@ import com.musicplayer.player.transcoder.HybridDownloadRequest
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
 
@@ -48,6 +50,7 @@ class DownloadWorker @AssistedInject constructor(
     private val downloadDao: DownloadDao,
     private val authRepository: AuthRepository,
     private val authSessionStore: AuthSessionStore,
+    private val preferencesDataStore: UserPreferencesDataStore,
     private val clientProvider: JellyfinClientProvider,
     private val hybridAudioDownloader: HybridAudioDownloader,
     private val mediaStoreAudioWriter: MediaStoreAudioWriter,
@@ -57,6 +60,15 @@ class DownloadWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val trackId = inputData.getString(KEY_TRACK_ID)?.takeIf { it.isNotBlank() }
             ?: return Result.failure()
+
+        if (preferencesDataStore.userPreferences.first().offlineModeEnabled) {
+            downloadDao.updateStatus(trackId, DownloadStatus.QUEUED, null)
+            return Result.retry()
+        }
+
+        if (downloadDao.countRefsForTrack(trackId) == 0) {
+            return Result.success()
+        }
 
         val qualityMode = inputData.getString(KEY_QUALITY_MODE)
             ?.let { runCatching { DownloadQualityMode.valueOf(it) }.getOrNull() }
@@ -81,7 +93,8 @@ class DownloadWorker @AssistedInject constructor(
         }
         val album = track.albumId?.let { albumDao.getById(it) }
 
-        val workDir = File(applicationContext.cacheDir, "downloads/$trackId")
+        val safeWorkDirName = trackId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifEmpty { "track" }
+        val workDir = File(applicationContext.cacheDir, "downloads/$safeWorkDirName")
         val notificationId = NOTIFICATION_ID_BASE + (trackId.hashCode() and 0x7FFF)
 
         ensureNotificationChannel()
@@ -96,7 +109,7 @@ class DownloadWorker @AssistedInject constructor(
 
         return try {
             // Check if a verified copy of this track in the requested quality already exists in
-            // Music/music-player/ (e.g. from a previous install) to avoid re-downloading and `(1)` duplicates.
+            // Music/Overtone/ (e.g. from a previous install) to avoid re-downloading and `(1)` duplicates.
             val expectedExt = if (quality.mode == DownloadQualityMode.MP3) {
                 "mp3"
             } else {
@@ -213,6 +226,12 @@ class DownloadWorker @AssistedInject constructor(
                 extension = prepared.extension,
             )
 
+            // Guard against cancellation / clear-all races right before publishing to MediaStore
+            if (isStopped || downloadDao.countRefsForTrack(trackId) == 0) {
+                return Result.success()
+            }
+
+            val previousUri = existing?.mediaStoreUri
             val published = mediaStoreAudioWriter.publishAudioFile(
                 sourceFile = prepared.file,
                 target = target,
@@ -221,6 +240,11 @@ class DownloadWorker @AssistedInject constructor(
                 album = track.albumName,
                 durationMs = track.durationMs,
             )
+
+            if (isStopped || downloadDao.countRefsForTrack(trackId) == 0) {
+                mediaStoreAudioWriter.delete(published.contentUri)
+                return Result.success()
+            }
 
             downloadDao.upsertRecord(
                 DownloadRecordEntity(
@@ -236,6 +260,11 @@ class DownloadWorker @AssistedInject constructor(
                     errorMessage = null,
                 ),
             )
+
+            // Remove stale previous file if format/quality changed (e.g. FLAC <-> MP3)
+            if (!previousUri.isNullOrBlank() && previousUri != published.contentUri) {
+                mediaStoreAudioWriter.delete(previousUri)
+            }
 
             Result.success()
         } catch (ce: CancellationException) {
@@ -270,9 +299,9 @@ class DownloadWorker @AssistedInject constructor(
         subtitle: String,
         progressPercent: Int,
     ) {
-        runCatching {
+        try {
             val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_launcher_monochrome)
                 .setContentTitle(title)
                 .setContentText(subtitle)
                 .setOngoing(true)
@@ -297,6 +326,10 @@ class DownloadWorker @AssistedInject constructor(
                 ForegroundInfo(notificationId, notification)
             }
             setForeground(foregroundInfo)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            // Foreground service promotion may be restricted in background on some OEMs
         }
     }
 
@@ -320,7 +353,7 @@ class DownloadWorker @AssistedInject constructor(
         const val KEY_PROGRESS_PERCENT = "progress_percent"
         const val TAG_DOWNLOAD = "music_player_download"
 
-        private const val CHANNEL_ID = "music_player_downloads"
+        private const val CHANNEL_ID = "overtone_downloads"
         private const val NOTIFICATION_ID_BASE = 4100
         private const val MAX_RETRIES = 3
         private const val PROGRESS_THROTTLE_MS = 500L

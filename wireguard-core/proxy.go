@@ -25,6 +25,10 @@ type localAuthProxy struct {
 	port         int
 	token        string
 	closeOnce    sync.Once
+
+	connMu      sync.Mutex
+	closed      bool
+	activeConns map[net.Conn]struct{}
 }
 
 func startLocalAuthProxy(dialFn dialContextFunc) (*localAuthProxy, error) {
@@ -62,6 +66,7 @@ func startLocalAuthProxy(dialFn dialContextFunc) (*localAuthProxy, error) {
 		expectedAuth: []byte(expectedHeader),
 		port:         tcpAddr.Port,
 		token:        token,
+		activeConns:  make(map[net.Conn]struct{}),
 	}
 
 	p.server = &http.Server{
@@ -84,11 +89,39 @@ func (p *localAuthProxy) Token() string {
 	return p.token
 }
 
+func (p *localAuthProxy) trackConns(c1, c2 net.Conn) bool {
+	p.connMu.Lock()
+	defer p.connMu.Unlock()
+	if p.closed {
+		return false
+	}
+	p.activeConns[c1] = struct{}{}
+	p.activeConns[c2] = struct{}{}
+	return true
+}
+
+func (p *localAuthProxy) untrackConns(c1, c2 net.Conn) {
+	p.connMu.Lock()
+	delete(p.activeConns, c1)
+	delete(p.activeConns, c2)
+	p.connMu.Unlock()
+}
+
 func (p *localAuthProxy) Close() {
 	p.closeOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = p.server.Shutdown(ctx)
+		p.connMu.Lock()
+		p.closed = true
+		conns := make([]net.Conn, 0, len(p.activeConns))
+		for c := range p.activeConns {
+			conns = append(conns, c)
+		}
+		p.activeConns = make(map[net.Conn]struct{})
+		p.connMu.Unlock()
+
+		for _, c := range conns {
+			_ = c.Close()
+		}
+		_ = p.server.Close()
 		_ = p.listener.Close()
 		p.transport.CloseIdleConnections()
 	})
@@ -104,7 +137,7 @@ func (p *localAuthProxy) isAuthorized(r *http.Request) bool {
 
 func (p *localAuthProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !p.isAuthorized(r) {
-		w.Header().Set("Proxy-Authenticate", `Basic realm="music-player-wg"`)
+		w.Header().Set("Proxy-Authenticate", `Basic realm="overtone-wg"`)
 		http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)
 		return
 	}
@@ -139,6 +172,13 @@ func (p *localAuthProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.trackConns(clientConn, upstream) {
+		_ = clientConn.Close()
+		_ = upstream.Close()
+		return
+	}
+	defer p.untrackConns(clientConn, upstream)
+
 	if _, err := clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
 		_ = clientConn.Close()
 		_ = upstream.Close()
@@ -151,18 +191,30 @@ func (p *localAuthProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Client -> Upstream (flush any buffered bytes from Hijack first)
 	go func() {
 		defer wg.Done()
-		defer closeWrite(upstream)
 		if bufRW != nil && bufRW.Reader.Buffered() > 0 {
-			_, _ = io.CopyN(upstream, bufRW, int64(bufRW.Reader.Buffered()))
+			if _, err := io.CopyN(upstream, bufRW, int64(bufRW.Reader.Buffered())); err != nil {
+				_ = upstream.Close()
+				_ = clientConn.Close()
+				return
+			}
 		}
-		_, _ = io.Copy(upstream, clientConn)
+		if _, err := io.Copy(upstream, clientConn); err != nil {
+			_ = upstream.Close()
+			_ = clientConn.Close()
+			return
+		}
+		closeWrite(upstream)
 	}()
 
 	// Upstream -> Client
 	go func() {
 		defer wg.Done()
-		defer closeWrite(clientConn)
-		_, _ = io.Copy(clientConn, upstream)
+		if _, err := io.Copy(clientConn, upstream); err != nil {
+			_ = clientConn.Close()
+			_ = upstream.Close()
+			return
+		}
+		closeWrite(clientConn)
 	}()
 
 	wg.Wait()
@@ -189,11 +241,10 @@ func (p *localAuthProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	respHeaders := resp.Header.Clone()
+	stripHopByHopHeaders(respHeaders)
 	dstHeader := w.Header()
-	for k, vals := range resp.Header {
-		if isHopByHopHeader(k) {
-			continue
-		}
+	for k, vals := range respHeaders {
 		for _, v := range vals {
 			dstHeader.Add(k, v)
 		}
@@ -212,7 +263,7 @@ func closeWrite(c net.Conn) {
 }
 
 func stripHopByHopHeaders(h http.Header) {
-	if connHeader := h.Get("Connection"); connHeader != "" {
+	for _, connHeader := range h.Values("Connection") {
 		for _, field := range strings.Split(connHeader, ",") {
 			if f := strings.TrimSpace(field); f != "" {
 				h.Del(f)
@@ -231,22 +282,5 @@ func stripHopByHopHeaders(h http.Header) {
 		"Upgrade",
 	} {
 		h.Del(key)
-	}
-}
-
-func isHopByHopHeader(name string) bool {
-	switch strings.ToLower(name) {
-	case "connection",
-		"keep-alive",
-		"proxy-authenticate",
-		"proxy-authorization",
-		"proxy-connection",
-		"te",
-		"trailer",
-		"transfer-encoding",
-		"upgrade":
-		return true
-	default:
-		return false
 	}
 }

@@ -92,6 +92,13 @@ object WireGuardConfigParser {
         if (addresses.isEmpty()) {
             return AppResult.Error(AppError.Validation("Missing Address in [Interface]"))
         }
+        val invalidAddress = addresses.firstOrNull { !isValidIpOrCidr(it) }
+        if (invalidAddress != null) {
+            return AppResult.Error(AppError.Validation("Invalid Address in [Interface]: $invalidAddress"))
+        }
+
+        // Keep valid DNS IP addresses and ignore non-IP search domains (e.g. fritz.box)
+        val validDnsServers = dnsServers.filter(::isValidIpOrCidr)
 
         val pub = peerPublicKey
             ?: return AppResult.Error(AppError.Validation("Missing PublicKey in [Peer]"))
@@ -109,6 +116,11 @@ object WireGuardConfigParser {
             return AppResult.Error(AppError.Validation("Invalid Endpoint format (expected host:port)"))
         }
 
+        val invalidAllowed = allowedIps.firstOrNull { !isValidIpOrCidr(it) }
+        if (invalidAllowed != null) {
+            return AppResult.Error(AppError.Validation("Invalid AllowedIPs entry in [Peer]: $invalidAllowed"))
+        }
+
         val normalizedAllowedIps = allowedIps
             .map(::normalizeAllowedIpCidr)
             .ifEmpty { listOf("0.0.0.0/0", "::/0") }
@@ -120,7 +132,7 @@ object WireGuardConfigParser {
                 profileName = defaultProfileName.trim().ifBlank { "Home Network" },
                 privateKeyBase64 = priv,
                 addresses = addresses.distinct(),
-                dnsServers = dnsServers.distinct(),
+                dnsServers = validDnsServers.distinct(),
                 mtu = mtu,
                 peerPublicKeyBase64 = pub,
                 presharedKeyBase64 = presharedKey,
@@ -149,6 +161,11 @@ object WireGuardConfigParser {
             requireNotNull(base64KeyToHex(raw)) { "Invalid preshared key" }
         }
 
+        val cleanEndpoint = resolvedEndpoint.trim()
+        require(!cleanEndpoint.contains('\n') && !cleanEndpoint.contains('\r')) {
+            "Invalid endpoint characters"
+        }
+
         return buildString {
             append("private_key=").append(privHex).append('\n')
             append("replace_peers=true\n")
@@ -156,9 +173,13 @@ object WireGuardConfigParser {
             if (pskHex != null) {
                 append("preshared_key=").append(pskHex).append('\n')
             }
-            append("endpoint=").append(resolvedEndpoint).append('\n')
+            append("endpoint=").append(cleanEndpoint).append('\n')
             config.allowedIps.forEach { cidr ->
-                append("allowed_ip=").append(normalizeAllowedIpCidr(cidr)).append('\n')
+                val normalized = normalizeAllowedIpCidr(cidr)
+                require(!normalized.contains('\n') && !normalized.contains('\r') && isValidIpOrCidr(normalized)) {
+                    "Invalid allowed_ip entry"
+                }
+                append("allowed_ip=").append(normalized).append('\n')
             }
             config.persistentKeepaliveSec?.takeIf { it > 0 }?.let { seconds ->
                 append("persistent_keepalive_interval=").append(seconds).append('\n')
@@ -209,6 +230,47 @@ object WireGuardConfigParser {
         } else {
             "$ipAddress:$port"
         }
+
+    private fun isValidIpOrCidr(raw: String): Boolean {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() || it == '\n' || it == '\r' }) return false
+        val slashIdx = trimmed.indexOf('/')
+        val ipPart = if (slashIdx >= 0) trimmed.substring(0, slashIdx) else trimmed
+        val prefixPart = if (slashIdx >= 0) trimmed.substring(slashIdx + 1) else null
+        if (ipPart.isEmpty()) return false
+
+        val isIpv4 = isValidIpv4(ipPart)
+        val isIpv6 = !isIpv4 && isValidIpv6(ipPart)
+        if (!isIpv4 && !isIpv6) return false
+
+        if (prefixPart != null) {
+            val prefix = prefixPart.toIntOrNull() ?: return false
+            val maxPrefix = if (isIpv4) 32 else 128
+            if (prefix !in 0..maxPrefix) return false
+        }
+        return true
+    }
+
+    private fun isValidIpv4(ip: String): Boolean {
+        val parts = ip.split('.')
+        if (parts.size != 4) return false
+        return parts.all { octet ->
+            octet.isNotEmpty() && octet.length <= 3 && octet.all { it.isDigit() } &&
+                (octet.toIntOrNull()?.let { it in 0..255 } == true)
+        }
+    }
+
+    private fun isValidIpv6(ip: String): Boolean {
+        if (!ip.contains(':') || ip.contains(":::")) return false
+        if (ip.indexOf("::") != ip.lastIndexOf("::")) return false
+        val cleaned = ip.removePrefix("::").removeSuffix("::")
+        if (cleaned.isEmpty()) return true
+        val groups = cleaned.split(':').filter { it.isNotEmpty() }
+        if (groups.size > 8) return false
+        return groups.all { group ->
+            group.length in 1..4 && group.all { ch -> ch in '0'..'9' || ch in 'a'..'f' || ch in 'A'..'F' }
+        }
+    }
 
     private fun normalizeAllowedIpCidr(raw: String): String {
         val trimmed = raw.trim()

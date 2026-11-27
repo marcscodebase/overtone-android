@@ -3,6 +3,7 @@ package com.musicplayer.navigation
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -89,6 +90,9 @@ fun MusicPlayerApp(
 
             AppSessionState.Unauthenticated -> {
                 var showPreAuthWireGuard by rememberSaveable { mutableStateOf(false) }
+                BackHandler(enabled = showPreAuthWireGuard) {
+                    showPreAuthWireGuard = false
+                }
                 if (showPreAuthWireGuard) {
                     WireGuardRoute(
                         onBackClick = { showPreAuthWireGuard = false },
@@ -147,25 +151,38 @@ private fun AuthenticatedShell(
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
     }
-    var hasRequestedAudioPermission by rememberSaveable { mutableStateOf(false) }
-    val audioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
+    var hasRequestedStartupPermissions by rememberSaveable { mutableStateOf(false) }
+    val startupPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        if (results[audioReadPermission] == true) {
             downloadActionsViewModel.onReconcileDownloads()
         }
     }
 
     LaunchedEffect(audioReadPermission) {
-        val alreadyGranted = ContextCompat.checkSelfPermission(
+        val audioGranted = ContextCompat.checkSelfPermission(
             context,
             audioReadPermission,
         ) == PackageManager.PERMISSION_GRANTED
-        if (alreadyGranted) {
+        if (audioGranted) {
             downloadActionsViewModel.onReconcileDownloads()
-        } else if (!hasRequestedAudioPermission) {
-            hasRequestedAudioPermission = true
-            audioPermissionLauncher.launch(audioReadPermission)
+        }
+        if (!hasRequestedStartupPermissions) {
+            val missing = buildList {
+                if (!audioGranted) add(audioReadPermission)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val notifGranted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (!notifGranted) add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            if (missing.isNotEmpty()) {
+                hasRequestedStartupPermissions = true
+                startupPermissionsLauncher.launch(missing.toTypedArray())
+            }
         }
     }
 

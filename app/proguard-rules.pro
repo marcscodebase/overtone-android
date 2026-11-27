@@ -1,6 +1,6 @@
 # Add project specific ProGuard rules here.
 # Keep kotlinx.serialization generated classes
--keepattributes *Annotation*, InnerClasses
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
 -dontnote kotlinx.serialization.AnnotationsKt
 -keepclassmembers class kotlinx.serialization.json.** {
     *** Companion;

@@ -24,6 +24,7 @@ import javax.inject.Singleton
 
 interface LyricsRepository {
     suspend fun getLyrics(trackId: String): TrackLyrics?
+    fun clearCache() {}
 }
 
 @Serializable
@@ -80,6 +81,12 @@ class JellyfinLyricsRepository @Inject constructor(
     private val cache = object : LinkedHashMap<String, TrackLyrics?>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TrackLyrics?>?): Boolean {
             return size > MAX_CACHE_ENTRIES
+        }
+    }
+
+    override fun clearCache() {
+        synchronized(cacheLock) {
+            cache.clear()
         }
     }
 

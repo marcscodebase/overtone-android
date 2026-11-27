@@ -500,8 +500,7 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun playNext(track: Track) {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            if (current.queue.isEmpty()) {
+            if (_playbackState.value.queue.isEmpty()) {
                 playTracks(listOf(track), startIndex = 0, shuffle = false)
                 return@launch
             }
@@ -513,12 +512,18 @@ class MediaControllerPlaybackController @Inject constructor(
             val resolved = streamUrlResolver.resolve(track, sessionQualitySelection) ?: return@launch
             resolvedSourcesByTrackId[track.id] = resolved
 
-            val insertIndex = (current.currentIndex + 1).coerceIn(0, current.queue.size)
+            val latest = _playbackState.value
+            if (latest.queue.isEmpty()) {
+                playTracks(listOf(track), startIndex = 0, shuffle = false)
+                return@launch
+            }
+            val insertIndex = (latest.currentIndex + 1)
+                .coerceIn(0, minOf(latest.queue.size, mediaController.mediaItemCount))
             val mutated = QueueOrderHelper.insertNext(
-                queue = current.queue,
-                currentIndex = current.currentIndex,
+                queue = latest.queue,
+                currentIndex = latest.currentIndex,
                 track = track,
-                manualQueueCount = current.manualQueueCount,
+                manualQueueCount = latest.manualQueueCount,
             )
             mediaController.addMediaItem(
                 insertIndex,
@@ -608,8 +613,7 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun skipToQueueIndex(index: Int) {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            if (index !in current.queue.indices) return@launch
+            if (index !in _playbackState.value.queue.indices) return@launch
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
@@ -617,11 +621,15 @@ class MediaControllerPlaybackController @Inject constructor(
             if (index >= mediaController.mediaItemCount) {
                 backgroundHydrationJob?.join()
             }
+            val latest = _playbackState.value
+            if (index !in latest.queue.indices || index !in 0 until mediaController.mediaItemCount) {
+                return@launch
+            }
             val updatedManual = QueueOrderHelper.adjustManualCountOnIndexChange(
-                oldIndex = current.currentIndex,
+                oldIndex = latest.currentIndex,
                 newIndex = index,
-                manualQueueCount = current.manualQueueCount,
-                queueSize = current.queue.size,
+                manualQueueCount = latest.manualQueueCount,
+                queueSize = latest.queue.size,
             )
             _playbackState.update { it.copy(manualQueueCount = updatedManual) }
             mediaController.seekTo(index, 0L)
@@ -634,19 +642,20 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun removeFromQueue(index: Int) {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            if (index !in current.queue.indices) return@launch
+            if (index !in _playbackState.value.queue.indices) return@launch
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
             backgroundHydrationJob?.join()
 
+            val latest = _playbackState.value
+            if (index !in latest.queue.indices) return@launch
             val mutated = QueueOrderHelper.removeAt(
-                queue = current.queue,
-                currentIndex = current.currentIndex,
+                queue = latest.queue,
+                currentIndex = latest.currentIndex,
                 removeIndex = index,
-                manualQueueCount = current.manualQueueCount,
+                manualQueueCount = latest.manualQueueCount,
             )
             if (index < mediaController.mediaItemCount) {
                 mediaController.removeMediaItem(index)
@@ -667,24 +676,23 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            if (fromIndex !in current.queue.indices || toIndex !in current.queue.indices ||
-                fromIndex == toIndex
-            ) {
-                return@launch
-            }
+            if (fromIndex == toIndex) return@launch
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
             backgroundHydrationJob?.join()
 
+            val latest = _playbackState.value
+            if (fromIndex !in latest.queue.indices || toIndex !in latest.queue.indices) {
+                return@launch
+            }
             val mutated = QueueOrderHelper.move(
-                queue = current.queue,
-                currentIndex = current.currentIndex,
+                queue = latest.queue,
+                currentIndex = latest.currentIndex,
                 fromIndex = fromIndex,
                 toIndex = toIndex,
-                manualQueueCount = current.manualQueueCount,
+                manualQueueCount = latest.manualQueueCount,
             )
             if (fromIndex < mediaController.mediaItemCount && toIndex < mediaController.mediaItemCount) {
                 mediaController.moveMediaItem(fromIndex, toIndex)
@@ -703,24 +711,25 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun clearManualQueue() {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            val activeIndex = current.currentIndex
-            if (activeIndex !in current.queue.indices || current.manualQueueCount <= 0) return@launch
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
             }
             backgroundHydrationJob?.join()
 
+            val latest = _playbackState.value
+            val activeIndex = latest.currentIndex
+            if (activeIndex !in latest.queue.indices || latest.manualQueueCount <= 0) return@launch
+
             val start = activeIndex + 1
-            val end = (start + current.manualQueueCount).coerceAtMost(mediaController.mediaItemCount)
+            val end = (start + latest.manualQueueCount).coerceAtMost(mediaController.mediaItemCount)
             if (start < end) {
                 mediaController.removeMediaItems(start, end)
             }
             val mutated = QueueOrderHelper.clearManualQueue(
-                queue = current.queue,
+                queue = latest.queue,
                 currentIndex = activeIndex,
-                manualQueueCount = current.manualQueueCount,
+                manualQueueCount = latest.manualQueueCount,
             )
             _playbackState.update {
                 it.copy(
@@ -735,9 +744,6 @@ class MediaControllerPlaybackController @Inject constructor(
 
     override fun clearUpNext() {
         appScope.launch(mainDispatcher) {
-            val current = _playbackState.value
-            val activeIndex = current.currentIndex
-            if (activeIndex !in current.queue.indices || activeIndex >= current.queue.lastIndex) return@launch
             val mediaController = ensureConnected() ?: return@launch
             if (needsPrepareOnPlay) {
                 hydrateControllerFromState(mediaController, autoPlay = false)
@@ -748,11 +754,15 @@ class MediaControllerPlaybackController @Inject constructor(
             rollingShuffleRefillJob = null
             rollingShuffleState = null
 
+            val latest = _playbackState.value
+            val activeIndex = latest.currentIndex
+            if (activeIndex !in latest.queue.indices || activeIndex >= latest.queue.lastIndex) return@launch
+
             val removeStart = activeIndex + 1
             if (removeStart < mediaController.mediaItemCount) {
                 mediaController.removeMediaItems(removeStart, mediaController.mediaItemCount)
             }
-            val trimmed = current.queue.subList(0, removeStart).toList()
+            val trimmed = latest.queue.subList(0, removeStart).toList()
             _playbackState.update {
                 it.copy(
                     queue = trimmed,
@@ -792,7 +802,9 @@ class MediaControllerPlaybackController @Inject constructor(
                 mediaController.pause()
             } else {
                 pendingAutoResumeAfterRouteDrop = false
-                if (mediaController.playbackState == Player.STATE_IDLE && mediaController.mediaItemCount > 0) {
+                if (mediaController.playbackState == Player.STATE_ENDED && mediaController.mediaItemCount > 0) {
+                    mediaController.seekTo(0, 0L)
+                } else if (mediaController.playbackState == Player.STATE_IDLE && mediaController.mediaItemCount > 0) {
                     val resumePos = maxOf(
                         mediaController.currentPosition.coerceAtLeast(0L),
                         _playbackState.value.positionMs.coerceAtLeast(0L),
@@ -1105,7 +1117,7 @@ class MediaControllerPlaybackController @Inject constructor(
                 qualitySelection = selection,
                 fallbackToAuto = true,
             )
-            if (newResolvedSources.size < queue.size) return@withLock
+            if (queue.any { it.id !in newResolvedSources }) return@withLock
             val newItems = queue.map { track ->
                 val resolved = newResolvedSources[track.id] ?: return@withLock
                 track.toMediaItem(
@@ -1220,9 +1232,15 @@ class MediaControllerPlaybackController @Inject constructor(
             tracks = state.queue,
             qualitySelection = sessionQualitySelection,
         )
+        val resolvedTracks = ArrayList<Track>(state.queue.size)
         val items = ArrayList<MediaItem>(state.queue.size)
-        state.queue.forEach { track ->
-            val resolved = newResolvedSources[track.id] ?: return@forEach
+        var mappedRestoreIndex = 0
+        state.queue.forEachIndexed { oldIdx, track ->
+            val resolved = newResolvedSources[track.id] ?: return@forEachIndexed
+            if (oldIdx == pendingRestoreIndex) {
+                mappedRestoreIndex = resolvedTracks.size
+            }
+            resolvedTracks += track
             items += track.toMediaItem(
                 uri = resolved.uri,
                 isLocal = resolved.isLocal,
@@ -1230,14 +1248,19 @@ class MediaControllerPlaybackController @Inject constructor(
                 mimeType = resolved.mimeType,
             )
         }
+        if (items.isEmpty()) {
+            _playbackState.update {
+                it.copy(errorMessage = "No playable tracks available while offline")
+            }
+            return
+        }
         needsPrepareOnPlay = false
-        if (items.isEmpty()) return
 
         resolvedSourcesByTrackId.clear()
         resolvedSourcesByTrackId.putAll(newResolvedSources)
 
-        val safeIndex = pendingRestoreIndex.coerceIn(0, items.lastIndex)
-        val activeResolved = state.queue.getOrNull(safeIndex)?.id?.let { newResolvedSources[it] }
+        val safeIndex = mappedRestoreIndex.coerceIn(0, items.lastIndex)
+        val activeResolved = resolvedTracks.getOrNull(safeIndex)?.id?.let { newResolvedSources[it] }
         setMediaItemsAndHydrate(
             mediaController = mediaController,
             mediaItems = items,
@@ -1248,9 +1271,13 @@ class MediaControllerPlaybackController @Inject constructor(
         )
         _playbackState.update {
             it.copy(
+                queue = resolvedTracks,
+                currentIndex = safeIndex,
+                currentTrack = resolvedTracks.getOrNull(safeIndex),
                 isLocalPlayback = activeResolved?.isLocal ?: it.isLocalPlayback,
                 transcodedBitrateKbps = activeResolved?.transcodedBitrateKbps,
                 streamQualitySelection = sessionQualitySelection,
+                errorMessage = null,
             )
         }
         syncFromPlayer()

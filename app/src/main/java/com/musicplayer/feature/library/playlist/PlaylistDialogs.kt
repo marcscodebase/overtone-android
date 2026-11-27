@@ -139,7 +139,7 @@ fun CreatePlaylistDialog(
                             IconButton(onClick = { folder = "" }) {
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(R.string.action_clear),
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
@@ -229,7 +229,7 @@ fun MovePlaylistToFolderDialog(
                             IconButton(onClick = { folder = "" }) {
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(R.string.action_clear),
                                     modifier = Modifier.size(18.dp),
                                 )
                             }

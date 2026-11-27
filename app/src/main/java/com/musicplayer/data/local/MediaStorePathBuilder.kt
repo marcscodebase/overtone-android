@@ -21,7 +21,10 @@ object MediaStorePathBuilder {
         discNumber: Int?,
         extension: String,
     ): MediaStoreTarget {
-        val cleanExt = extension.trim().trimStart('.').lowercase(Locale.US).ifEmpty { "flac" }
+        val cleanExt = extension.trim().trimStart('.').lowercase(Locale.US)
+            .filter { it in 'a'..'z' || it in '0'..'9' }
+            .take(5)
+            .ifEmpty { "flac" }
         val safeArtist = sanitizeSegment(artistName, fallback = "Unknown Artist")
         val safeAlbum = sanitizeSegment(albumName, fallback = "Unknown Album")
         val safeTitle = sanitizeSegment(title, fallback = "Untitled")
@@ -63,10 +66,11 @@ object MediaStorePathBuilder {
             .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
             .replace(Regex("\\s+"), " ")
             .trim()
-            .trim('.')
             .take(MAX_SEGMENT_LENGTH)
             .trim()
-        return cleaned.ifEmpty { fallback }
+            .trim('.')
+            .trim()
+        return if (cleaned.isEmpty() || cleaned == "." || cleaned == "..") fallback else cleaned
     }
 
     private const val MAX_SEGMENT_LENGTH = 80

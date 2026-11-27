@@ -38,10 +38,12 @@ build_abi() {
   echo "Building libwguserspace.so for $abi ($goarch)..."
   (
     cd "$SCRIPT_DIR"
+    GOTOOLCHAIN=local \
     GOOS=android \
     GOARCH="$goarch" \
     CGO_ENABLED=1 \
     CC="$cc" \
+    CGO_CFLAGS="-g0 -ffile-prefix-map=${SCRIPT_DIR}=. -ffile-prefix-map=${ANDROID_NDK_HOME}=." \
     CGO_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,--build-id=none" \
     go build \
       -buildmode=c-shared \

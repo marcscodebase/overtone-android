@@ -11,6 +11,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
@@ -33,9 +34,10 @@ object PlayerProvidersModule {
         wireGuardTunnelManager: WireGuardTunnelManager,
     ): OkHttpClient {
         val client = baseOkHttpClient.newBuilder()
+            .dispatcher(Dispatcher())
             .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .addInterceptor(authHeaderInterceptor)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addNetworkInterceptor(authHeaderInterceptor)
             .build()
         wireGuardTunnelManager.registerConnectionEvictor {
             client.dispatcher.cancelAll()

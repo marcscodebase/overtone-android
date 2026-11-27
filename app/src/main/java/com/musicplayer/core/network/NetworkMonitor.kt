@@ -85,10 +85,15 @@ class ConnectivityManagerNetworkMonitor @Inject constructor(
             }
         }
 
-        connectivityManager.registerDefaultNetworkCallback(callback)
+        val registered = runCatching {
+            connectivityManager.registerDefaultNetworkCallback(callback)
+            true
+        }.getOrDefault(false)
 
         awaitClose {
-            connectivityManager.unregisterNetworkCallback(callback)
+            if (registered) {
+                runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+            }
         }
     }
         .distinctUntilChanged()

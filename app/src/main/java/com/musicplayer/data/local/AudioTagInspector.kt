@@ -65,9 +65,13 @@ data class DetectedFileQuality(
  */
 object AudioTagInspector {
 
-    const val TAG_TRACK_ID = "MUSICPLAYER_TRACK_ID"
-    const val TAG_QUALITY = "MUSICPLAYER_QUALITY"
-    const val TAG_AUDIO_SHA256 = "MUSICPLAYER_AUDIO_SHA256"
+    const val TAG_TRACK_ID = "OVERTONE_TRACK_ID"
+    const val TAG_QUALITY = "OVERTONE_QUALITY"
+    const val TAG_AUDIO_SHA256 = "OVERTONE_AUDIO_SHA256"
+
+    private const val LEGACY_TAG_TRACK_ID = "MUSICPLAYER_TRACK_ID"
+    private const val LEGACY_TAG_QUALITY = "MUSICPLAYER_QUALITY"
+    private const val LEGACY_TAG_AUDIO_SHA256 = "MUSICPLAYER_AUDIO_SHA256"
 
     private const val MAX_HEADER_BYTES = 16 * 1024 * 1024 // 16 MB safety cap
 
@@ -232,8 +236,11 @@ object AudioTagInspector {
                         val value = comment.substring(eqIdx + 1).trim()
                         when (key) {
                             TAG_TRACK_ID -> trackId = value
+                            LEGACY_TAG_TRACK_ID -> if (trackId == null) trackId = value
                             TAG_QUALITY -> qualityTag = value
+                            LEGACY_TAG_QUALITY -> if (qualityTag == null) qualityTag = value
                             TAG_AUDIO_SHA256 -> audioSha256 = value
+                            LEGACY_TAG_AUDIO_SHA256 -> if (audioSha256 == null) audioSha256 = value
                             "TITLE" -> title = value
                             "ARTIST" -> artist = value
                             "ALBUM" -> album = value
@@ -263,6 +270,8 @@ object AudioTagInspector {
             return InspectedAudioTags()
         }
         val majorVersion = header[3].toInt() and 0xFF
+        if (majorVersion < 3) return InspectedAudioTags()
+        val flags = header[5].toInt() and 0xFF
         val tagSize = Id3v24TagWriter.decodeSyncSafeInt(header, 6)
         if (tagSize <= 0 || tagSize > MAX_HEADER_BYTES) return InspectedAudioTags()
 
@@ -278,6 +287,21 @@ object AudioTagInspector {
         var album: String? = null
 
         var pos = 0
+        if ((flags and 0x40) != 0 && actual >= 4) {
+            val extSize = if (majorVersion >= 4) {
+                Id3v24TagWriter.decodeSyncSafeInt(tagBytes, 0)
+            } else {
+                4 + (
+                    ((tagBytes[0].toInt() and 0xFF) shl 24) or
+                        ((tagBytes[1].toInt() and 0xFF) shl 16) or
+                        ((tagBytes[2].toInt() and 0xFF) shl 8) or
+                        (tagBytes[3].toInt() and 0xFF)
+                    )
+            }
+            if (extSize in 4..actual) {
+                pos = extSize
+            }
+        }
         while (pos + 10 <= actual) {
             if (tagBytes[pos] == 0.toByte()) break // padding
             val frameId = String(tagBytes, pos, 4, Charsets.US_ASCII)
@@ -300,8 +324,11 @@ object AudioTagInspector {
                     val (desc, value) = decodeId3Txxx(tagBytes, pos, frameSize)
                     when (desc.uppercase(Locale.US)) {
                         TAG_TRACK_ID -> trackId = value
+                        LEGACY_TAG_TRACK_ID -> if (trackId == null) trackId = value
                         TAG_QUALITY -> qualityTag = value
+                        LEGACY_TAG_QUALITY -> if (qualityTag == null) qualityTag = value
                         TAG_AUDIO_SHA256 -> audioSha256 = value
+                        LEGACY_TAG_AUDIO_SHA256 -> if (audioSha256 == null) audioSha256 = value
                     }
                 }
             }
@@ -427,7 +454,7 @@ object AudioTagInspector {
 }
 
 /**
- * Pure verification policy that matches existing files in `Music/music-player/` against Jellyfin
+ * Pure verification policy that matches existing files in `Music/Overtone/` against Jellyfin
  * library tracks without false positives, supporting both embedded Track-ID tags and legacy files
  * from previous app installs.
  */
@@ -449,14 +476,14 @@ object OfflineFileVerifier {
             return false
         }
 
-        // 2. Strongest verification: exact embedded MUSICPLAYER_TRACK_ID tag
+        // 2. Strongest verification: exact embedded OVERTONE_TRACK_ID (or legacy) tag
         val embeddedTrackId = file.inspectedTags.trackId?.trim()
         if (!embeddedTrackId.isNullOrEmpty()) {
             return embeddedTrackId.equals(track.id, ignoreCase = true)
         }
 
         // 3. Fallback verification for legacy files (e.g. from an earlier install before trackId tag):
-        // Require BOTH exact Music/music-player/<Artist>/<Album>/<Track> path AND metadata match.
+        // Require BOTH exact Music/Overtone/<Artist>/<Album>/<Track> path AND metadata match.
         val expected = MediaStorePathBuilder.build(
             artistName = track.artistName,
             albumName = track.albumName,

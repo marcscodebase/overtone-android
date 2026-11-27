@@ -167,6 +167,7 @@ fun PlaylistDetailScreen(
                         if (state.entries.isNotEmpty()) {
                             val allTracksDownloaded = state.entries.all { it.track.isDownloaded }
                             IconButton(
+                                enabled = !state.isDownloadingAny,
                                 onClick = {
                                     if (state.isPlaylistPinnedDownloaded || allTracksDownloaded) {
                                         onRemovePlaylistDownload(playlist.id, playlist.name)
@@ -219,7 +220,7 @@ fun PlaylistDetailScreen(
                         IconButton(onClick = { menuExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = stringResource(R.string.track_more_options),
+                                contentDescription = stringResource(R.string.playlist_options),
                             )
                         }
                         DropdownMenu(
@@ -267,10 +268,11 @@ fun PlaylistDetailScreen(
             totalDurationMs.takeIf { it > 0L }?.let(Formatters::formatDuration),
         ).joinToString(" • ")
 
+        val headerCount = 2 + (if (state.isSyncing) 1 else 0) + (if (state.playlist != null) 1 else 0)
         LazyColumnFastScroller(
             listState = listState,
             itemCount = if (state.isReordering) 0 else state.entries.size,
-            headerItemCount = 3,
+            headerItemCount = headerCount,
             bubbleLabelForIndex = { idx -> "#${idx + 1}" },
             modifier = Modifier
                 .fillMaxSize()

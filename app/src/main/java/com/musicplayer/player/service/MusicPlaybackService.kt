@@ -107,8 +107,9 @@ class MusicPlaybackService : MediaLibraryService() {
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
-                    // Preserve full 24-bit Hi-Res PCM precision instead of downsampling to 16-bit
-                    .setEnableFloatOutput(true)
+                    // Keep integer 16/24/32-bit PCM intact so Android 14+ Bit-Perfect USB DAC
+                    // mixer matching works on 24-bit/32-bit Hi-Res streams without float conversion.
+                    .setEnableFloatOutput(false)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(arrayOf(replayGainAudioProcessor))
                     .setAudioTrackProvider { config, audioAttributes, audioSessionId ->
@@ -178,16 +179,41 @@ class MusicPlaybackService : MediaLibraryService() {
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo,
                 ): MediaSession.ConnectionResult {
+                    val isSelf = controller.packageName == packageName
                     val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                         .buildUpon()
                         .add(COMMAND_TOGGLE_FAVORITE)
                         .build()
+                    val playerCommands = if (isSelf) {
+                        MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+                    } else {
+                        // Restrict third-party controllers from injecting arbitrary media URIs
+                        // into ExoPlayer (prevents cross-app SSRF / auth token abuse).
+                        MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+                            .buildUpon()
+                            .remove(Player.COMMAND_SET_MEDIA_ITEM)
+                            .remove(Player.COMMAND_CHANGE_MEDIA_ITEMS)
+                            .build()
+                    }
                     return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                         .setAvailableSessionCommands(sessionCommands)
+                        .setAvailablePlayerCommands(playerCommands)
                         .setMediaButtonPreferences(
                             listOf(buildFavoriteCommandButton(currentTrackIsFavorite.value)),
                         )
                         .build()
+                }
+
+                override fun onAddMediaItems(
+                    mediaSession: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    mediaItems: MutableList<MediaItem>,
+                ): ListenableFuture<MutableList<MediaItem>> {
+                    if (controller.packageName != packageName) {
+                        // Strip any externally supplied URIs so third-party apps cannot stream arbitrary URLs
+                        return Futures.immediateFuture(mutableListOf())
+                    }
+                    return super.onAddMediaItems(mediaSession, controller, mediaItems)
                 }
 
                 override fun onCustomCommand(
@@ -266,16 +292,21 @@ class MusicPlaybackService : MediaLibraryService() {
     private fun observeReplayGainAndBitPerfectUpdates() {
         serviceScope.launch {
             var lastEffectiveBitPerfect: Boolean? = null
+            var lastUsbActive: Boolean? = null
             val audioPrefs = preferencesDataStore.userPreferences
                 .map { Triple(it.replayGainMode, it.replayGainPreampDb, it.bitPerfectUsbAudio) }
                 .distinctUntilChanged()
+            val usbActiveFlow = audioOutputMonitor.outputState
+                .map { it.activeDevice.type == AudioOutputType.USB_AUDIO }
+                .distinctUntilChanged()
 
-            combine(currentMediaId, audioPrefs) { trackId, (mode, preampDb, bitPerfectUsb) ->
+            combine(currentMediaId, audioPrefs, usbActiveFlow) { trackId, (mode, preampDb, bitPerfectUsb), usbActive ->
                 AudioProcessingConfig(
                     trackId = trackId,
                     replayGainMode = mode,
                     preampDb = preampDb,
                     bitPerfectUsbAudio = bitPerfectUsb,
+                    usbActive = usbActive,
                 )
             }.collect { cfg ->
                 val replayGainActive = cfg.replayGainMode != ReplayGainMode.OFF
@@ -288,11 +319,12 @@ class MusicPlaybackService : MediaLibraryService() {
 
                 val bitPerfectStateChanged = lastEffectiveBitPerfect != null &&
                     lastEffectiveBitPerfect != effectiveBitPerfect
+                val usbPluggedInForBitPerfect = lastUsbActive != null &&
+                    !lastUsbActive!! && cfg.usbActive && effectiveBitPerfect
                 lastEffectiveBitPerfect = effectiveBitPerfect
+                lastUsbActive = cfg.usbActive
 
-                if (bitPerfectStateChanged &&
-                    audioOutputMonitor.outputState.value.activeDevice.type == AudioOutputType.USB_AUDIO
-                ) {
+                if ((bitPerfectStateChanged && cfg.usbActive) || usbPluggedInForBitPerfect) {
                     recreateAudioTrackForActiveItem()
                 }
 
@@ -331,6 +363,7 @@ class MusicPlaybackService : MediaLibraryService() {
         val replayGainMode: ReplayGainMode,
         val preampDb: Float,
         val bitPerfectUsbAudio: Boolean,
+        val usbActive: Boolean,
     )
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -359,7 +392,7 @@ class MusicPlaybackService : MediaLibraryService() {
     }
 
     companion object {
-        private const val ACTION_TOGGLE_FAVORITE = "com.musicplayer.action.TOGGLE_FAVORITE"
+        private const val ACTION_TOGGLE_FAVORITE = "io.saier.overtone.action.TOGGLE_FAVORITE"
         private val COMMAND_TOGGLE_FAVORITE = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
     }
 }

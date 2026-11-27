@@ -26,15 +26,37 @@ Java_com_musicplayer_core_network_wireguard_WireGuardNativeBridge_nativeStartTun
     jint jMtu
 ) {
     (void)thiz;
-    const char* uapi = jUapiConfig ? (*env)->GetStringUTFChars(env, jUapiConfig, NULL) : "";
-    const char* addrs = jLocalAddrsCsv ? (*env)->GetStringUTFChars(env, jLocalAddrsCsv, NULL) : "";
-    const char* dns = jDnsCsv ? (*env)->GetStringUTFChars(env, jDnsCsv, NULL) : "";
+    const char* uapi = "";
+    const char* addrs = "";
+    const char* dns = "";
+
+    if (jUapiConfig != NULL) {
+        uapi = (*env)->GetStringUTFChars(env, jUapiConfig, NULL);
+        if (uapi == NULL) {
+            return NULL;
+        }
+    }
+    if (jLocalAddrsCsv != NULL) {
+        addrs = (*env)->GetStringUTFChars(env, jLocalAddrsCsv, NULL);
+        if (addrs == NULL) {
+            if (jUapiConfig != NULL) (*env)->ReleaseStringUTFChars(env, jUapiConfig, uapi);
+            return NULL;
+        }
+    }
+    if (jDnsCsv != NULL) {
+        dns = (*env)->GetStringUTFChars(env, jDnsCsv, NULL);
+        if (dns == NULL) {
+            if (jLocalAddrsCsv != NULL) (*env)->ReleaseStringUTFChars(env, jLocalAddrsCsv, addrs);
+            if (jUapiConfig != NULL) (*env)->ReleaseStringUTFChars(env, jUapiConfig, uapi);
+            return NULL;
+        }
+    }
 
     char* res = wg_start_tunnel((char*)uapi, (char*)addrs, (char*)dns, (int)jMtu);
 
-    if (jUapiConfig) (*env)->ReleaseStringUTFChars(env, jUapiConfig, uapi);
-    if (jLocalAddrsCsv) (*env)->ReleaseStringUTFChars(env, jLocalAddrsCsv, addrs);
-    if (jDnsCsv) (*env)->ReleaseStringUTFChars(env, jDnsCsv, dns);
+    if (jDnsCsv != NULL) (*env)->ReleaseStringUTFChars(env, jDnsCsv, dns);
+    if (jLocalAddrsCsv != NULL) (*env)->ReleaseStringUTFChars(env, jLocalAddrsCsv, addrs);
+    if (jUapiConfig != NULL) (*env)->ReleaseStringUTFChars(env, jUapiConfig, uapi);
 
     return to_jstring_and_free(env, res);
 }
@@ -65,9 +87,15 @@ Java_com_musicplayer_core_network_wireguard_WireGuardNativeBridge_nativeDialTest
     jint jTimeoutMs
 ) {
     (void)thiz;
-    const char* hostPort = jHostPort ? (*env)->GetStringUTFChars(env, jHostPort, NULL) : "";
+    const char* hostPort = "";
+    if (jHostPort != NULL) {
+        hostPort = (*env)->GetStringUTFChars(env, jHostPort, NULL);
+        if (hostPort == NULL) {
+            return NULL;
+        }
+    }
     char* res = wg_dial_test((char*)hostPort, (int)jTimeoutMs);
-    if (jHostPort) (*env)->ReleaseStringUTFChars(env, jHostPort, hostPort);
+    if (jHostPort != NULL) (*env)->ReleaseStringUTFChars(env, jHostPort, hostPort);
     return to_jstring_and_free(env, res);
 }
 #endif

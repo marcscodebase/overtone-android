@@ -82,6 +82,9 @@ class LibraryViewModelTest {
             preferencesDataStore = prefsStore,
             playbackController = FakePlaybackController(),
             offlineStateProvider = FakeOfflineStateProvider(),
+            offlineSyncScheduler = object : com.musicplayer.data.worker.OfflineSyncScheduler {
+                override fun scheduleFlush() = Unit
+            },
         )
 
         viewModel.uiState.test {
@@ -120,6 +123,9 @@ class LibraryViewModelTest {
             preferencesDataStore = prefsStore,
             playbackController = fakePlayer,
             offlineStateProvider = offlineProvider,
+            offlineSyncScheduler = object : com.musicplayer.data.worker.OfflineSyncScheduler {
+                override fun scheduleFlush() = Unit
+            },
         )
 
         viewModel.uiState.test {

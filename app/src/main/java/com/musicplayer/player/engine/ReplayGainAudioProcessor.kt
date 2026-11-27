@@ -28,21 +28,25 @@ object ReplayGainMath {
         preampDb: Float,
     ): Float {
         if (mode == ReplayGainMode.OFF) return 1f
+        val safePreampDb = if (preampDb.isFinite()) preampDb else 0f
+        val safeTrackDb = trackGainDb?.takeIf { it.isFinite() }
+        val safeAlbumDb = albumGainDb?.takeIf { it.isFinite() }
 
         val selectedGainDb = when (mode) {
             ReplayGainMode.OFF -> return 1f
-            ReplayGainMode.TRACK -> trackGainDb ?: albumGainDb
-            ReplayGainMode.ALBUM -> albumGainDb ?: trackGainDb
+            ReplayGainMode.TRACK -> safeTrackDb ?: safeAlbumDb
+            ReplayGainMode.ALBUM -> safeAlbumDb ?: safeTrackDb
         }
 
         val totalDb = if (selectedGainDb != null) {
-            (selectedGainDb + preampDb).coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
+            (selectedGainDb + safePreampDb).coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
         } else {
             // Never blindly boost tracks that lack ReplayGain tags; allow negative preamp only
-            preampDb.coerceIn(MIN_GAIN_DB, 0f)
+            safePreampDb.coerceIn(MIN_GAIN_DB, 0f)
         }
 
-        return 10.0.pow(totalDb / 20.0).toFloat()
+        val linear = 10.0.pow(totalDb / 20.0).toFloat()
+        return if (linear.isFinite()) linear else 1f
     }
 
     /**
@@ -50,6 +54,7 @@ object ReplayGainMath {
      * peak limiter above 0.95 so boosted tracks never hard-clip.
      */
     fun applyGainWithSoftLimiter(sample: Float, gain: Float): Float {
+        if (!sample.isFinite() || !gain.isFinite()) return 0f
         val scaled = sample * gain
         val magnitude = abs(scaled)
         if (magnitude <= KNEE_START) return scaled
@@ -76,7 +81,7 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
     private var smoothedGain: Float = 1f
 
     fun setTargetGain(linearGain: Float) {
-        targetGain = linearGain.coerceIn(0.05f, 4.0f)
+        targetGain = if (linearGain.isFinite()) linearGain.coerceIn(0.05f, 4.0f) else 1f
     }
 
     fun getTargetGain(): Float = targetGain
@@ -92,7 +97,11 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
             return AudioProcessor.AudioFormat.NOT_SET
         }
         val encoding = inputAudioFormat.encoding
-        if (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT) {
+        if (encoding != C.ENCODING_PCM_16BIT &&
+            encoding != C.ENCODING_PCM_24BIT &&
+            encoding != C.ENCODING_PCM_32BIT &&
+            encoding != C.ENCODING_PCM_FLOAT
+        ) {
             return AudioProcessor.AudioFormat.NOT_SET
         }
         return inputAudioFormat
@@ -116,6 +125,8 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         val channels = inputAudioFormat.channelCount.coerceAtLeast(1)
         when (inputAudioFormat.encoding) {
             C.ENCODING_PCM_16BIT -> processPcm16(inputBuffer, outputBuffer, channels, target)
+            C.ENCODING_PCM_24BIT -> processPcm24(inputBuffer, outputBuffer, channels, target)
+            C.ENCODING_PCM_32BIT -> processPcm32(inputBuffer, outputBuffer, channels, target)
             C.ENCODING_PCM_FLOAT -> processPcmFloat(inputBuffer, outputBuffer, channels, target)
             else -> outputBuffer.put(inputBuffer)
         }
@@ -138,6 +149,59 @@ class ReplayGainAudioProcessor @Inject constructor() : BaseAudioProcessor() {
                 val processed = ReplayGainMath.applyGainWithSoftLimiter(normalized, g)
                 val outInt = (processed * 32767f).roundToInt().coerceIn(-32768, 32767)
                 output.putShort(outInt.toShort())
+            }
+        }
+        while (input.hasRemaining()) {
+            output.put(input.get())
+        }
+    }
+
+    private fun processPcm24(
+        input: ByteBuffer,
+        output: ByteBuffer,
+        channels: Int,
+        target: Float,
+    ) {
+        val bytesPerFrame = channels * 3
+        while (input.remaining() >= bytesPerFrame) {
+            smoothedGain += (target - smoothedGain) * RAMP_ALPHA
+            val g = smoothedGain
+            for (ch in 0 until channels) {
+                val b0 = input.get().toInt() and 0xFF
+                val b1 = input.get().toInt() and 0xFF
+                val b2 = input.get().toInt()
+                val sample24 = (b2 shl 16) or (b1 shl 8) or b0
+                val normalized = sample24 / 8388608f
+                val processed = ReplayGainMath.applyGainWithSoftLimiter(normalized, g)
+                val outInt = (processed * 8388607f).roundToInt().coerceIn(-8388608, 8388607)
+                output.put((outInt and 0xFF).toByte())
+                output.put(((outInt ushr 8) and 0xFF).toByte())
+                output.put(((outInt ushr 16) and 0xFF).toByte())
+            }
+        }
+        while (input.hasRemaining()) {
+            output.put(input.get())
+        }
+    }
+
+    private fun processPcm32(
+        input: ByteBuffer,
+        output: ByteBuffer,
+        channels: Int,
+        target: Float,
+    ) {
+        val bytesPerFrame = channels * 4
+        while (input.remaining() >= bytesPerFrame) {
+            smoothedGain += (target - smoothedGain) * RAMP_ALPHA
+            val g = smoothedGain
+            for (ch in 0 until channels) {
+                val sample32 = input.int
+                val normalized = (sample32.toDouble() / 2147483648.0).toFloat()
+                val processed = ReplayGainMath.applyGainWithSoftLimiter(normalized, g)
+                val outInt = (processed.toDouble() * 2147483647.0).toLong()
+                    .coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())
+                    .toInt()
+                output.putInt(outInt)
             }
         }
         while (input.hasRemaining()) {

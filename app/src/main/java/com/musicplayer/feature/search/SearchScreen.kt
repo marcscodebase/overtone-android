@@ -135,7 +135,10 @@ fun SearchScreen(
                 trailingIcon = {
                     if (state.query.isNotEmpty()) {
                         IconButton(onClick = onClearQuery) {
-                            Icon(Icons.Rounded.Close, contentDescription = null)
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.action_clear),
+                            )
                         }
                     }
                 },

@@ -1,5 +1,6 @@
 package com.musicplayer.feature.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -108,6 +109,10 @@ fun AuthScreen(
     onConfirmLibraries: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    BackHandler(enabled = state.step == AuthStep.CREDENTIALS) {
+        onBackToServerStep()
+    }
+
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
@@ -361,7 +366,9 @@ private fun CredentialsStep(
                                 } else {
                                     Icons.Rounded.Visibility
                                 },
-                                contentDescription = null,
+                                contentDescription = stringResource(
+                                    if (passwordVisible) R.string.auth_hide_password else R.string.auth_show_password,
+                                ),
                             )
                         }
                     },

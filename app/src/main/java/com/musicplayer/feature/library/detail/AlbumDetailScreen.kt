@@ -107,6 +107,7 @@ fun AlbumDetailScreen(
                     state.album?.let { album ->
                         val allTracksDownloaded = state.tracks.isNotEmpty() && state.tracks.all { it.isDownloaded }
                         IconButton(
+                            enabled = !state.isDownloadingAny,
                             onClick = {
                                 if (state.isAlbumPinnedDownloaded || allTracksDownloaded) {
                                     onRemoveAlbumDownload(album.id, album.title)

@@ -1,7 +1,9 @@
 package com.musicplayer.data.local
 
+import androidx.room.withTransaction
 import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.Dispatcher
+import com.musicplayer.core.database.MusicPlayerDatabase
 import com.musicplayer.core.database.dao.DownloadDao
 import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.database.entity.DownloadRecordEntity
@@ -24,9 +26,9 @@ data class ReconcileResult(
 )
 
 /**
- * Reconciles Room download records against public MediaStore files under `Music/music-player/`:
+ * Reconciles Room download records against public MediaStore files under `Music/Overtone/`:
  * 1. Prunes Room records whose underlying files were deleted externally.
- * 2. Discovers and verifies pre-existing audio files in `Music/music-player/` (e.g. from a
+ * 2. Discovers and verifies pre-existing audio files in `Music/Overtone/` (e.g. from a
  *    previous app installation) using embedded Track-ID tags or strict path + duration + metadata
  *    verification, adopting them into Room automatically.
  * 3. Deduplicates `(1)` collision copies when the canonical file and duplicate have matching
@@ -34,6 +36,7 @@ data class ReconcileResult(
  */
 @Singleton
 class MediaStoreReconciler @Inject constructor(
+    private val database: MusicPlayerDatabase,
     private val downloadDao: DownloadDao,
     private val trackDao: TrackDao,
     private val mediaStoreAudioWriter: MediaStoreAudioWriter,
@@ -51,7 +54,7 @@ class MediaStoreReconciler @Inject constructor(
             }
         }
 
-        // 2. Scan Music/music-player/ and match verified files to library tracks
+        // 2. Scan Music/Overtone/ and match verified files to library tracks
         val tracks = trackDao.getAllSnapshot()
         if (tracks.isEmpty()) {
             return@withContext ReconcileResult(removedMissingCount = removedCount)
@@ -146,32 +149,34 @@ class MediaStoreReconciler @Inject constructor(
                     sizeBytes = canonical.sizeBytes,
                     durationMs = canonical.durationMs,
                 )
-                downloadDao.upsertRecord(
-                    DownloadRecordEntity(
-                        trackId = trackId,
-                        mediaStoreUri = canonical.contentUri,
-                        relativePath = canonical.relativePath + canonical.displayName,
-                        status = DownloadStatus.COMPLETED,
-                        qualityMode = quality.mode,
-                        bitrateKbps = quality.bitrateKbps,
-                        fileSizeBytes = canonical.sizeBytes,
-                        transcodeSource = if (quality.mode == DownloadQualityMode.LOSSLESS) {
-                            TranscodeSource.ORIGINAL
-                        } else {
-                            TranscodeSource.SERVER
-                        },
-                        downloadedAt = canonical.dateModifiedSeconds * 1000L,
-                        errorMessage = null,
-                    ),
-                )
-                if (downloadDao.countRefsForTrack(trackId) == 0) {
-                    downloadDao.upsertRef(
-                        DownloadRefEntity(
+                database.withTransaction {
+                    downloadDao.upsertRecord(
+                        DownloadRecordEntity(
                             trackId = trackId,
-                            ownerType = DownloadOwnerType.TRACK,
-                            ownerId = trackId,
+                            mediaStoreUri = canonical.contentUri,
+                            relativePath = canonical.relativePath + canonical.displayName,
+                            status = DownloadStatus.COMPLETED,
+                            qualityMode = quality.mode,
+                            bitrateKbps = quality.bitrateKbps,
+                            fileSizeBytes = canonical.sizeBytes,
+                            transcodeSource = if (quality.mode == DownloadQualityMode.LOSSLESS) {
+                                TranscodeSource.ORIGINAL
+                            } else {
+                                TranscodeSource.SERVER
+                            },
+                            downloadedAt = canonical.dateModifiedSeconds * 1000L,
+                            errorMessage = null,
                         ),
                     )
+                    if (downloadDao.countRefsForTrack(trackId) == 0) {
+                        downloadDao.upsertRef(
+                            DownloadRefEntity(
+                                trackId = trackId,
+                                ownerType = DownloadOwnerType.TRACK,
+                                ownerId = trackId,
+                            ),
+                        )
+                    }
                 }
                 if (existing == null || existing.status != DownloadStatus.COMPLETED) {
                     adoptedCount++

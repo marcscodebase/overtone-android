@@ -475,9 +475,10 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            val hasQualityOptions = qualityMenu.autoOption != null || qualityMenu.options.isNotEmpty()
             Box {
                 AssistChip(
-                    onClick = { qualityMenuExpanded = true },
+                    onClick = { if (hasQualityOptions) qualityMenuExpanded = true },
                     label = {
                         Text(
                             text = qualityBadge,

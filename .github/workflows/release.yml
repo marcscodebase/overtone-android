@@ -69,6 +69,19 @@ jobs:
             exit 1
           fi
 
+          if [[ "${{ steps.tag.outputs.prerelease }}" == "false" ]]; then
+            CHANGELOG_FILE="fastlane/metadata/android/en-US/changelogs/${GRADLE_CODE}.txt"
+            if [[ ! -f "${CHANGELOG_FILE}" ]]; then
+              echo "::error::Missing F-Droid Fastlane changelog at ${CHANGELOG_FILE} for versionCode ${GRADLE_CODE}."
+              exit 1
+            fi
+            CHAR_COUNT="$(wc -m < "${CHANGELOG_FILE}" | tr -d ' ')"
+            if [[ "${CHAR_COUNT}" -gt 500 ]]; then
+              echo "::error::${CHANGELOG_FILE} exceeds F-Droid 500-character limit (${CHAR_COUNT} chars)."
+              exit 1
+            fi
+          fi
+
       - name: Generate changelog from commits since previous release
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}

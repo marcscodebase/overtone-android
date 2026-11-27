@@ -148,3 +148,22 @@ func TestParseAddrsCsvAndIpcStats(t *testing.T) {
 		t.Fatalf("unexpected stats: rx=%d tx=%d hs=%d ep=%q", rx, tx, hs, ep)
 	}
 }
+
+func TestParseDnsAddrsCsvSkipsSearchDomains(t *testing.T) {
+	dns := parseDnsAddrsCsv("192.168.178.1, fritz.box, fd00::1, home.arpa")
+	if len(dns) != 2 || dns[0].String() != "192.168.178.1" || dns[1].String() != "fd00::1" {
+		t.Fatalf("expected FritzBox search domains to be skipped while keeping valid IPs, got: %v", dns)
+	}
+}
+
+func TestEscapeJSONToASCIIHandlesSupplementaryRunes(t *testing.T) {
+	escaped := escapeJSONToASCII(`{"error":"bad 🎵 café"}`)
+	for i := 0; i < len(escaped); i++ {
+		if escaped[i] >= 0x80 {
+			t.Fatalf("expected pure ASCII output for JNI NewStringUTF safety, got byte 0x%x in %q", escaped[i], escaped)
+		}
+	}
+	if !strings.Contains(escaped, `\ud83c\udfb5`) || !strings.Contains(escaped, `\u00e9`) {
+		t.Fatalf("expected UTF-16 surrogate pair and BMP escape, got %q", escaped)
+	}
+}

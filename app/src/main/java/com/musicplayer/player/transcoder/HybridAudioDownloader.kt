@@ -54,44 +54,52 @@ class OkHttpAudioFetcher @Inject constructor(
         onProgress: (bytesRead: Long, totalBytes: Long) -> Unit,
     ): HttpDownloadResult = withContext(ioDispatcher) {
         val request = Request.Builder().url(url).get().build()
-        okHttpClient.newCall(request).execute().use { response ->
-            val contentType = response.header("Content-Type")
-            if (!response.isSuccessful) {
-                return@withContext HttpDownloadResult(
+        val call = okHttpClient.newCall(request)
+        val completionHandle = currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+            if (cause != null) call.cancel()
+        }
+        try {
+            call.execute().use { response ->
+                val contentType = response.header("Content-Type")
+                if (!response.isSuccessful) {
+                    return@withContext HttpDownloadResult(
+                        success = false,
+                        statusCode = response.code,
+                        contentType = contentType,
+                        bytesWritten = 0L,
+                    )
+                }
+                val body = response.body ?: return@withContext HttpDownloadResult(
                     success = false,
                     statusCode = response.code,
                     contentType = contentType,
                     bytesWritten = 0L,
                 )
-            }
-            val body = response.body ?: return@withContext HttpDownloadResult(
-                success = false,
-                statusCode = response.code,
-                contentType = contentType,
-                bytesWritten = 0L,
-            )
-            val totalBytes = body.contentLength()
-            var bytesWritten = 0L
-            destination.parentFile?.mkdirs()
-            destination.outputStream().buffered(64 * 1024).use { out ->
-                body.byteStream().use { input ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        out.write(buffer, 0, read)
-                        bytesWritten += read
-                        onProgress(bytesWritten, totalBytes)
+                val totalBytes = body.contentLength()
+                var bytesWritten = 0L
+                destination.parentFile?.mkdirs()
+                destination.outputStream().buffered(64 * 1024).use { out ->
+                    body.byteStream().use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            out.write(buffer, 0, read)
+                            bytesWritten += read
+                            onProgress(bytesWritten, totalBytes)
+                        }
                     }
                 }
+                HttpDownloadResult(
+                    success = bytesWritten > 0L,
+                    statusCode = response.code,
+                    contentType = contentType,
+                    bytesWritten = bytesWritten,
+                )
             }
-            HttpDownloadResult(
-                success = bytesWritten > 0L,
-                statusCode = response.code,
-                contentType = contentType,
-                bytesWritten = bytesWritten,
-            )
+        } finally {
+            completionHandle?.dispose()
         }
     }
 
@@ -181,7 +189,7 @@ object AudioFormatSniffer {
             ?.trim()
             ?.trimStart('.')
             ?.lowercase(Locale.US)
-            ?.takeIf { it.isNotEmpty() && it.length <= 5 }
+            ?.takeIf { it.matches(SAFE_EXTENSION_REGEX) }
         if (fromHint != null) return fromHint
 
         val mime = contentType?.substringBefore(';')?.trim()?.lowercase(Locale.US)
@@ -196,6 +204,8 @@ object AudioFormatSniffer {
             else -> "flac"
         }
     }
+
+    private val SAFE_EXTENSION_REGEX = Regex("^[a-z0-9]{1,5}$")
 }
 
 data class HybridDownloadRequest(
@@ -264,7 +274,8 @@ class HybridAudioDownloader @Inject constructor(
             DownloadQualityMode.MP3 -> {
                 val targetKbps = request.quality.mp3Bitrate.kbps
                 onStatusChange(DownloadStatus.DOWNLOADING)
-                val serverFile = File(workDir, "${request.trackId}_server.mp3")
+                val safeTempId = sanitizeTempFileId(request.trackId)
+                val serverFile = File(workDir, "${safeTempId}_server.mp3")
                 val serverUrl = buildServerMp3Url(
                     cleanBase = cleanBase,
                     trackId = request.trackId,
@@ -273,9 +284,14 @@ class HybridAudioDownloader @Inject constructor(
                     deviceId = request.deviceId,
                 )
 
-                val serverResult = runCatching {
+                val serverResult = try {
                     httpFetcher.downloadToFile(serverUrl, serverFile, onProgress)
-                }.getOrNull()
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    serverFile.delete()
+                    throw ce
+                } catch (_: Throwable) {
+                    null
+                }
 
                 if (serverResult != null &&
                     serverResult.success &&
@@ -305,7 +321,7 @@ class HybridAudioDownloader @Inject constructor(
                             }.getOrNull()?.let(LyricsParser::formatForEmbedding)
                         }
                         onStatusChange(DownloadStatus.TRANSCODING)
-                        val encodedFile = File(workDir, "${request.trackId}_encoded.mp3")
+                        val encodedFile = File(workDir, "${safeTempId}_encoded.mp3")
                         val encoded = onDeviceMp3Encoder.encodeToMp3(
                             sourceFile = originalFile,
                             targetMp3File = encodedFile,
@@ -370,11 +386,16 @@ class HybridAudioDownloader @Inject constructor(
         workDir: File,
         onProgress: (bytesRead: Long, totalBytes: Long) -> Unit,
     ): Pair<File, String?> {
-        val originalFile = File(workDir, "${trackId}_original.tmp")
+        val originalFile = File(workDir, "${sanitizeTempFileId(trackId)}_original.tmp")
         val primaryUrl = "$cleanBase/Items/$trackId/Download"
-        val primary = runCatching {
+        val primary = try {
             httpFetcher.downloadToFile(primaryUrl, originalFile, onProgress)
-        }.getOrNull()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            originalFile.delete()
+            throw ce
+        } catch (_: Throwable) {
+            null
+        }
 
         if (primary != null && primary.success) {
             return originalFile to primary.contentType
@@ -389,6 +410,9 @@ class HybridAudioDownloader @Inject constructor(
         }
         return originalFile to fallback.contentType
     }
+
+    private fun sanitizeTempFileId(rawId: String): String =
+        rawId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifEmpty { "track" }
 
     private fun buildServerMp3Url(
         cleanBase: String,

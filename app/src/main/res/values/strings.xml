@@ -299,4 +299,10 @@
     <string name="wireguard_delete_confirm_title">Remove WireGuard profile?</string>
     <string name="wireguard_delete_confirm_message">This deletes the encrypted WireGuard keys from this device and disables the in-app tunnel.</string>
     <string name="wireguard_native_unavailable">Embedded WireGuard native engine is unavailable for this device architecture.</string>
+    <string name="action_clear">Clear</string>
+    <string name="auth_show_password">Show password</string>
+    <string name="auth_hide_password">Hide password</string>
+    <string name="settings_sign_out_title">Sign out of Jellyfin?</string>
+    <string name="settings_sign_out_message">Playback will stop and your local library cache will be cleared. Downloaded music files in Music/Overtone/ will remain on your device.</string>
+    <string name="settings_about_version">Overtone %1$s (%2$d) • GPL-3.0-or-later</string>
 </resources>

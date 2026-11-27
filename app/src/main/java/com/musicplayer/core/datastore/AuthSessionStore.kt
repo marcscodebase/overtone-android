@@ -29,16 +29,12 @@ class EncryptedAuthSessionStore @Inject constructor(
 ) : AuthSessionStore {
 
     @Volatile
-    private var cachedEncoded: String? = null
-
-    @Volatile
-    private var cachedSession: AuthSession? = null
+    private var cache: Pair<String, AuthSession>? = null
 
     override val session: Flow<AuthSession?> = dataStore.data.map { prefs ->
         val encoded = prefs[KEY_ENCRYPTED_SESSION]
         if (encoded == null) {
-            cachedEncoded = null
-            cachedSession = null
+            cache = null
             return@map null
         }
         decodeSession(encoded)
@@ -50,32 +46,32 @@ class EncryptedAuthSessionStore @Inject constructor(
         val plaintext = json.encodeToString(session).toByteArray(Charsets.UTF_8)
         val encrypted = cryptoCipher.encrypt(plaintext)
         val encoded = Base64.getEncoder().encodeToString(encrypted)
-        cachedEncoded = encoded
-        cachedSession = session
         dataStore.edit { prefs ->
             prefs[KEY_ENCRYPTED_SESSION] = encoded
         }
+        cache = encoded to session
     }
 
     override suspend fun clearSession() {
-        cachedEncoded = null
-        cachedSession = null
+        cache = null
         dataStore.edit { prefs ->
             prefs.remove(KEY_ENCRYPTED_SESSION)
         }
     }
 
     private fun decodeSession(encoded: String): AuthSession? {
-        if (cachedEncoded == encoded) {
-            return cachedSession
+        val current = cache
+        if (current != null && current.first == encoded) {
+            return current.second
         }
         val decoded = runCatching {
             val encrypted = Base64.getDecoder().decode(encoded)
             val plaintext = cryptoCipher.decrypt(encrypted).toString(Charsets.UTF_8)
             json.decodeFromString<AuthSession>(plaintext)
         }.getOrNull()
-        cachedEncoded = encoded
-        cachedSession = decoded
+        if (decoded != null) {
+            cache = encoded to decoded
+        }
         return decoded
     }
 

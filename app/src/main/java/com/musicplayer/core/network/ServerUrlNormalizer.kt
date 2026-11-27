@@ -8,6 +8,10 @@ import java.net.URI
  */
 object ServerUrlNormalizer {
 
+    private val IPV4_PRIVATE_OR_CGNAT = Regex(
+        "^(127\\.\\d+\\.\\d+\\.\\d+|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|100\\.(6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])\\.\\d+\\.\\d+)$",
+    )
+
     fun normalize(rawInput: String): String? {
         val trimmed = rawInput.trim()
         if (trimmed.isEmpty()) return null
@@ -17,13 +21,21 @@ object ServerUrlNormalizer {
             if (schemePrefix != "http" && schemePrefix != "https") return null
             trimmed
         } else {
-            val lower = trimmed.lowercase()
-            val preferHttp = lower.startsWith("localhost") ||
-                lower.startsWith("127.") ||
-                lower.startsWith("10.") ||
-                lower.startsWith("192.168.") ||
-                lower.matches(Regex("^172\\.(1[6-9]|2\\d|3[01])\\..*")) ||
-                lower.startsWith("100.")
+            val hostCandidate = trimmed
+                .substringBefore('/')
+                .substringBefore('?')
+                .substringBefore('#')
+                .let { authority ->
+                    if (authority.startsWith("[")) {
+                        authority.substringAfter('[').substringBefore(']')
+                    } else {
+                        authority.substringBefore(':')
+                    }
+                }
+                .lowercase()
+            val preferHttp = hostCandidate == "localhost" ||
+                hostCandidate == "::1" ||
+                IPV4_PRIVATE_OR_CGNAT.matches(hostCandidate)
             val scheme = if (preferHttp) "http://" else "https://"
             scheme + trimmed
         }
@@ -32,6 +44,7 @@ object ServerUrlNormalizer {
         val scheme = uri.scheme?.lowercase() ?: return null
         if (scheme != "http" && scheme != "https") return null
         if (uri.host.isNullOrBlank()) return null
+        if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null
 
         return withScheme.trimEnd('/')
     }

@@ -20,6 +20,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -238,36 +240,40 @@ class JellyfinSyncRepository @Inject constructor(
         }
     }
 
+    private val flushMutex = Mutex()
+
     override suspend fun flushPendingSyncActions(): Int = withContext(ioDispatcher) {
-        if (!canSyncRemotely()) return@withContext 0
-        val pending = pendingSyncActionDao.getAllPending()
-        var flushedCount = 0
+        flushMutex.withLock {
+            if (!canSyncRemotely()) return@withLock 0
+            val pending = pendingSyncActionDao.getAllPending()
+            var flushedCount = 0
 
-        for (action in pending) {
-            val succeeded = try {
-                executePendingAction(action)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Throwable) {
-                false
+            for (action in pending) {
+                val succeeded = try {
+                    executePendingAction(action)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Throwable) {
+                    false
+                }
+
+                when (OutboxRetryPolicy.evaluate(succeeded, action.retryCount, MAX_RETRY_COUNT)) {
+                    OutboxActionDisposition.DELETE_SUCCEEDED -> {
+                        pendingSyncActionDao.deleteById(action.id)
+                        flushedCount++
+                    }
+
+                    OutboxActionDisposition.DROP_MAX_RETRIES -> {
+                        pendingSyncActionDao.deleteById(action.id)
+                    }
+
+                    OutboxActionDisposition.INCREMENT_RETRY -> {
+                        pendingSyncActionDao.incrementRetry(action.id)
+                    }
+                }
             }
-
-            when (OutboxRetryPolicy.evaluate(succeeded, action.retryCount, MAX_RETRY_COUNT)) {
-                OutboxActionDisposition.DELETE_SUCCEEDED -> {
-                    pendingSyncActionDao.deleteById(action.id)
-                    flushedCount++
-                }
-
-                OutboxActionDisposition.DROP_MAX_RETRIES -> {
-                    pendingSyncActionDao.deleteById(action.id)
-                }
-
-                OutboxActionDisposition.INCREMENT_RETRY -> {
-                    pendingSyncActionDao.incrementRetry(action.id)
-                }
-            }
+            flushedCount
         }
-        flushedCount
     }
 
     private suspend fun syncFavoriteRemotely(itemId: String, isFavorite: Boolean): AppResult<Unit> {
@@ -423,7 +429,8 @@ class JellyfinSyncRepository @Inject constructor(
     }
 
     private suspend fun sendFavoriteMutation(itemId: UUID, isFavorite: Boolean) {
-        val session = authSessionStore.getSession() ?: return
+        val session = authSessionStore.getSession()
+            ?: throw IllegalStateException("Not signed in")
         val userUuid = parseUuid(session.userId)
         val userLibrary = clientProvider.getClient().userLibraryApi
         if (isFavorite) {

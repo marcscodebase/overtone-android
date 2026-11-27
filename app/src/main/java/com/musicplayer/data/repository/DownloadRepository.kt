@@ -422,6 +422,7 @@ class JellyfinDownloadRepository @Inject constructor(
         workManager.cancelUniqueWork(DownloadWorker.uniqueWorkName(trackId))
         val record = downloadDao.getByTrackId(trackId)
         if (record != null && record.status != DownloadStatus.COMPLETED) {
+            mediaStoreAudioWriter.delete(record.mediaStoreUri)
             downloadDao.deleteAllRefsForTrack(trackId)
             downloadDao.deleteRecord(trackId)
         }

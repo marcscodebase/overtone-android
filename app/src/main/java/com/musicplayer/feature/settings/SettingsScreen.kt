@@ -46,9 +46,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.musicplayer.BuildConfig
 import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.model.CellularBitrateCap
@@ -116,6 +118,7 @@ fun SettingsScreen(
     var showCellularDialog by rememberSaveable { mutableStateOf(false) }
     var showDownloadQualityDialog by rememberSaveable { mutableStateOf(false) }
     var showReplayGainDialog by rememberSaveable { mutableStateOf(false) }
+    var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -640,7 +643,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedButton(
-                onClick = onSignOut,
+                onClick = { showSignOutDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -649,7 +652,44 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.action_sign_out))
             }
+
+            Text(
+                text = stringResource(
+                    R.string.settings_about_version,
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 16.dp),
+            )
         }
+    }
+
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text(stringResource(R.string.settings_sign_out_title)) },
+            text = { Text(stringResource(R.string.settings_sign_out_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSignOutDialog = false
+                        onSignOut()
+                    },
+                ) {
+                    Text(stringResource(R.string.action_sign_out))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     if (showCellularDialog) {

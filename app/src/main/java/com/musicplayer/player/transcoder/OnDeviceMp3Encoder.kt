@@ -337,6 +337,9 @@ class AndroidMediaCodecMp3Encoder @Inject constructor(
             }
 
             targetMp3File.exists() && targetMp3File.length() > 0L
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            targetMp3File.delete()
+            throw ce
         } catch (_: Throwable) {
             targetMp3File.delete()
             false

@@ -62,7 +62,7 @@ func (c *tunnelController) Start(uapiConfig, localAddrsCsv, dnsCsv string, mtu i
 		return StartResult{Success: false, Error: msg}
 	}
 
-	dnsAddrs, _ := parseAddrsCsv(dnsCsv)
+	dnsAddrs := parseDnsAddrsCsv(dnsCsv)
 	if len(dnsAddrs) == 0 {
 		dnsAddrs = []netip.Addr{netip.MustParseAddr("1.1.1.1")}
 	}
@@ -136,9 +136,8 @@ func (c *tunnelController) Status() StatusResult {
 	ipcRaw, err := dev.IpcGet()
 	if err != nil {
 		return StatusResult{
-			Running:   true,
-			ProxyPort: proxy.Port(),
-			Error:     err.Error(),
+			Running: false,
+			Error:   err.Error(),
 		}
 	}
 
@@ -210,6 +209,30 @@ func parseAddrsCsv(csv string) ([]netip.Addr, error) {
 		return nil, errors.New("no valid IP addresses provided")
 	}
 	return out, nil
+}
+
+// parseDnsAddrsCsv retains all valid DNS IP entries and ignores non-IP search domains
+// (such as "fritz.box" commonly emitted by FritzBox and wg-quick configs).
+func parseDnsAddrsCsv(csv string) []netip.Addr {
+	trimmed := strings.TrimSpace(csv)
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, ",")
+	out := make([]netip.Addr, 0, len(parts))
+	for _, raw := range parts {
+		token := strings.TrimSpace(raw)
+		if token == "" {
+			continue
+		}
+		if slash := strings.IndexByte(token, '/'); slash >= 0 {
+			token = strings.TrimSpace(token[:slash])
+		}
+		if addr, err := netip.ParseAddr(token); err == nil {
+			out = append(out, addr)
+		}
+	}
+	return out
 }
 
 func parseIpcStats(ipc string) (rxBytes int64, txBytes int64, lastHandshakeSec int64, endpoint string) {

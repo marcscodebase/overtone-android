@@ -1,5 +1,7 @@
 package com.musicplayer.data.repository
 
+import android.content.Context
+import androidx.work.WorkManager
 import com.musicplayer.core.common.AppDispatcher
 import com.musicplayer.core.common.AppError
 import com.musicplayer.core.common.AppResult
@@ -14,6 +16,10 @@ import com.musicplayer.core.model.ServerPublicInfo
 import com.musicplayer.core.network.JellyfinClientProvider
 import com.musicplayer.core.network.ServerUrlNormalizer
 import com.musicplayer.core.network.wireguard.WireGuardTunnelManager
+import com.musicplayer.data.worker.DownloadWorker
+import com.musicplayer.data.worker.OfflineSyncWorker
+import com.musicplayer.data.worker.PlaylistSyncWorker
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -54,10 +60,12 @@ interface AuthRepository {
 
 @Singleton
 class JellyfinAuthRepository @Inject constructor(
+    @param:ApplicationContext private val appContext: Context,
     private val clientProvider: JellyfinClientProvider,
     private val authSessionStore: AuthSessionStore,
     private val preferencesDataStore: UserPreferencesDataStore,
     private val wireGuardTunnelManager: WireGuardTunnelManager,
+    private val lyricsRepository: LyricsRepository,
     private val database: MusicPlayerDatabase,
     @param:Dispatcher(AppDispatcher.IO) private val ioDispatcher: CoroutineDispatcher,
 ) : AuthRepository {
@@ -213,6 +221,14 @@ class JellyfinAuthRepository @Inject constructor(
         }
 
     override suspend fun logout() = withContext(ioDispatcher) {
+        runCatching {
+            val workManager = WorkManager.getInstance(appContext)
+            workManager.cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
+            workManager.cancelUniqueWork(OfflineSyncWorker.UNIQUE_WORK_NAME)
+            workManager.cancelAllWorkByTag(PlaylistSyncWorker.TAG_PLAYLIST_SYNC)
+        }
+        lyricsRepository.clearCache()
+        wireGuardTunnelManager.clearPendingServerUrl()
         authSessionStore.clearSession()
         clientProvider.clear()
         preferencesDataStore.setSelectedMusicLibraryIds(emptySet())

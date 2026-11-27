@@ -28,6 +28,7 @@ class AndroidKeystoreCryptoCipher @Inject constructor() : CryptoCipher {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val iv = cipher.iv
+        require(iv != null && iv.size == GCM_IV_LENGTH_BYTES) { "Unexpected GCM IV length" }
         val encrypted = cipher.doFinal(plaintext)
         return ByteArray(iv.size + encrypted.size).apply {
             System.arraycopy(iv, 0, this, 0, iv.size)
@@ -36,7 +37,8 @@ class AndroidKeystoreCryptoCipher @Inject constructor() : CryptoCipher {
     }
 
     override fun decrypt(ciphertext: ByteArray): ByteArray {
-        require(ciphertext.size > GCM_IV_LENGTH_BYTES) { "Ciphertext payload is truncated" }
+        val minLength = GCM_IV_LENGTH_BYTES + (GCM_TAG_LENGTH_BITS / 8)
+        require(ciphertext.size > minLength) { "Ciphertext payload is truncated" }
         val iv = ciphertext.copyOfRange(0, GCM_IV_LENGTH_BYTES)
         val encrypted = ciphertext.copyOfRange(GCM_IV_LENGTH_BYTES, ciphertext.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -47,9 +49,16 @@ class AndroidKeystoreCryptoCipher @Inject constructor() : CryptoCipher {
     @Synchronized
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        val existing = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+        val existing = runCatching {
+            keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+        }.getOrNull()
         if (existing != null) {
             return existing.secretKey
+        }
+        runCatching {
+            if (keyStore.containsAlias(KEY_ALIAS)) {
+                keyStore.deleteEntry(KEY_ALIAS)
+            }
         }
 
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)

@@ -37,6 +37,7 @@ class AudioOutputMonitor @Inject constructor(
     private val mediaRouter2: MediaRouter2? = runCatching { MediaRouter2.getInstance(context) }.getOrNull()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val routerExecutor = Executors.newSingleThreadExecutor()
+    private val refreshLock = Any()
 
     private val _outputState = MutableStateFlow(AudioOutputState())
     val outputState: StateFlow<AudioOutputState> = _outputState.asStateFlow()
@@ -88,7 +89,7 @@ class AudioOutputMonitor @Inject constructor(
         refreshDevices()
     }
 
-    fun refreshDevices() {
+    fun refreshDevices() = synchronized(refreshLock) {
         val rawOutputs = runCatching {
             audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.toList().orEmpty()
         }.getOrDefault(emptyList())
@@ -128,12 +129,12 @@ class AudioOutputMonitor @Inject constructor(
             .map { it.copy(isActive = it.id == activeDevice.id && it.type == activeDevice.type) }
             .sortedByDescending { it.isActive }
 
+        usbBitPerfectController.refreshForActiveDevice()
         _outputState.value = AudioOutputState(
             activeDevice = activeDevice.copy(isActive = true),
             availableDevices = marked,
             bitPerfectStatus = usbBitPerfectController.status.value,
         )
-        usbBitPerfectController.refreshForActiveDevice()
     }
 
     /**

@@ -12,6 +12,7 @@ import com.musicplayer.core.network.OfflineStateProvider
 import com.musicplayer.core.network.OfflineStatus
 import com.musicplayer.data.repository.LibraryRepository
 import com.musicplayer.data.repository.PlaylistRepository
+import com.musicplayer.data.worker.OfflineSyncScheduler
 import com.musicplayer.player.PlaybackController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class LibraryViewModel @Inject constructor(
     private val preferencesDataStore: UserPreferencesDataStore,
     private val playbackController: PlaybackController,
     private val offlineStateProvider: OfflineStateProvider,
+    private val offlineSyncScheduler: OfflineSyncScheduler,
 ) : ViewModel() {
 
     val offlineStatus: StateFlow<OfflineStatus> = offlineStateProvider.offlineStatus
@@ -174,12 +176,16 @@ class LibraryViewModel @Inject constructor(
         }
         viewModelScope.launch {
             offlineStateProvider.setManualOfflineMode(target)
+            if (!target) {
+                offlineSyncScheduler.scheduleFlush()
+            }
         }
     }
 
     fun onDisableManualOfflineMode() {
         viewModelScope.launch {
             offlineStateProvider.setManualOfflineMode(false)
+            offlineSyncScheduler.scheduleFlush()
         }
     }
 
