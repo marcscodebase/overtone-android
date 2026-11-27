@@ -93,7 +93,7 @@ A complete, code-verified overview of all features currently implemented in **an
   - Bottom-left output indicator in Now Playing and a dedicated **Audio Output** sheet listing all detected devices with PCM bit-depth/sample-rate capabilities, an Android system output switcher shortcut, and a per-Bluetooth-device **Hi-Res / LDAC** override toggle.
   - Optional Settings toggle **Match quality to output device** (streams lossless on wired/USB/speaker/HDMI/Hi-Res BT; caps standard Bluetooth to `320 kbps MP3`).
 - **ReplayGain Loudness Normalization:** Custom Media3 `AudioProcessor` supporting **Off (Bit-exact)**, **Track gain**, and **Album gain** (falls back to track gain when album gain metadata is absent), configurable preamp (`-6.0 dB` to `+6.0 dB` in `0.5 dB` steps), smooth gain ramping, `tanh` soft-knee peak limiting, and protection so untagged tracks are never boosted above `0 dB`.
-- **Background & Hardware Controls:** Media3 `MediaLibraryService` + `MediaSession` providing foreground media notifications, lock-screen controls, Bluetooth transport buttons, automatic audio focus/ducking, and auto-pause when headphones disconnect.
+- **Background & Hardware Controls:** Media3 `MediaLibraryService` + `MediaSession` providing foreground media notifications, lock-screen controls with a live **`+` / `✓` Quick Favorite** button (synced optimistically to Room, Jellyfin, and offline queue), Bluetooth transport buttons, automatic audio focus/ducking, and auto-pause when headphones disconnect.
 
 ---
 

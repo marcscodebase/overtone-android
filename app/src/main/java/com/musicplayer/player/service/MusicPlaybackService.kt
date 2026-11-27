@@ -3,6 +3,7 @@ package com.musicplayer.player.service
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -17,13 +18,21 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.musicplayer.MainActivity
+import com.musicplayer.R
 import com.musicplayer.core.database.dao.TrackDao
 import com.musicplayer.core.datastore.UserPreferencesDataStore
 import com.musicplayer.core.model.AudioOutputType
 import com.musicplayer.core.model.ReplayGainMode
+import com.musicplayer.data.repository.SyncRepository
+import com.musicplayer.player.PlaybackController
 import com.musicplayer.player.PlaybackOkHttpClient
 import com.musicplayer.player.engine.AudioOutputMonitor
 import com.musicplayer.player.engine.ReplayGainAudioProcessor
@@ -32,11 +41,14 @@ import com.musicplayer.player.engine.UsbBitPerfectController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,8 +78,15 @@ class MusicPlaybackService : MediaLibraryService() {
     @Inject
     lateinit var preferencesDataStore: UserPreferencesDataStore
 
+    @Inject
+    lateinit var syncRepository: SyncRepository
+
+    @Inject
+    lateinit var playbackController: PlaybackController
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val currentMediaId = MutableStateFlow<String?>(null)
+    private val currentTrackIsFavorite = MutableStateFlow(false)
 
     private var mediaLibrarySession: MediaLibrarySession? = null
     private var exoPlayer: ExoPlayer? = null
@@ -154,9 +173,93 @@ class MusicPlaybackService : MediaLibraryService() {
         mediaLibrarySession = MediaLibrarySession.Builder(
             this,
             player,
-            object : MediaLibrarySession.Callback {},
+            object : MediaLibrarySession.Callback {
+                override fun onConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                ): MediaSession.ConnectionResult {
+                    val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+                        .buildUpon()
+                        .add(COMMAND_TOGGLE_FAVORITE)
+                        .build()
+                    return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                        .setAvailableSessionCommands(sessionCommands)
+                        .setMediaButtonPreferences(
+                            listOf(buildFavoriteCommandButton(currentTrackIsFavorite.value)),
+                        )
+                        .build()
+                }
+
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle,
+                ): ListenableFuture<SessionResult> {
+                    if (customCommand.customAction == ACTION_TOGGLE_FAVORITE) {
+                        toggleCurrentTrackFavorite()
+                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    }
+                    return super.onCustomCommand(session, controller, customCommand, args)
+                }
+            },
         )
             .setSessionActivity(sessionActivityIntent)
+            .setMediaButtonPreferences(listOf(buildFavoriteCommandButton(isFavorite = false)))
+            .build()
+
+        observeCurrentTrackFavoriteState()
+    }
+
+    @kotlin.OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeCurrentTrackFavoriteState() {
+        serviceScope.launch {
+            currentMediaId
+                .flatMapLatest { trackId ->
+                    if (trackId.isNullOrBlank()) {
+                        flowOf(false)
+                    } else {
+                        trackDao.observeIsFavorite(trackId).map { it == true }
+                    }
+                }
+                .distinctUntilChanged()
+                .collect { isFavorite ->
+                    currentTrackIsFavorite.value = isFavorite
+                    mediaLibrarySession?.setMediaButtonPreferences(
+                        listOf(buildFavoriteCommandButton(isFavorite)),
+                    )
+                }
+        }
+    }
+
+    private fun toggleCurrentTrackFavorite() {
+        val trackId = exoPlayer?.currentMediaItem?.mediaId
+            ?: currentMediaId.value
+            ?: return
+        val targetFavorite = !currentTrackIsFavorite.value
+        currentTrackIsFavorite.value = targetFavorite
+        mediaLibrarySession?.setMediaButtonPreferences(
+            listOf(buildFavoriteCommandButton(targetFavorite)),
+        )
+        playbackController.updateTrackFavorite(trackId, targetFavorite)
+        serviceScope.launch {
+            syncRepository.setTrackFavorite(trackId, targetFavorite)
+        }
+    }
+
+    private fun buildFavoriteCommandButton(isFavorite: Boolean): CommandButton {
+        val icon = if (isFavorite) {
+            CommandButton.ICON_CHECK_CIRCLE_FILLED
+        } else {
+            CommandButton.ICON_PLUS_CIRCLE_UNFILLED
+        }
+        val label = getString(
+            if (isFavorite) R.string.favorite_remove else R.string.favorite_add,
+        )
+        return CommandButton.Builder(icon)
+            .setDisplayName(label)
+            .setSessionCommand(COMMAND_TOGGLE_FAVORITE)
+            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY, CommandButton.SLOT_OVERFLOW)
             .build()
     }
 
@@ -253,5 +356,10 @@ class MusicPlaybackService : MediaLibraryService() {
         mediaLibrarySession = null
         exoPlayer = null
         super.onDestroy()
+    }
+
+    companion object {
+        private const val ACTION_TOGGLE_FAVORITE = "com.musicplayer.action.TOGGLE_FAVORITE"
+        private val COMMAND_TOGGLE_FAVORITE = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
     }
 }
