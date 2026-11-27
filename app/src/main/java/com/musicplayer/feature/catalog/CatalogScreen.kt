@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
@@ -43,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.FastScrollMath
+import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.Track
 
@@ -117,26 +120,44 @@ fun CatalogContent(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 160.dp),
+                    val albumsListState = rememberLazyListState()
+                    LazyColumnFastScroller(
+                        listState = albumsListState,
+                        itemCount = state.albums.size,
+                        bottomPadding = 164.dp,
+                        bubbleLabelForIndex = { idx ->
+                            val album = state.albums.getOrNull(idx) ?: return@LazyColumnFastScroller null
+                            when (state.selectedSort) {
+                                CatalogSort.ALPHABETICAL -> FastScrollMath.sectionLetter(album.title)
+                                CatalogSort.CREATOR -> FastScrollMath.sectionLetter(album.artistName)
+                                CatalogSort.RECENTLY_ADDED -> album.year?.toString()
+                                    ?: FastScrollMath.sectionLetter(album.title)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
                     ) {
-                        items(
-                            items = state.albums,
-                            key = { it.id },
-                            contentType = { "album" },
-                        ) { album ->
-                            val subtitle = listOfNotNull(
-                                album.artistName,
-                                album.year?.toString(),
-                            ).joinToString(" • ")
-                            CatalogCollectionRow(
-                                title = album.title,
-                                subtitle = subtitle,
-                                imageUrl = album.artworkUrl,
-                                isCircular = false,
-                                onClick = { onAlbumClick(album.id) },
-                            )
+                        LazyColumn(
+                            state = albumsListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 160.dp),
+                        ) {
+                            items(
+                                items = state.albums,
+                                key = { it.id },
+                                contentType = { "album" },
+                            ) { album ->
+                                val subtitle = listOfNotNull(
+                                    album.artistName,
+                                    album.year?.toString(),
+                                ).joinToString(" • ")
+                                CatalogCollectionRow(
+                                    title = album.title,
+                                    subtitle = subtitle,
+                                    imageUrl = album.artworkUrl,
+                                    isCircular = false,
+                                    onClick = { onAlbumClick(album.id) },
+                                )
+                            }
                         }
                     }
                 }
@@ -151,23 +172,41 @@ fun CatalogContent(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 160.dp),
+                    val artistsListState = rememberLazyListState()
+                    LazyColumnFastScroller(
+                        listState = artistsListState,
+                        itemCount = state.artists.size,
+                        bottomPadding = 164.dp,
+                        bubbleLabelForIndex = { idx ->
+                            val artist = state.artists.getOrNull(idx) ?: return@LazyColumnFastScroller null
+                            when (state.selectedSort) {
+                                CatalogSort.RECENTLY_ADDED -> "${artist.albumCount}"
+                                CatalogSort.ALPHABETICAL,
+                                CatalogSort.CREATOR,
+                                -> FastScrollMath.sectionLetter(artist.name)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
                     ) {
-                        items(
-                            items = state.artists,
-                            key = { it.id },
-                            contentType = { "artist" },
-                        ) { artist ->
-                            val countText = if (artist.albumCount == 1) "1 album" else "${artist.albumCount} albums"
-                            CatalogCollectionRow(
-                                title = artist.name,
-                                subtitle = countText,
-                                imageUrl = artist.artworkUrl,
-                                isCircular = true,
-                                onClick = { onArtistClick(artist.id) },
-                            )
+                        LazyColumn(
+                            state = artistsListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 160.dp),
+                        ) {
+                            items(
+                                items = state.artists,
+                                key = { it.id },
+                                contentType = { "artist" },
+                            ) { artist ->
+                                val countText = if (artist.albumCount == 1) "1 album" else "${artist.albumCount} albums"
+                                CatalogCollectionRow(
+                                    title = artist.name,
+                                    subtitle = countText,
+                                    imageUrl = artist.artworkUrl,
+                                    isCircular = true,
+                                    onClick = { onArtistClick(artist.id) },
+                                )
+                            }
                         }
                     }
                 }
@@ -181,28 +220,45 @@ fun CatalogContent(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 160.dp),
+                    val songsListState = rememberLazyListState()
+                    LazyColumnFastScroller(
+                        listState = songsListState,
+                        itemCount = state.tracks.size,
+                        bottomPadding = 164.dp,
+                        bubbleLabelForIndex = { idx ->
+                            val track = state.tracks.getOrNull(idx) ?: return@LazyColumnFastScroller null
+                            when (state.selectedSort) {
+                                CatalogSort.ALPHABETICAL -> FastScrollMath.sectionLetter(track.title)
+                                CatalogSort.CREATOR -> FastScrollMath.sectionLetter(track.artistName)
+                                CatalogSort.RECENTLY_ADDED -> "#${idx + 1}"
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
                     ) {
-                        itemsIndexed(
-                            items = state.tracks,
-                            key = { _, track -> "cat_${track.id}" },
-                            contentType = { _, _ -> "track" },
-                        ) { index, track ->
-                            TrackRow(
-                                track = track,
-                                isPlaying = track.id == state.activeTrackId,
-                                enabled = !state.isOffline || track.isDownloaded,
-                                // Keep horizontal right-swipe free for smoothly swiping back to Library
-                                enableSwipeToQueue = false,
-                                onClick = { onTrackClick(state.tracks, index) },
-                                onAddToQueue = { onAddToQueue(track) },
-                                onAddToPlaylist = { onAddToPlaylist(track) },
-                                onToggleDownload = { onToggleTrackDownload(track) },
-                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
-                                onGoToArtist = { onGoToTrackArtist(track) },
-                            )
+                        LazyColumn(
+                            state = songsListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 160.dp),
+                        ) {
+                            itemsIndexed(
+                                items = state.tracks,
+                                key = { _, track -> "cat_${track.id}" },
+                                contentType = { _, _ -> "track" },
+                            ) { index, track ->
+                                TrackRow(
+                                    track = track,
+                                    isPlaying = track.id == state.activeTrackId,
+                                    enabled = !state.isOffline || track.isDownloaded,
+                                    // Keep horizontal right-swipe free for smoothly swiping back to Library
+                                    enableSwipeToQueue = false,
+                                    onClick = { onTrackClick(state.tracks, index) },
+                                    onAddToQueue = { onAddToQueue(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
+                                    onToggleDownload = { onToggleTrackDownload(track) },
+                                    onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                    onGoToArtist = { onGoToTrackArtist(track) },
+                                )
+                            }
                         }
                     }
                 }

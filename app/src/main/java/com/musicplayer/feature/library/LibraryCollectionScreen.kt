@@ -46,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.FastScrollMath
+import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
@@ -156,110 +158,124 @@ fun LibraryCollectionScreen(
                     sortLabel,
                 ).joinToString(" • ")
 
-                LazyColumn(
-                    state = listState,
+                LazyColumnFastScroller(
+                    listState = listState,
+                    itemCount = state.tracks.size,
+                    headerItemCount = 2,
+                    bubbleLabelForIndex = { idx ->
+                        val track = state.tracks.getOrNull(idx) ?: return@LazyColumnFastScroller null
+                        when (state.sort) {
+                            CollectionTrackSort.ALPHABETICAL -> FastScrollMath.sectionLetter(track.title)
+                            CollectionTrackSort.RECENTLY_PLAYED -> "#${idx + 1}"
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
-                    item(key = "offline_banner") {
-                        OfflineStatusBanner(status = state.offlineStatus)
-                    }
-                    item(key = "collection_header") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Box(
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 24.dp),
+                    ) {
+                        item(key = "offline_banner") {
+                            OfflineStatusBanner(status = state.offlineStatus)
+                        }
+                        item(key = "collection_header") {
+                            Column(
                                 modifier = Modifier
-                                    .size(160.dp)
-                                    .clip(MaterialTheme.shapes.large)
-                                    .background(
-                                        if (isFavorites) {
-                                            MaterialTheme.colorScheme.primaryContainer
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .clip(MaterialTheme.shapes.large)
+                                        .background(
+                                            if (isFavorites) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.secondaryContainer
+                                            },
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (isFavorites) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
                                         } else {
-                                            MaterialTheme.colorScheme.secondaryContainer
+                                            MaterialTheme.colorScheme.onSecondaryContainer
                                         },
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = if (isFavorites) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
-                                    modifier = Modifier.size(64.dp),
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = stringResource(titleRes),
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = metadata,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                            Spacer(modifier = Modifier.height(18.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Button(
-                                    onClick = onPlayAll,
-                                    enabled = state.playableTracks.isNotEmpty(),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp),
-                                ) {
-                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(stringResource(R.string.action_play))
+                                        modifier = Modifier.size(64.dp),
+                                    )
                                 }
-                                FilledTonalButton(
-                                    onClick = onShuffleAll,
-                                    enabled = state.playableTracks.isNotEmpty(),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp),
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = stringResource(titleRes),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = metadata,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(modifier = Modifier.height(18.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Icon(Icons.Rounded.Shuffle, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(stringResource(R.string.action_shuffle))
+                                    Button(
+                                        onClick = onPlayAll,
+                                        enabled = state.playableTracks.isNotEmpty(),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                    ) {
+                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(stringResource(R.string.action_play))
+                                    }
+                                    FilledTonalButton(
+                                        onClick = onShuffleAll,
+                                        enabled = state.playableTracks.isNotEmpty(),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                    ) {
+                                        Icon(Icons.Rounded.Shuffle, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(stringResource(R.string.action_shuffle))
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    itemsIndexed(
-                        items = state.tracks,
-                        key = { _, track -> "col_${state.section.routeKey}_${track.id}" },
-                        contentType = { _, _ -> "track" },
-                    ) { index, track ->
-                        TrackRow(
-                            track = track,
-                            isPlaying = track.id == state.activeTrackId,
-                            enabled = !state.isOffline || track.isDownloaded,
-                            onClick = { onTrackClick(index) },
-                            onAddToQueue = { onAddToQueue(track) },
-                            onAddToPlaylist = { onAddToPlaylist(track) },
-                            onToggleDownload = { onToggleTrackDownload(track) },
-                            onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
-                            onGoToArtist = { onGoToTrackArtist(track) },
-                        )
+                        itemsIndexed(
+                            items = state.tracks,
+                            key = { _, track -> "col_${state.section.routeKey}_${track.id}" },
+                            contentType = { _, _ -> "track" },
+                        ) { index, track ->
+                            TrackRow(
+                                track = track,
+                                isPlaying = track.id == state.activeTrackId,
+                                enabled = !state.isOffline || track.isDownloaded,
+                                onClick = { onTrackClick(index) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
+                                onToggleDownload = { onToggleTrackDownload(track) },
+                                onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                onGoToArtist = { onGoToTrackArtist(track) },
+                            )
+                        }
                     }
                 }
             }

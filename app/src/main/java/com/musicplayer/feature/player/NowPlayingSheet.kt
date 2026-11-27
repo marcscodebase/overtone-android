@@ -101,6 +101,7 @@ import com.musicplayer.R
 import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.database.entity.DownloadRecordEntity
 import com.musicplayer.core.designsystem.component.ArtworkCard
+import com.musicplayer.core.designsystem.component.LocalLeftHandedMode
 import com.musicplayer.core.model.AudioOutputQualityPolicy
 import com.musicplayer.core.model.AudioOutputState
 import com.musicplayer.core.model.DownloadQualityMode
@@ -808,12 +809,37 @@ fun NowPlayingSheet(
             Spacer(modifier = Modifier.weight(0.35f))
 
             // Spotify-style bottom utility bar: Output device on far left, Lyrics (when available) + Queue on far right
+            // (Mirrored in Left-Handed Mode so Queue & Lyrics sit right under the left thumb)
+            val isLeftHanded = LocalLeftHandedMode.current
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (isLeftHanded) {
+                    IconButton(onClick = onOpenQueue) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = stringResource(R.string.queue_title),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (hasLyrics) {
+                        IconButton(onClick = onOpenLyrics) {
+                            Icon(
+                                imageVector = Icons.Rounded.Lyrics,
+                                contentDescription = stringResource(R.string.lyrics_title),
+                                tint = if (syncedLyrics != null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -865,26 +891,28 @@ fun NowPlayingSheet(
                     }
                 }
 
-                if (hasLyrics) {
-                    IconButton(onClick = onOpenLyrics) {
+                if (!isLeftHanded) {
+                    if (hasLyrics) {
+                        IconButton(onClick = onOpenLyrics) {
+                            Icon(
+                                imageVector = Icons.Rounded.Lyrics,
+                                contentDescription = stringResource(R.string.lyrics_title),
+                                tint = if (syncedLyrics != null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onOpenQueue) {
                         Icon(
-                            imageVector = Icons.Rounded.Lyrics,
-                            contentDescription = stringResource(R.string.lyrics_title),
-                            tint = if (syncedLyrics != null) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = stringResource(R.string.queue_title),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
-
-                IconButton(onClick = onOpenQueue) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = stringResource(R.string.queue_title),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }

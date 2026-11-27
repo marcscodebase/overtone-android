@@ -36,6 +36,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.musicplayer.core.designsystem.component.LocalLeftHandedMode
 import com.musicplayer.core.designsystem.component.LocalOnSaveTrack
 import com.musicplayer.core.designsystem.component.LocalSavedTrackIds
 import com.musicplayer.core.model.Track
@@ -122,6 +123,7 @@ private fun AuthenticatedShell(
     val audioOutputState by playerViewModel.audioOutputState.collectAsStateWithLifecycle()
     val hiResBluetoothDevices by playerViewModel.hiResBluetoothDevices.collectAsStateWithLifecycle()
     val bitPerfectUsbAudio by playerViewModel.bitPerfectUsbAudio.collectAsStateWithLifecycle()
+    val leftHandedMode by playerViewModel.leftHandedMode.collectAsStateWithLifecycle()
     val isOffline by playerViewModel.isOffline.collectAsStateWithLifecycle()
     val allPlaylists by playlistPickerViewModel.playlists.collectAsStateWithLifecycle()
     val trackIdsInPlaylists by playlistPickerViewModel.trackIdsInAnyPlaylist.collectAsStateWithLifecycle()
@@ -242,6 +244,7 @@ private fun AuthenticatedShell(
         currentDestination?.hasRoute(WireGuardDestination::class) != true
 
     CompositionLocalProvider(
+        LocalLeftHandedMode provides leftHandedMode,
         LocalSavedTrackIds provides trackIdsInPlaylists,
         LocalOnSaveTrack provides onSaveTrack,
     ) {

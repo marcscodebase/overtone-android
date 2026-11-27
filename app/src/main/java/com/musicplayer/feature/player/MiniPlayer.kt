@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
+import com.musicplayer.core.designsystem.component.LocalLeftHandedMode
 import com.musicplayer.player.PlaybackState
 
 @Composable
@@ -49,6 +50,7 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     val track = state.currentTrack ?: return
+    val isLeftHanded = LocalLeftHandedMode.current
     var dragDelta by remember { mutableFloatStateOf(0f) }
 
     Surface(
@@ -77,17 +79,36 @@ fun MiniPlayer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 10.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+                    .padding(
+                        start = if (isLeftHanded) 6.dp else 10.dp,
+                        end = if (isLeftHanded) 10.dp else 6.dp,
+                        top = 8.dp,
+                        bottom = 6.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ArtworkCard(
-                    imageUrl = track.artworkUrl,
-                    contentDescription = track.albumName,
-                    shape = MaterialTheme.shapes.extraSmall,
-                    fallbackIconSize = 20.dp,
-                    modifier = Modifier.size(44.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
+                if (isLeftHanded) {
+                    MiniPlayerPlayPauseButton(
+                        isPlaying = state.isPlaying,
+                        isBuffering = state.isBuffering,
+                        onClick = onTogglePlayPause,
+                    )
+                    MiniPlayerSaveButton(
+                        isTrackSaved = isTrackSaved,
+                        onClick = onSaveOrAddToPlaylist,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                } else {
+                    ArtworkCard(
+                        imageUrl = track.artworkUrl,
+                        contentDescription = track.albumName,
+                        shape = MaterialTheme.shapes.extraSmall,
+                        fallbackIconSize = 20.dp,
+                        modifier = Modifier.size(44.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = track.title,
@@ -104,35 +125,26 @@ fun MiniPlayer(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = onSaveOrAddToPlaylist) {
-                    Icon(
-                        imageVector = if (isTrackSaved) {
-                            Icons.Rounded.CheckCircle
-                        } else {
-                            Icons.Rounded.AddCircleOutline
-                        },
-                        contentDescription = stringResource(R.string.playlist_save_to),
-                        tint = if (isTrackSaved) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(24.dp),
+
+                if (isLeftHanded) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    ArtworkCard(
+                        imageUrl = track.artworkUrl,
+                        contentDescription = track.albumName,
+                        shape = MaterialTheme.shapes.extraSmall,
+                        fallbackIconSize = 20.dp,
+                        modifier = Modifier.size(44.dp),
                     )
-                }
-                IconButton(onClick = onTogglePlayPause) {
-                    if (state.isBuffering) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = stringResource(R.string.player_play_pause),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                } else {
+                    MiniPlayerSaveButton(
+                        isTrackSaved = isTrackSaved,
+                        onClick = onSaveOrAddToPlaylist,
+                    )
+                    MiniPlayerPlayPauseButton(
+                        isPlaying = state.isPlaying,
+                        isBuffering = state.isBuffering,
+                        onClick = onTogglePlayPause,
+                    )
                 }
             }
             LinearProgressIndicator(
@@ -141,6 +153,51 @@ fun MiniPlayer(
                     .fillMaxWidth()
                     .height(2.dp),
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayerSaveButton(
+    isTrackSaved: Boolean,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = if (isTrackSaved) {
+                Icons.Rounded.CheckCircle
+            } else {
+                Icons.Rounded.AddCircleOutline
+            },
+            contentDescription = stringResource(R.string.playlist_save_to),
+            tint = if (isTrackSaved) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun MiniPlayerPlayPauseButton(
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        if (isBuffering) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = stringResource(R.string.player_play_pause),
+                tint = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

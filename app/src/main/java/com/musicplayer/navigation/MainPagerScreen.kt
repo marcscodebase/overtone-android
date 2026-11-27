@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -63,6 +64,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
+import com.musicplayer.core.designsystem.component.LocalLeftHandedMode
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.model.Track
 import com.musicplayer.feature.catalog.CatalogContent
@@ -100,11 +102,13 @@ fun MainPagerRoute(
     val offlineStatus by libraryViewModel.offlineStatus.collectAsStateWithLifecycle()
     val existingPlaylistFolders by libraryViewModel.existingPlaylistFolders.collectAsStateWithLifecycle()
     val libraryUiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
+    val isLeftHanded = LocalLeftHandedMode.current
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        floatingActionButtonPosition = if (isLeftHanded) FabPosition.Start else FabPosition.End,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 CompactTopTabBar(

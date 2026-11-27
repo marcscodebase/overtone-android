@@ -76,6 +76,7 @@ fun SettingsRoute(
         onOpenStorageManager = onOpenStorageManager,
         onOpenWireGuard = onOpenWireGuard,
         onToggleOfflineMode = viewModel::onToggleOfflineMode,
+        onToggleLeftHandedMode = viewModel::onToggleLeftHandedMode,
         onSelectCellularBitrateCap = viewModel::onSelectCellularBitrateCap,
         onToggleAutoMatchOutputQuality = viewModel::onToggleAutoMatchOutputQuality,
         onToggleBitPerfectUsbAudio = viewModel::onToggleBitPerfectUsbAudio,
@@ -98,6 +99,7 @@ fun SettingsScreen(
     onOpenStorageManager: () -> Unit,
     onOpenWireGuard: () -> Unit,
     onToggleOfflineMode: (Boolean) -> Unit,
+    onToggleLeftHandedMode: (Boolean) -> Unit,
     onSelectCellularBitrateCap: (CellularBitrateCap) -> Unit,
     onToggleAutoMatchOutputQuality: (Boolean) -> Unit,
     onToggleBitPerfectUsbAudio: (Boolean) -> Unit,
@@ -555,6 +557,31 @@ fun SettingsScreen(
                         Switch(
                             checked = state.preferences.offlineModeEnabled,
                             onCheckedChange = onToggleOfflineMode,
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_left_handed_mode),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_left_handed_mode_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = state.preferences.leftHandedMode,
+                            onCheckedChange = onToggleLeftHandedMode,
                         )
                     }
                     if (state.pendingSyncCount > 0) {

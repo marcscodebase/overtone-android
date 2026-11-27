@@ -59,6 +59,7 @@ import com.musicplayer.core.common.Formatters
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.CollectionDetailHeader
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
@@ -266,13 +267,20 @@ fun PlaylistDetailScreen(
             totalDurationMs.takeIf { it > 0L }?.let(Formatters::formatDuration),
         ).joinToString(" • ")
 
-        LazyColumn(
-            state = listState,
+        LazyColumnFastScroller(
+            listState = listState,
+            itemCount = if (state.isReordering) 0 else state.entries.size,
+            headerItemCount = 3,
+            bubbleLabelForIndex = { idx -> "#${idx + 1}" },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
             item(key = "playlist_offline_banner") {
                 OfflineStatusBanner(status = state.offlineStatus)
             }
@@ -393,6 +401,7 @@ fun PlaylistDetailScreen(
                     }
                 }
             }
+        }
         }
     }
     }

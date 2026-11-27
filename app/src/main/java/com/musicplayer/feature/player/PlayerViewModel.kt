@@ -65,6 +65,15 @@ class PlayerViewModel @Inject constructor(
             initialValue = false,
         )
 
+    val leftHandedMode: StateFlow<Boolean> = preferencesDataStore.userPreferences
+        .map { it.leftHandedMode }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false,
+        )
+
     val recentlyPlayedTracks: StateFlow<List<Track>> = libraryRepository
         .observeRecentlyPlayedTracks(limit = 50)
         .stateIn(

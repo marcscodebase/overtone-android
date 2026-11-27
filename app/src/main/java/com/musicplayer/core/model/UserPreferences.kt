@@ -53,6 +53,7 @@ data class UserPreferences(
     val daylistRefreshSlotKey: String = "",
     val daylistRefreshNonce: Long = 0L,
     val pinnedLibraryKeys: List<String> = DEFAULT_PINNED_LIBRARY_KEYS,
+    val leftHandedMode: Boolean = false,
 ) {
     companion object {
         const val PIN_KEY_FAVORITES = "collection:favorites"

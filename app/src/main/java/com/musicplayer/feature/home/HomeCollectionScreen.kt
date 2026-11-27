@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
 import com.musicplayer.core.designsystem.component.OfflineStatusBanner
 import com.musicplayer.core.designsystem.component.SwipeDownToDismissContainer
 import com.musicplayer.core.designsystem.component.TrackRow
@@ -134,25 +135,35 @@ fun HomeCollectionScreen(
                                 .padding(innerPadding),
                         )
                     } else {
-                        LazyColumn(
-                            state = listState,
+                        LazyColumnFastScroller(
+                            listState = listState,
+                            itemCount = state.albums.size,
+                            headerItemCount = 1,
+                            bubbleLabelForIndex = { idx ->
+                                state.albums.getOrNull(idx)?.year?.toString() ?: "#${idx + 1}"
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(innerPadding),
-                            contentPadding = PaddingValues(bottom = 24.dp),
                         ) {
-                            item(key = "offline_banner") {
-                                OfflineStatusBanner(status = state.offlineStatus)
-                            }
-                            items(
-                                items = state.albums,
-                                key = { it.id },
-                                contentType = { "album" },
-                            ) { album ->
-                                RecentlyAddedAlbumRow(
-                                    album = album,
-                                    onClick = { onAlbumClick(album.id) },
-                                )
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                            ) {
+                                item(key = "offline_banner") {
+                                    OfflineStatusBanner(status = state.offlineStatus)
+                                }
+                                items(
+                                    items = state.albums,
+                                    key = { it.id },
+                                    contentType = { "album" },
+                                ) { album ->
+                                    RecentlyAddedAlbumRow(
+                                        album = album,
+                                        onClick = { onAlbumClick(album.id) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -169,63 +180,71 @@ fun HomeCollectionScreen(
                                 .padding(innerPadding),
                         )
                     } else {
-                        LazyColumn(
-                            state = listState,
+                        LazyColumnFastScroller(
+                            listState = listState,
+                            itemCount = state.tracks.size,
+                            headerItemCount = 2,
+                            bubbleLabelForIndex = { idx -> "#${idx + 1}" },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(innerPadding),
-                            contentPadding = PaddingValues(bottom = 24.dp),
                         ) {
-                            item(key = "offline_banner") {
-                                OfflineStatusBanner(status = state.offlineStatus)
-                            }
-                            item(key = "actions_bar") {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Button(
-                                        onClick = onPlayAll,
-                                        enabled = state.playableTracks.isNotEmpty(),
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                            ) {
+                                item(key = "offline_banner") {
+                                    OfflineStatusBanner(status = state.offlineStatus)
+                                }
+                                item(key = "actions_bar") {
+                                    Row(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .height(46.dp),
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
-                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(stringResource(R.string.action_play))
-                                    }
-                                    FilledTonalButton(
-                                        onClick = onShuffleAll,
-                                        enabled = state.playableTracks.isNotEmpty(),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(46.dp),
-                                    ) {
-                                        Icon(Icons.Rounded.Shuffle, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(stringResource(R.string.action_shuffle))
+                                        Button(
+                                            onClick = onPlayAll,
+                                            enabled = state.playableTracks.isNotEmpty(),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(46.dp),
+                                        ) {
+                                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(stringResource(R.string.action_play))
+                                        }
+                                        FilledTonalButton(
+                                            onClick = onShuffleAll,
+                                            enabled = state.playableTracks.isNotEmpty(),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(46.dp),
+                                        ) {
+                                            Icon(Icons.Rounded.Shuffle, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(stringResource(R.string.action_shuffle))
+                                        }
                                     }
                                 }
-                            }
-                            itemsIndexed(
-                                items = state.tracks,
-                                key = { _, track -> "rp_${track.id}" },
-                                contentType = { _, _ -> "track" },
-                            ) { index, track ->
-                                TrackRow(
-                                    track = track,
-                                    isPlaying = track.id == state.activeTrackId,
-                                    enabled = !state.isOffline || track.isDownloaded,
-                                    onClick = { onTrackClick(index) },
-                                    onAddToQueue = { onAddToQueue(track) },
-                                    onAddToPlaylist = { onAddToPlaylist(track) },
-                                    onToggleDownload = { onToggleTrackDownload(track) },
-                                    onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
-                                    onGoToArtist = { onGoToTrackArtist(track) },
-                                )
+                                itemsIndexed(
+                                    items = state.tracks,
+                                    key = { _, track -> "rp_${track.id}" },
+                                    contentType = { _, _ -> "track" },
+                                ) { index, track ->
+                                    TrackRow(
+                                        track = track,
+                                        isPlaying = track.id == state.activeTrackId,
+                                        enabled = !state.isOffline || track.isDownloaded,
+                                        onClick = { onTrackClick(index) },
+                                        onAddToQueue = { onAddToQueue(track) },
+                                        onAddToPlaylist = { onAddToPlaylist(track) },
+                                        onToggleDownload = { onToggleTrackDownload(track) },
+                                        onGoToAlbum = track.albumId?.let { id -> { onAlbumClick(id) } },
+                                        onGoToArtist = { onGoToTrackArtist(track) },
+                                    )
+                                }
                             }
                         }
                     }

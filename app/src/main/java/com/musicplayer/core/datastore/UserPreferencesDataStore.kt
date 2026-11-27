@@ -52,6 +52,7 @@ class UserPreferencesDataStore @Inject constructor(
             daylistRefreshSlotKey = prefs[KEY_DAYLIST_REFRESH_SLOT] ?: "",
             daylistRefreshNonce = prefs[KEY_DAYLIST_REFRESH_NONCE] ?: 0L,
             pinnedLibraryKeys = decodePinnedKeys(prefs[KEY_PINNED_LIBRARY_KEYS]),
+            leftHandedMode = prefs[KEY_LEFT_HANDED_MODE] ?: false,
         )
     }
 
@@ -135,6 +136,10 @@ class UserPreferencesDataStore @Inject constructor(
         }
     }
 
+    suspend fun setLeftHandedMode(enabled: Boolean) {
+        dataStore.edit { it[KEY_LEFT_HANDED_MODE] = enabled }
+    }
+
     private fun decodePinnedKeys(raw: String?): List<String> {
         if (raw == null) return UserPreferences.DEFAULT_PINNED_LIBRARY_KEYS
         if (raw.isEmpty()) return emptyList()
@@ -159,5 +164,6 @@ class UserPreferencesDataStore @Inject constructor(
         private val KEY_DAYLIST_REFRESH_SLOT = stringPreferencesKey("daylist_refresh_slot")
         private val KEY_DAYLIST_REFRESH_NONCE = longPreferencesKey("daylist_refresh_nonce")
         private val KEY_PINNED_LIBRARY_KEYS = stringPreferencesKey("pinned_library_keys")
+        private val KEY_LEFT_HANDED_MODE = booleanPreferencesKey("left_handed_mode")
     }
 }

@@ -93,6 +93,8 @@
     <string name="action_close">Close</string>
     <string name="settings_offline_mode">Offline Mode</string>
     <string name="settings_offline_mode_subtitle">Browse cached metadata and prefer downloaded local files</string>
+    <string name="settings_left_handed_mode">Left-Handed Mode</string>
+    <string name="settings_left_handed_mode_subtitle">Moves fast-scroller, floating buttons, and one-handed player controls to the left side</string>
 
     <string name="player_play_pause">Play or pause</string>
     <string name="player_next">Next track</string>

@@ -36,6 +36,7 @@ class UserPreferencesDataStoreTest {
         assertFalse(prefs.offlineModeEnabled)
         assertEquals(CellularBitrateCap.ORIGINAL, prefs.cellularBitrateCap)
         assertFalse(prefs.bitPerfectUsbAudio)
+        assertFalse(prefs.leftHandedMode)
         assertEquals(DownloadQualityMode.LOSSLESS, prefs.defaultDownloadQuality.mode)
         assertEquals(Mp3Bitrate.KBPS_320, prefs.defaultDownloadQuality.mp3Bitrate)
         assertTrue(prefs.wifiOnlyDownloads)
@@ -90,5 +91,8 @@ class UserPreferencesDataStoreTest {
         assertTrue("playlist:p1" in store.userPreferences.first().pinnedLibraryKeys)
         store.toggleLibraryPin("playlist:p1")
         assertFalse("playlist:p1" in store.userPreferences.first().pinnedLibraryKeys)
+
+        store.setLeftHandedMode(true)
+        assertTrue(store.userPreferences.first().leftHandedMode)
     }
 }

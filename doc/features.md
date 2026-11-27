@@ -40,7 +40,9 @@ A complete, code-verified overview of all features currently implemented in **an
   - **Library:** Stacked **Search** FAB, **Shuffle Library** FAB above it, and a smaller **Create Playlist (`+`)** FAB on top.
   - **Catalog:** Stacked **Search** FAB and **Shuffle Catalog** FAB above it.
 - **Persistent Floating Mini-Player:** Floats above the system navigation bar on browse and detail screens (hidden on Settings, Storage, and WireGuard screens) with album art, title/artist, quick `+`/`✓` save button, play/pause with buffering indicator, thin progress bar, horizontal swipe to skip tracks, and tap to expand.
-- **Natural Touch Gestures:**
+- **Natural Touch Gestures & One-Handed Ergonomics:**
+  - **Vertical Alphabetical Fast-Scroller:** Draggable Material You edge scrollbar with a floating section bubble (`A–Z` / `#`, release year, or track index) and haptic ticks on all long lists (*Catalog*, *Library*, *Favorites*, *Downloaded*, *Recently Added*, *Recently Played*, and long *Playlists*).
+  - **Left-Handed Mode (Off by Default):** Optional toggle in Settings that shifts the fast-scroller, floating action buttons, Mini-Player controls, Now Playing Queue/Lyrics shortcuts, and Queue drag handles to the left edge for effortless left-handed one-handed use while keeping the default layout optimized for right-handed use.
   - **Pull down to dismiss** detail screens (*Album*, *Artist*, *Artist Collections*, *Playlist*, *Daylist*, *Favorites*, *Downloaded*, *Recently Added*, *Recently Played*) smoothly from the top of the list or top bar (automatically disabled during Playlist Reorder Mode).
   - **Swipe right on playable song rows** on Home and detail screens for instant Spotify-style *Add to Queue* with haptic feedback (disabled on unavailable offline rows, Catalog Songs, Last Played, and Playlist Reorder Mode so tab swiping never collides with row actions).
   - **Swipe left / right in Now Playing** to skip to the next or previous track with animated cover-art tracking.

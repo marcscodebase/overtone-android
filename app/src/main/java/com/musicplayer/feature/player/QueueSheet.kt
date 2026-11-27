@@ -71,6 +71,7 @@ import androidx.compose.ui.zIndex
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.LocalLeftHandedMode
 import com.musicplayer.core.designsystem.component.TrackRow
 import com.musicplayer.core.model.Track
 import com.musicplayer.player.PlaybackState
@@ -530,6 +531,7 @@ private fun QueueRowContent(
     onRemove: (() -> Unit)?,
     dragHandleModifier: Modifier,
 ) {
+    val isLeftHanded = LocalLeftHandedMode.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -541,9 +543,30 @@ private fun QueueRowContent(
                 },
             )
             .clickable(enabled = !isActive && !isDragging, onClick = onClick)
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            .padding(
+                start = if (isLeftHanded && !isActive) 8.dp else 16.dp,
+                end = if (isLeftHanded && !isActive) 12.dp else 8.dp,
+                top = 8.dp,
+                bottom = 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (!isActive && isLeftHanded) {
+            Box(
+                modifier = dragHandleModifier.size(44.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DragHandle,
+                    contentDescription = stringResource(R.string.queue_drag_reorder),
+                    tint = if (isDragging) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
         ArtworkCard(
             imageUrl = track.artworkUrl,
             contentDescription = track.albumName,
@@ -599,20 +622,22 @@ private fun QueueRowContent(
                     )
                 }
             }
-            Box(
-                modifier = dragHandleModifier
-                    .size(44.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.DragHandle,
-                    contentDescription = stringResource(R.string.queue_drag_reorder),
-                    tint = if (isDragging) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
+            if (!isLeftHanded) {
+                Box(
+                    modifier = dragHandleModifier
+                        .size(44.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DragHandle,
+                        contentDescription = stringResource(R.string.queue_drag_reorder),
+                        tint = if (isDragging) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
     }

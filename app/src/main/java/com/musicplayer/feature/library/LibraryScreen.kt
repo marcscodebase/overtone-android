@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -64,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import com.musicplayer.R
 import com.musicplayer.core.designsystem.component.ArtworkCard
 import com.musicplayer.core.designsystem.component.EmptyState
+import com.musicplayer.core.designsystem.component.FastScrollMath
+import com.musicplayer.core.designsystem.component.LazyColumnFastScroller
 import com.musicplayer.core.model.Playlist
 import com.musicplayer.core.model.PlaylistFolderGroup
 import com.musicplayer.feature.library.playlist.MovePlaylistToFolderDialog
@@ -197,88 +200,106 @@ fun LibraryContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 210.dp),
+                val libraryListState = rememberLazyListState()
+                LazyColumnFastScroller(
+                    listState = libraryListState,
+                    itemCount = state.items.size,
+                    bottomPadding = 216.dp,
+                    bubbleLabelForIndex = { idx ->
+                        val item = state.items.getOrNull(idx) ?: return@LazyColumnFastScroller null
+                        when {
+                            item.isPinned -> "★"
+                            state.selectedSort == LibrarySort.CREATOR ->
+                                FastScrollMath.sectionLetter(item.creator.ifBlank { item.title })
+                            else -> FastScrollMath.sectionLetter(item.title)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
                 ) {
-                    items(
-                        items = state.items,
-                        key = { it.pinKey },
-                        contentType = { item ->
+                    LazyColumn(
+                        state = libraryListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 210.dp),
+                    ) {
+                        items(
+                            items = state.items,
+                            key = { it.pinKey },
+                            contentType = { item ->
+                                when (item) {
+                                    is LibraryListItem.BuiltInCollection -> "collection"
+                                    is LibraryListItem.PlaylistFolderItem -> "folder"
+                                    is LibraryListItem.PlaylistItem -> "playlist"
+                                    is LibraryListItem.AlbumItem -> "album"
+                                    is LibraryListItem.ArtistItem -> "artist"
+                                }
+                            },
+                        ) { item ->
                             when (item) {
-                                is LibraryListItem.BuiltInCollection -> "collection"
-                                is LibraryListItem.PlaylistFolderItem -> "folder"
-                                is LibraryListItem.PlaylistItem -> "playlist"
-                                is LibraryListItem.AlbumItem -> "album"
-                                is LibraryListItem.ArtistItem -> "artist"
-                            }
-                        },
-                    ) { item ->
-                        when (item) {
-                            is LibraryListItem.BuiltInCollection -> {
-                                BuiltInCollectionRow(
-                                    item = item,
-                                    onClick = { onOpenCollection(item.section) },
-                                    onTogglePin = { onTogglePin(item.pinKey) },
-                                )
-                            }
+                                is LibraryListItem.BuiltInCollection -> {
+                                    BuiltInCollectionRow(
+                                        item = item,
+                                        onClick = { onOpenCollection(item.section) },
+                                        onTogglePin = { onTogglePin(item.pinKey) },
+                                    )
+                                }
 
-                            is LibraryListItem.PlaylistFolderItem -> {
-                                PlaylistFolderRow(
-                                    folder = item.folder,
-                                    isPinned = item.isPinned,
-                                    onClick = { onOpenPlaylistFolder(item.folder.name) },
-                                    onTogglePin = { onTogglePin(item.pinKey) },
-                                    onRename = { folderPendingRename = item.folder.name },
-                                    onUngroup = { onUngroupFolder(item.folder.name) },
-                                )
-                            }
+                                is LibraryListItem.PlaylistFolderItem -> {
+                                    PlaylistFolderRow(
+                                        folder = item.folder,
+                                        isPinned = item.isPinned,
+                                        onClick = { onOpenPlaylistFolder(item.folder.name) },
+                                        onTogglePin = { onTogglePin(item.pinKey) },
+                                        onRename = { folderPendingRename = item.folder.name },
+                                        onUngroup = { onUngroupFolder(item.folder.name) },
+                                    )
+                                }
 
-                            is LibraryListItem.PlaylistItem -> {
-                                PlaylistLibraryRow(
-                                    playlist = item.playlist,
-                                    isPinned = item.isPinned,
-                                    showPinOption = true,
-                                    onTogglePin = { onTogglePin(item.pinKey) },
-                                    onClick = { onPlaylistClick(item.playlist.id) },
-                                    onMoveToFolder = { playlistPendingFolderMove = item.playlist },
-                                )
-                            }
+                                is LibraryListItem.PlaylistItem -> {
+                                    PlaylistLibraryRow(
+                                        playlist = item.playlist,
+                                        isPinned = item.isPinned,
+                                        showPinOption = true,
+                                        onTogglePin = { onTogglePin(item.pinKey) },
+                                        onClick = { onPlaylistClick(item.playlist.id) },
+                                        onMoveToFolder = { playlistPendingFolderMove = item.playlist },
+                                    )
+                                }
 
-                            is LibraryListItem.AlbumItem -> {
-                                val subtitle = listOfNotNull(
-                                    stringResource(R.string.library_type_album),
-                                    item.album.artistName.takeIf { it.isNotBlank() },
-                                ).joinToString(" • ")
-                                CuratedCollectionRow(
-                                    title = item.album.title,
-                                    subtitle = subtitle,
-                                    imageUrl = item.album.artworkUrl,
-                                    isCircular = false,
-                                    isPinned = item.isPinned,
-                                    hasDownloaded = item.hasDownloadedContent,
-                                    fallbackIcon = Icons.Rounded.Album,
-                                    onClick = { onAlbumClick(item.album.id) },
-                                    onTogglePin = { onTogglePin(item.pinKey) },
-                                )
-                            }
+                                is LibraryListItem.AlbumItem -> {
+                                    val subtitle = listOfNotNull(
+                                        stringResource(R.string.library_type_album),
+                                        item.album.artistName.takeIf { it.isNotBlank() },
+                                    ).joinToString(" • ")
+                                    CuratedCollectionRow(
+                                        title = item.album.title,
+                                        subtitle = subtitle,
+                                        imageUrl = item.album.artworkUrl,
+                                        isCircular = false,
+                                        isPinned = item.isPinned,
+                                        hasDownloaded = item.hasDownloadedContent,
+                                        fallbackIcon = Icons.Rounded.Album,
+                                        onClick = { onAlbumClick(item.album.id) },
+                                        onTogglePin = { onTogglePin(item.pinKey) },
+                                    )
+                                }
 
-                            is LibraryListItem.ArtistItem -> {
-                                val subtitle = listOfNotNull(
-                                    stringResource(R.string.library_type_artist),
-                                    item.artist.albumCount.takeIf { it > 0 }?.let { "$it albums" },
-                                ).joinToString(" • ")
-                                CuratedCollectionRow(
-                                    title = item.artist.name,
-                                    subtitle = subtitle,
-                                    imageUrl = item.artist.artworkUrl,
-                                    isCircular = true,
-                                    isPinned = item.isPinned,
-                                    hasDownloaded = false,
-                                    fallbackIcon = Icons.Rounded.Person,
-                                    onClick = { onArtistClick(item.artist.id) },
-                                    onTogglePin = { onTogglePin(item.pinKey) },
-                                )
+                                is LibraryListItem.ArtistItem -> {
+                                    val subtitle = listOfNotNull(
+                                        stringResource(R.string.library_type_artist),
+                                        item.artist.albumCount.takeIf { it > 0 }?.let { "$it albums" },
+                                    ).joinToString(" • ")
+                                    CuratedCollectionRow(
+                                        title = item.artist.name,
+                                        subtitle = subtitle,
+                                        imageUrl = item.artist.artworkUrl,
+                                        isCircular = true,
+                                        isPinned = item.isPinned,
+                                        hasDownloaded = false,
+                                        fallbackIcon = Icons.Rounded.Person,
+                                        onClick = { onArtistClick(item.artist.id) },
+                                        onTogglePin = { onTogglePin(item.pinKey) },
+                                    )
+                                }
                             }
                         }
                     }

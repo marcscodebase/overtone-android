@@ -115,6 +115,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun onToggleLeftHandedMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesDataStore.setLeftHandedMode(enabled)
+        }
+    }
+
     fun onFlushPendingSync() {
         viewModelScope.launch {
             val flushed = syncRepository.flushPendingSyncActions()
