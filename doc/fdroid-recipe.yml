@@ -1,10 +1,8 @@
-# F-Droid metadata recipe for submission to https://gitlab.com/fdroid/fdroiddata
-# Place as: metadata/io.saier.overtone.yml
-
 Categories:
   - Multimedia
 License: GPL-3.0-or-later
 AuthorName: Marc Saier
+AuthorEmail: marc@saier.io
 SourceCode: https://github.com/marcscodebase/overtone-android
 IssueTracker: https://github.com/marcscodebase/overtone-android/issues
 Changelog: https://github.com/marcscodebase/overtone-android/releases
@@ -13,30 +11,33 @@ AutoName: Overtone
 
 RepoType: git
 Repo: https://github.com/marcscodebase/overtone-android.git
+Binaries:
+  https://github.com/marcscodebase/overtone-android/releases/download/v%v/Overtone-v%v.apk
 
 Builds:
-  - versionName: '0.1.0'
+  - versionName: 0.1.0
     versionCode: 1
-    commit: v0.1.0
+    commit: ff0576c1bb8c4fcb2fc5025323670e062dafce42
     subdir: app
     sudo:
       - apt-get update
-      - apt-get install -y -t bookworm-backports golang-1.23-go
+      - apt-get install -y gcc libc-dev golang-go
     gradle:
       - yes
-    ndk: 27.2.12479018
     srclibs:
       - go@go1.24.2
     build:
       - pushd $$go$$/src
-      - GOROOT_BOOTSTRAP=/usr/lib/go-1.23 ./make.bash
+      - ./make.bash
       - popd
       - export PATH="$$go$$/bin:$PATH"
       - export ANDROID_NDK_HOME="$$NDK$$"
       - ../wireguard-core/build-android.sh
+    ndk: 27.2.12479018
 
-AutoUpdateMode: Version v%v
-UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-UpdateCheckData: app/build.gradle.kts|versionCode\s*=\s*(\d+)|.|versionName\s*=\s*"([^"]+)"
-CurrentVersion: '0.1.0'
+AllowedAPKSigningKeys: 2bbace0a60e9d7b52f06b77640b2249a9bd016e6ffbd2b500489340baecad64f
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[\d.]+$
+CurrentVersion: 0.1.0
 CurrentVersionCode: 1
